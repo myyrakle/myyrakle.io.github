@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] Storage Policy: 멀티 디스크 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224127895597/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] Storage Policy: 멀티 디스크 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224127895597/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-12-30T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224127895597/">[Clickhouse] Storage Policy: 멀티 디스크 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-30T00:00:00+00:00"><time datetime="2025-12-30T00:00:00+00:00">2025.12.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="305 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224127895597" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>clickhouse는 빅데이터를 다루는 시스템이고, 대부분의 사용사례에서는 디스크를 매우 많이 사용한다.<br />
+단일 디스크로는 성능/용량 한계가 분명하기 때문에 어느 시점에서는 분명히 하드웨어 수준 확장을 꾀해야 할 시점이 온다.</p>
+<p>그럴 경우에는 단일머신에 디스크를 여러개 달거나, 아니면 아예 멀티노드 클러스터를 구성해야 한다.<br />
+여기서는 그 중 단일머신-멀티 디스크를 사용하는 방법만 다룬다.</p>
+<p>clickhouse는 멀티 디스크나 외부 파일시스템 연동을 위한 기능을 제법 잘 지원한다.<br />
+disk와 storage policy란 시스템 수준 설정을 통해서 여러개의 디스크/저장소를 관리할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">--</span><span> 디스크 정보 목록 </span></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span><span> FROM system</span><span style="color: #94E2D5;">.</span><span>disks</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">--</span><span> 스토리지 정책 목</span></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span><span> FROM system</span><span style="color: #94E2D5;">.</span><span>storage_policies</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_c59c9dafcef3f97b.png" alt="" />
+기본값은 대략 이런 형태다.<br />
+기본 데이터 경로가 기본 disk로 설정되어있고, 별다른 옵션을 주지 않는다면 이 기본 disk에 저장하도록 테이블이 만들어지는 것이다.</p>
+<p>그래서 우리가 할 것은, 디스크를 추가하고, 해당 디스크를 사용하는 storage policy를 추가하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="diseukeu-gyeongro-junbi">디스크 경로 준비</h2>
+<p>당연히 먼저 해야할 것은, 추가로 사용할 디스크 디렉토리를 잘 준비해놓는 것이다.<br />
+디스크를 마운트해놓고, 마운트한 경로 아래에 적절한 clickhouse용 디렉토리까지 만들어준다.</p>
+<p><img src="/images/img_b9440b7febb91944.png" alt="" />
+내 경우에는 저 아래쪽에 4테라짜리 디스크를 쓸 것이다.</p>
+<br>
+<p><img src="/images/img_3e15882dd7e12704.png" alt="" />
+clickhouse란 디렉터리를 만들고, 저기에 데이터가 저장되도록 했다.</p>
+<br>
+<br>
+<br>
+<h2 id="config-yml-sujeong">config.yml 수정</h2>
+<p>디스크 관련된 설정들은 query로는 수정할 수 없고, 설정파일을 건드려야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>clickhouse</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #94E2D5;">.</span><span>xml</span></span>
+<span class="giallo-l"><span>sudo systemctl restart clickhouse</span><span style="color: #94E2D5;">-</span><span>server</span></span></code></pre>
+<p>수정하고 DB 서버까지 재부팅해야 한다. 다운타임은 필연적이다.</p>
+<p>설정파일에는 다음과 같이 storage_configuration 설정을 추가한다.<br />
+기본 디스크는 따로 설정하지 않아도 되고, default라는 이름으로 존재한다.<br />
+아래처럼 추가 디스크 설정만 추가해서 넣으면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #F5C2E7;">storage_configuration</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">disks</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span>            &lt;!-- 추가 볼륨 --&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            &lt;</span><span style="color: #F5C2E7;">second_disk</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                &lt;</span><span style="color: #89B4FA;">path</span><span style="color: #94E2D5;">&gt;</span><span>/mnt/ssd4tb/clickhouse/</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">path</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            &lt;/</span><span style="color: #F5C2E7;">second_disk</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;/</span><span style="color: #89B4FA;">disks</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">policies</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span>            &lt;!-- 2번째 디스크만 쓰는 정책 --&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">           &lt;</span><span style="color: #F5C2E7;">second_policy</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                &lt;</span><span style="color: #89B4FA;">volumes</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;</span><span style="color: #89B4FA;">main</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        &lt;</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span><span>second_disk</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;/</span><span style="color: #89B4FA;">main</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                &lt;/</span><span style="color: #89B4FA;">volumes</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            &lt;/</span><span style="color: #F5C2E7;">second_policy</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            &lt;!-- 두 디스크를 모두 사용하는 정책 --&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            &lt;</span><span style="color: #F5C2E7;">multi_disk_policy</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                &lt;</span><span style="color: #89B4FA;">volumes</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;</span><span style="color: #89B4FA;">volume1</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        &lt;</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span><span>default</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;/</span><span style="color: #89B4FA;">volume1</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;</span><span style="color: #89B4FA;">volume2</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        &lt;</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span><span>second_disk</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;/</span><span style="color: #89B4FA;">volume2</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                &lt;/</span><span style="color: #89B4FA;">volumes</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            &lt;/</span><span style="color: #F5C2E7;">multi_disk_policy</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            &lt;!-- 자동으로 여러 디스크에 분산하는 정책 --&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            &lt;</span><span style="color: #F5C2E7;">balanced_policy</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                &lt;</span><span style="color: #89B4FA;">volumes</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;</span><span style="color: #89B4FA;">main</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        &lt;</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span><span>default</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        &lt;</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span><span>second_disk</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">disk</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                    &lt;/</span><span style="color: #89B4FA;">main</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                &lt;/</span><span style="color: #89B4FA;">volumes</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            &lt;/</span><span style="color: #F5C2E7;">balanced_policy</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;/</span><span style="color: #89B4FA;">policies</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;/</span><span style="color: #F5C2E7;">storage_configuration</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p><img src="/images/img_328ae8fefb1f888d.png" alt="" /></p>
+<p><img src="/images/img_fe32c54e3fe63331.png" alt="" />
+그리고 재시작해서 오류가 안나면 세팅은 잘 된 것이다.</p>
+<p>그러면 이제 디스크 목록에도 추가가 될 것이고</p>
+<p><img src="/images/img_347c6cb0b787324c.png" alt="" /></p>
+<p><img src="/images/img_3acfdfa4c41b34cd.png" alt="" />
+Storage Policy에도 추가가 되었을 것이다.<br />
+이러면 사용 준비는 끝이다.</p>
+<br>
+<br>
+<br>
+<h2 id="storage-policy-sayonghagi">Storage Policy 사용하기</h2>
+<p>Storage Policy의 사용법은 간단하다.<br />
+테이블을 만들때 옵션만 적절히 넣어주면 자동으로 거기에 속한 디스크에 저장을 해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE laboratory</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">foo</span><span> (</span></span>
+<span class="giallo-l"><span>	id BigInt</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>	value String</span></span>
+<span class="giallo-l"><span>) </span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree </span></span>
+<span class="giallo-l"><span>ORDER BY id</span></span>
+<span class="giallo-l"><span>SETTINGS storage_policy</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;second_policy&#39;</span></span></code></pre>
+<p><img src="/images/img_fcf26b30b2cc963a.png" alt="" />
+이렇게 만들고 나면</p>
+<br>
+<p><img src="/images/img_a97f817d8664e095.png" alt="" />
+이런 식으로 해당 디스크 경로에 저장이 될 것이다.</p>
+<p>단, 유의할 점은. DDL 같은 기본적인 메타데이터들은 디폴트 볼륨 영역에 저장된다는 것이다. 여기에는 대부분의 용량을 차지하는 메인 세그먼트들이 저장된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/operations/storing-data">https://clickhouse.com/docs/operations/storing-data</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224127227522/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>체크섬 (checksum)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224122592777/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>컴파일러가 당신을 놀라게 할 때.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

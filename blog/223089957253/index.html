@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] EKS: Fargate 노드 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223089957253/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] EKS: Fargate 노드 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223089957253/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-05-01T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223089957253/">[AWS] EKS: Fargate 노드 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-01T00:00:00+00:00"><time datetime="2023-05-01T00:00:00+00:00">2023.05.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="190 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223089957253" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>EKS는 Fargate로도 노드를 구성하고 띄울 수 있다.<br />
+EC2 구성과는 다르게 스케일링이 매우 자유롭다는 장점이 있다. 인스턴스 사이즈를 신경쓸 필요가 없다.</p>
+<p>다만, Daemonset 같은 기능을 쓸 수 없다거나 하는 제한이 좀 있다.<br />
+아래 문서를 보면 이래저래 많다...<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/fargate.html">https://docs.aws.amazon.com/ko_kr/eks/latest/userguide/fargate.html</a></p>
+<br>
+<br>
+<br>
+<h2 id="iam-role-guseong">IAM Role 구성</h2>
+<p>Fargate profile 전용 역할을 하나 만든다.</p>
+<p><img src="/images/img_2f575dc09720226b.png" alt="" />
+EKS Fargate Pod 타입으로 하고</p>
+<p>이름을  AmazonEKSFargatePodExecutionRole로 해준다.</p>
+<p><img src="/images/img_a63130f8fc7e54d3.png" alt="" />
+됐다.</p>
+<br>
+<br>
+<br>
+<h2 id="fargate-profile">Fargate profile</h2>
+<p>Fargate profile은 fargate 인스턴스를 어떻게 띄울 것인지를 정의하는 서브시스템이다.</p>
+<p>profile에서 쿠버네티스 네임스페이스와 레이블로 형태를 정의해두면, 이후에 거기에 맞춰서 요청되는 pod들은 fargate로 올라가는 식이다.</p>
+<p><img src="/images/img_cccc48d94dbf21b4.png" alt="" /></p>
+<p>우선 하나 만들어보겠다.</p>
+<p><img src="/images/img_44fba63e6bf3d58c.png" alt="" /></p>
+<p>이름은 적당히 짓고</p>
+<p><img src="/images/img_ed43ac948d857f42.png" alt="" />
+방금 만든 역할을 넣어준다.</p>
+<p>그리고 네임스페이스와 레이블 셀렉터를 적절히 지정해준다.</p>
+<p><img src="/images/img_1253d8283cd9e884.png" alt="" />
+저러면 default 네임스페이스에서 app=test-server 레이블을 가진 파드를 전부 fargate로 띄워줄 것이다.</p>
+<br>
+<p>그리고 저 조건에 맞게끔 파드 생성을 띄우면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl create deployment test</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;"> --</span><span>image</span><span style="color: #94E2D5;">=</span><span>myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span></span></code></pre>
+<p><img src="/images/img_b551da97816d3ffb.png" alt="" /></p>
+<p>거기에 맞춰서 Fargate로 노드를 띄우고 프로비저닝을 해줄 것이다.</p>
+<p><img src="/images/img_d8e233917da178b1.png" alt="" />
+대충 이런 느낌으로 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/eks/latest/userguide/pod-execution-role.html">https://docs.aws.amazon.com/eks/latest/userguide/pod-execution-role.html</a></p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223089937248/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] EKS: EC2 노드 구성<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223089072864/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>eojuk 0.9.1 배포<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

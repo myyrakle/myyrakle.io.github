@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] ArgoCD | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223112272539/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] ArgoCD">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223112272539/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-05-26T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223112272539/">[k8s] ArgoCD</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-26T00:00:00+00:00"><time datetime="2023-05-26T00:00:00+00:00">2023.05.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="442 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223112272539" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_4ec7ca6f49be85b5.png" alt="" />
+ArgoCD는 쿠버네티스 환경에서 주로 사용되는 코드 배포(CD) 도구다.</p>
+<p>이건 일반 애플리케이션 코드에 사용하는건 아니고, 쿠버네티스의 yaml 구성들을 git 기반으로 운영하고 배포할 수 있게 해주는 녀석이다.</p>
+<p>이런 식이다.</p>
+<p><img src="/images/img_47800afc064791cd.png" alt="" />
+출처: 공식 문서<br />
+git 기반으로 인프라 운영을 한다는 점에서 gitops라고도 부른다.</p>
+<p>이제 한번 구성하고 써보면서 익혀보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="pod-guseong">Pod 구성</h2>
+<p>먼저 쿠버에 argocd 세팅을 pod들로 배포해야 한다.<br />
+그래야 중앙에서 통제도 하고, 제어 콘솔도 제공을 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl create</span><span style="color: #CBA6F7;"> namespace</span><span style="color: #F9E2AF;font-style: italic;"> argocd</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">kubectl apply</span><span> -</span><span style="color: #F9E2AF;font-style: italic;">n argocd</span><span> -</span><span style="color: #F9E2AF;font-style: italic;">f https</span><span>:</span><span style="color: #9399B2;font-style: italic;">//raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml</span></span></code></pre>
+<p><img src="/images/img_bc8ba9caafdab2f9.png" alt="" /></p>
+<p>그럼 이렇게 리소스를 조회할 수가 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get all</span><span style="color: #94E2D5;"> -</span><span>n argocd</span></span></code></pre>
+<p><img src="/images/img_49ecd22ab4acf914.png" alt="" />
+뭐가 참 많다.</p>
+<p>다 되면 서비스의 로드밸런서 설정을 건드려서 외부로 공개가 되게 해주자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl patch svc argocd</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;"> -</span><span>n argocd</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #A6E3A1;"> &#39;{&quot;spec&quot;: {&quot;type&quot;: &quot;LoadBalancer&quot;}}&#39;</span></span></code></pre>
+<p><img src="/images/img_d6388836896198af.png" alt="" />
+이래야 제어 콘솔에 접속을 할 수 있다.</p>
+<p><img src="/images/img_62b02ea6687c3db6.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="paeseuweodeu-cogihwa">패스워드 초기화</h2>
+<p>argocd 콘솔에 로그인할 수 있는 계정과 패스워드를 만들어줘야 한다.</p>
+<p>우선 argocd-cli를 설치하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo curl</span><span style="color: #94E2D5;"> -</span><span>sSL</span><span style="color: #94E2D5;"> -</span><span>o argocd</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>amd64 https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64</span></span>
+<span class="giallo-l"><span>sudo install</span><span style="color: #94E2D5;"> -</span><span>m</span><span style="color: #FAB387;"> 555</span><span> argocd</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>amd64</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>local</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>argocd</span></span>
+<span class="giallo-l"><span>rm argocd</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>amd64</span></span></code></pre>
+<p><img src="/images/img_5446a5429390f406.png" alt="" /></p>
+<p>패스워드 초기화를 한번 때려준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>argocd admin initial</span><span style="color: #94E2D5;">-</span><span>password</span><span style="color: #94E2D5;"> -</span><span>n argocd</span></span></code></pre>
+<p><img src="/images/img_b6bf3efd77a2266a.png" alt="" />
+그럼 최초 패스워드가 떨어지는데</p>
+<p>로그인하고</p>
+<p><img src="/images/img_dbcd2fa196fc1fc3.png" alt="" /></p>
+<p>update-password로 패스워드를 변경해주면 된다.</p>
+<p><img src="/images/img_72423833e204d79d.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="cuga-boan-seoljeong">추가: 보안 설정</h2>
+<p>아까 로드밸런서 달아서 외부 IP를 공개했었는데, 저런건 특정 IP만 접속할 수 있도록 인바운드를 걸어주는게 좋다.</p>
+<p>방법은 별도 포스트를 참조하길 바란다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223101386886">https://blog.naver.com/sssang97/223101386886</a></p>
+<br>
+<br>
+<br>
+<h2 id="konsol-jeobsog">콘솔 접속</h2>
+<p>아무튼 아까 열어놨던 외부 IP로 접속을 하면 아래와 같은 콘솔이 뜰 것이다.</p>
+<p><img src="/images/img_a54fcbb31b4c596d.png" alt="" /></p>
+<p>로그인하면 대시보드로 진입한다.</p>
+<p><img src="/images/img_3b9955b878b53b70.png" alt="" />
+여기서 이제 이것저것 추가하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="git-repojitori-guseong">Git 레포지토리 구성</h2>
+<p>이제 레포지토리를 등록해보자.<br />
+우선 레포지토리를 하나 파고</p>
+<p><img src="/images/img_606a030e57175612.png" alt="" /></p>
+<p>서브디렉터리에 배포할 yaml을 적절히 배치한다.</p>
+<p><img src="/images/img_22f41e0dc78a9059.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="git-yeongyeol">Git 연결</h2>
+<p>private repository를 argocd에서 접근하려면, 당연히 인증 처리를 해야 한다.<br />
+세팅에서 레포지토리로 이동하고</p>
+<p><img src="/images/img_ae92b75c072dff0d.png" alt="" /></p>
+<p>Connect Repo,</p>
+<p><img src="/images/img_5ac6f5b85c81f736.png" alt="" />
+레포지토리 경로와 로그인에 필요한 username와 패스워드를 넣어준다.<br />
+Github의 경우 패스워드는 그냥 패스워드가 아니라 personal access tokens이어야 한다.</p>
+<br>
+<p><img src="/images/img_a084be32e2a5adcf.png" alt="" />
+그래서 이렇게 연결이 성공하면 된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="repository-deungrog">Repository 등록</h2>
+<p>이제 마지막이다.</p>
+<p><img src="/images/img_0e064cd4725129bc.png" alt="" />
+이름과 프로젝트명을 고르고</p>
+<br>
+<p><img src="/images/img_bc28dcc3dc78119f.png" alt="" />
+레포지토리 정보 넣고, 방금 만든 서브디렉터리 "test"를 Path로 넣어줬다.</p>
+<br>
+<p><img src="/images/img_9f50e93cefab4217.png" alt="" />
+실제로 Pod가 구성될 네임스페이스를 지정한다.</p>
+<br>
+<p><img src="/images/img_494203482ae8ce71.png" alt="" />
+대강 이렇게 체크해주고 생성해주면</p>
+<p>이런식으로 생성이 된다.</p>
+<p><img src="/images/img_fe9c09b13e071ae9.png" alt="" /></p>
+<p>여기서 Sync를 누르면</p>
+<p><img src="/images/img_2be03ee55c2a2388.png" alt="" /></p>
+<p><img src="/images/img_43a241299b4dbbd0.png" alt="" /></p>
+<p>실제로 반영이 될 것이다.</p>
+<p><img src="/images/img_bd1c4a63a15336d6.png" alt="" /></p>
+<p>잘 떴다.</p>
+<p><img src="/images/img_6e4fb57cd98f772c.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="byeongyeong">변경</h2>
+<p>Pod 구성을 변경하거나 추가하고 싶다면, git으로 commit을 친 다음에</p>
+<p><img src="/images/img_a4de0fc8ea979807.png" alt="" /></p>
+<p>Refresh를 누르면 갱신이 된다.</p>
+<p><img src="/images/img_624b242d7c923521.png" alt="" />
+여기서 또 Sync를 하면 이전과 동일하게 반영이 된다.</p>
+<br>
+<p><img src="/images/img_51edac5633a8d097.png" alt="" />
+그렇다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://nayoungs.tistory.com/entry/ArgoCD%EB%9E%80-ArgoCD-%EA%B0%9C%EC%9A%94-%EB%B0%8F-%EC%84%A4%EC%B9%98">https://nayoungs.tistory.com/entry/ArgoCD%EB%9E%80-ArgoCD-%EA%B0%9C%EC%9A%94-%EB%B0%8F-%EC%84%A4%EC%B9%98</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223112139606/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] go cli 정리<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223112355237/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] ArgoCD: helm과 통합하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

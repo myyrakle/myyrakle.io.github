@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] IAM: 역할과 정책 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222948296539/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] IAM: 역할과 정책">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222948296539/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2022-12-07T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222948296539/">[AWS] IAM: 역할과 정책</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-12-07T00:00:00+00:00"><time datetime="2022-12-07T00:00:00+00:00">2022.12.07</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="459 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222948296539" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_881c33d7bdb71927.png" alt="" /></p>
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222503738493">https://blog.naver.com/sssang97/222503738493</a><br />
+이전 포스트에 이어 작성한다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeoghal-role-gwa-jeongcaeg-policy">역할(role)과 정책(policy)</h2>
+<p>사용자 계정이 말 그대로 사용자들에게 정책을 부여해서 권한을 관리하는 것이라면,<br />
+역할은 AWS 리소스들에게 정책을 부여해서 권한을 관리하는 것이다.</p>
+<p>예를 들어, 내 Lambda 함수 리소스를 한번 보자</p>
+<p><img src="/images/img_9ece7216c812a2c2.png" alt="" /></p>
+<p>대부분의 AWS 리소스는 역할을 하나씩 갖고있는데, 이것도 그렇다.</p>
+<p><img src="/images/img_71a5ecfe2037a688.png" alt="" /></p>
+<p>역할이 있고</p>
+<p><img src="/images/img_3ffff4f3f28aeb5b.png" alt="" />
+그 역할에 부여된 정책들에 의해서만 권한을 휘두를 수가 있다.<br />
+이런 부분은 사용자에 정책을 부여하는 것과 동일하다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeongcaeg-policy-jeongyihagi">정책(Policy) 정의하기</h2>
+<p>정책을 정의하는 기본 골자부터 천천히 다뤄보겠다.</p>
+<p>정책은 상기했듯 접근권한을 직접적으로 관리해주는 녀석이다.<br />
+직접 만들수도 있고, 대충 쓸 수 있게 미리 제공하는 것들이 있는데, 예를 들어 저기서 AmazonS3FullAccess는 말 그대로 S3에 대한 모든 권한을 부여해주는 정책이다.</p>
+<p><img src="/images/img_beb2b523009e9961.png" alt="" /></p>
+<p>저걸 까보면, 실제로는 아래와 같은 구조의 JSON 값으로 구성이 되어있고, 이런식으로 또 직접 만들어서 사용할 수도 있다.</p>
+<p><img src="/images/img_0241499f306965cf.png" alt="" />
+저 JSON은 모든 리소스에 s3 계열의 모든 행동을 허용하는 정책이라는 뜻이다.</p>
+<p>그래서 보통 이런 형태를 띤다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2012-10-17&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Statement&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Effect&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Allow&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Action&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;허가할 행동들...&quot;</span></span>
+<span class="giallo-l"><span>            ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Resource&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;리소스 대상&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>기본적으로 정책은 Statement의 배열로 여러개의 조건을 지정할 수 있다.</p>
+<p>Effect: "Allow"는 해당 내용들을 허용한다는 뜻이다. 자주 쓰지는 않지만 허용 대신 거부 조건인 "Deny"를 쓸 수도 있다.</p>
+<p>Action은 말 그대로 허용할 행동들을 정의한다. 예를 들어 s3에 대한 단일 개체 읽기만 써도 충분하다면 "s3:GetObject"로 줘도 되고, s3의 모든 처리를 다 해야한다면 와일드카드로 "s3:*"를 줘도 된다.</p>
+<p>아래 AWS 문서에 들어가서 쓰고싶은 리소스 페이지로 들어가면, Action들의 목록을 확인해볼 수 있다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html">https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html</a></p>
+<p>Resource는 어떤 리소스에 대한 행동을 허가할 것인지를 지정한다. 예를 들어 s3에 액세스할때 아무 버킷에나 접근해도 상관없다면 와일드카드 *를 주면 되지만, 특정 버킷에만 접근할 수 있는 정책을 정의하고 싶다면 해당 버킷의 ARN를 넣어주면 되는 것이다.</p>
+<p>그래서 만약 "boom-bucket"라는 버킷이 있고, 그 버킷에 대해서만 권한을 가지는 정책을 정의한다면 이런식으로 할 수 있을 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2012-10-17&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Statement&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Effect&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Allow&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Action&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;s3:*&quot;</span></span>
+<span class="giallo-l"><span>            ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Resource&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:s3:::boom-bucket&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="yeoghal-role-jeongyihagi">역할(Role) 정의하기</h2>
+<p>역할은 리소스를 만들때 자동으로 함께 만들게 될때가 많은데, 가끔은 직접 만들어쓸 경우도 있다.</p>
+<p>한번 만들어보자.</p>
+<p><img src="/images/img_e0b797c70aa79bb7.png" alt="" />
+생성 창에 들어가면 신뢰 관계(trust policy)라는 것을 먼저 정하라고 한다.<br />
+쉽게 말하면 어떤 리소스에서만 이 역할을 쓰게 할 것인지를 미리 정해두는 것이다.</p>
+<p>Lambda 리소스를 만들때 자동으로 만들어진 신뢰관계는 이런식으로 만들어져 있다.</p>
+<p><img src="/images/img_dccdcca55a94d68b.png" alt="" />
+여기서는 람다 서비스만 허용해주도록 했다.<br />
+저 lambda.amazonaws.com는 람다 서비스를 가리키는 도메인이다. 저거 말고도 이것저것 있다.</p>
+<p>아무튼 마저 만들어보자.</p>
+<p><img src="/images/img_40e4d07b00f70431.png" alt="" />
+여기서 JSON 직접 입력으로 만들 수도 있지만, 그냥 일반 사용사례에서 선택해서 만드는게 편하다.<br />
+내 경우에는 EC2로 했다. 이러면 EC2에만 달 수 있는 역할이 된다.</p>
+<p>그다음에는 역할에 부착할 정책들을 연결한다.</p>
+<p><img src="/images/img_cf332b0af18f0b83.png" alt="" />
+적당히 필요한대로 고르고</p>
+<p>이름짓고, 잘 확인하고 만들면 된다.</p>
+<p><img src="/images/img_d70118991ee44fec.png" alt="" /></p>
+<p>그럼 이렇게 잘 생성될 것이다.</p>
+<p><img src="/images/img_aeccc024271eefe0.png" alt="" />
+이제 이걸 필요한데다가 갖다붙여서 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/IAM/latest/UserGuide/access_policies.html">https://docs.aws.amazon.com/ko_kr/IAM/latest/UserGuide/access_policies.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222952423177/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>eojuk 0.6.0 배포<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222946625972/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] CodePipeline: EC2에 CodeDeploy 연동<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

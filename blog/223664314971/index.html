@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>검색 최적화 지표: MRR, mAP | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223664314971/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="검색 최적화 지표: MRR, mAP">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223664314971/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-11-18T00:00:00+00:00">
+    <meta property="article:tag" content="자료구조&#x2F;알고리즘">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223664314971/">검색 최적화 지표: MRR, mAP</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-18T00:00:00+00:00"><time datetime="2024-11-18T00:00:00+00:00">2024.11.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="356 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/jaryogujo-algorijeum/">자료구조&#x2F;알고리즘</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223664314971" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>텍스트 검색 기능은 성능과 별개로 "품질"이 매우 중요하다.</p>
+<p>대충 Elaticsearch 박고 텍스트검색 넣으면 성능은 잘 나오니 괜찮겠지 싶을 수도 있지만, 사실 여기에는 변수가 매우 많은 편이다. 검색 자체의 정확도와 유저의 선호도 2가지를 동시에 다 챙겨야 하기 때문이다.</p>
+<p>사전 데이터 잘 넣어야지 분리돼서 검색이 되고, 카테고리 필터링같은 것도 잘 적용해줘야 하고, 정확도와 별개로 실제 인기도 반영해서 관심있을 만한 것을 위에 올려줘야 하고... 머리가 아프다.</p>
+<p>그래서 검색의 품질을 정량화하고 개선하는 것부터가 상당한 난관이다.<br />
+사람이 감으로 그냥 보는 정성적인 방법에는 한계가 있고, 정량화하자니 뭘 어떻게 해야할지가 난감하다.</p>
+<p>그래도 약간 모범답안처럼 나도는 공식들이 몇가지 존재하고, 여기서는 검색의 "정렬"이 잘 동작하는지에 대한 지표를 설정하는 법을 간단히 정리해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-gajeong">기본 가정</h2>
+<p>사용자가 어떤 액션을 취해야 좋은 검색 결과라고 말할 수 있을까?</p>
+<p>아마도 검색하고 클릭을 아예 하지 않으면 나쁜 검색이라고 할 수 있을 것이다.<br />
+그리고 검색을 클릭했더라도, 페이지를 최대한 넘어가지 않고 상위 정렬의 검색 결과를 클릭했다면 괜찮은 검색 결과라고 판단할 수 있을 것이다.</p>
+<p>이제 여기서 말하는 공식들은 이 상위 클릭에 대한 가중치나, 뭐 그런 것들을 어떻게 계산할지를 말하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="mean-reciprocal-rank-mrr">Mean Reciprocal Rank(MRR)</h2>
+<p>사용자가 클릭한 상위 아이템을 기준으로 역수를 잡고, 총합해서 평균을 내는 방법이다.</p>
+<p>예를 들어 특정 유저의 검색 결과가 [A, B, C, D, E, F]이고, C와 D를 클릭했다면 C(3)이 상위 아이템이다.<br />
+그러므로 1/3=0.3이 해당 유저의 점수가 되는 것이다.</p>
+<p>그리고 이러한 점수들로 평균을 내서 품질을 계산한다.</p>
+<p>구현하기에 간편하지만 사용자가 여러개의 아이템을 클릭했을 때를 충분히 반영하지 못한다는게 단점이다.<br />
+이것저것 들어가봤으면 그것도 나름 의미있는 검색 아니겠는가?</p>
+<br>
+<br>
+<br>
+<h2 id="mean-average-precision-map">mean Average Precision(mAP)</h2>
+<p>MRR에서 단계가 하나 추가된 방법이다.</p>
+<p><img src="/images/img_b8f1c63d12c69810.jpg" alt="" />
+수식으로 보면 복잡한데, 사실 뜯어보면 어려운게 아니다.</p>
+<p>사용자가 여러개의 아이템을 클릭했다면, 그 각각의 아이템에 대해서 역수를 잡은 수치를 뽑는다.<br />
+그리고 그 수치들을 다시 평균내서 User의 점수를 뽑은 다음에, 각 User 점수들로 평균을 잡아서 다시 최종 품질을 계산한다.</p>
+<p>예를 들어 특정 유저의 검색 결과가 [A, B, C, D, E, F]이고, C와 D를 클릭했다면 C(3) 점수는 1/3=0.333.., D(4) 점수는 1/4=0.25다.<br />
+이 2개를 다시 평균을 내면 (0.333 + 0.25) / 2 = 0.29...가 된다.</p>
+<p>그리고 이 각각의 User 점수들을 평균내면 mAP 점수가 되는 것이다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://medium.com/musinsa-tech/map-416b5f143943">https://medium.com/musinsa-tech/map-416b5f143943</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223669876836/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] 트래픽 과금 구조<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223664275708/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>DNS 관련 썰.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

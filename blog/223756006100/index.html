@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] pg_cron | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223756006100/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] pg_cron">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223756006100/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-02-11T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223756006100/">[PostgreSQL] pg_cron</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-11T00:00:00+00:00"><time datetime="2025-02-11T00:00:00+00:00">2025.02.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="326 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223756006100" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>pg_cron은 postgres 자체에서 일정 기반 스케줄러를 구현할 수 있는 강력한 확장 도구다.</p>
+<p>서비스의 규모가 대단한게 아니라면, 스케줄러 서버 띄워서 관리포인트 늘리는 것보단, 이게 훨씬 간편하고 비용<br />
+효율적일 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="seolci">설치</h2>
+<p>관리형 PostgreSQL을 쓴다면 pg_cron이 기본적으로 설치되어있는 경우가 많다. AWS와 GCP를 포함한 상당수의 클라우드들이 이 정도는 다 해준다.<br />
+그런 경우엔 다음 절차를 다 생략하고 CREATE Extension만 해도 된다.</p>
+<p>일반적인 리눅스 환경에서는 pg_cron 모듈을 설치하고, 설정도 조금은 해줘야 사용할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get</span><span style="color: #94E2D5;"> -</span><span>y install postgresql</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">16</span><span style="color: #94E2D5;">-</span><span>cron</span></span></code></pre>
+<p><img src="/images/img_982e3fc1065e067b.png" alt="" />
+현재 사용중인 psql 버전에 맞는 cron 모듈을 먼저 설치한다.<br />
+psql 버전이 너무 낮다면 설치하기 매우 불편하거나 어려울 수 있다.</p>
+<p>패키지 매니저에서 버전에 맞는걸 지원하지 않는다면, 직접 받아서 빌드해야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>git clone https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/citusdata/pg_cron.git</span></span>
+<span class="giallo-l"><span>cd pg_cron</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">export</span><span> PATH</span><span style="color: #94E2D5;">=/</span><span>usr</span><span style="color: #94E2D5;">/</span><span>pgsql</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">10</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #9399B2;">:</span><span>$PATH</span></span>
+<span class="giallo-l"><span>make</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> sudo PATH</span><span style="color: #94E2D5;">=</span><span>$PATH make install</span></span></code></pre>
+<p>설치가 잘 되었다면 postgres 설정파일을 찾아서 열고</p>
+<p><img src="/images/img_b2233019422a4996.png" alt="" /></p>
+<p>다음 2줄을 추가한 뒤에</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>shared_preload_libraries</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;pg_cron&#39;</span></span>
+<span class="giallo-l"><span>cron</span><span style="color: #94E2D5;">.</span><span>database_name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;postgres&#39;</span></span></code></pre>
+<p><img src="/images/img_b1661e859632348c.png" alt="" /></p>
+<p>리스타트를 때리면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl restart postgresql</span></span></code></pre>
+<p><img src="/images/img_8fd56671cc136410.png" alt="" /></p>
+<p>그리고 psql에 들어가서 확장을 활성화하면 기본 설정은 끝이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE EXTENSION pg_cron</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_1158928eb08fc268.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>초기화가 잘 되었다면 cron.job, cron.job_run_detail과 같은 기본 테이블들이 생성이 될 것이다.</p>
+<p><img src="/images/img_b955a63d372d0712.png" alt="" /></p>
+<p>한번 테이블 하나 만들고, 거기에 1분마다 데이터를 집어넣는 cron을 정의해보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create table</span><span style="color: #89B4FA;font-style: italic;"> cron_test</span><span> (</span></span>
+<span class="giallo-l"><span>  id serial primary key</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  time timestamp default</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>()</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_cf45128a4f9e5331.png" alt="" />
+테이블은 대충 만들었고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT cron</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">schedule</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &#39;test_cron_job&#39;</span><span style="color: #9399B2;">,</span><span>  </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &#39;* * * * *&#39;</span><span style="color: #9399B2;">,</span><span>             </span></span>
+<span class="giallo-l"><span>  $$INSERT INTO</span><span style="color: #89B4FA;font-style: italic;"> cron_test</span><span> (time)</span><span style="color: #89B4FA;font-style: italic;"> VALUES</span><span> (</span><span style="color: #89B4FA;font-style: italic;">now</span><span>());$$</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_2bbe113e76adf5ec.png" alt="" />
+이런 식으로 정의하면 된다.<br />
+첫번째 인자가 job 이름, 두번째 인자가 cron식, 세번째 인자가 실행될 쿼리다.</p>
+<br>
+<p><img src="/images/img_fb0ec3ccbb1d718b.png" alt="" />
+그렇게 생성하면 job 목록에 항목이 추가된다.</p>
+<br>
+<p><img src="/images/img_862bacab6d4510eb.png" alt="" /></p>
+<p><img src="/images/img_b4d521e752c726a6.png" alt="" />
+그리고 좀 기다리면 의도대로 쌓이는걸 볼 수 있을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="connection-failed-munje">Connection Failed 문제</h2>
+<p>클라우드를 쓰지 않고 직접 구성했는데, 추가적인 네트워크 설정을 하지 않았다면 cron job들이 줄줄이 실패하는 것을 볼 확률이 높다.</p>
+<p><img src="/images/img_e2cb1333612233e4.png" alt="" />
+이렇게 말이다.</p>
+<p>pg_cron 확장은 생각보다 postgres 자체와 강하게 결합되어있는 것은 아니다.<br />
+별도의 프로세스로 떠서 postgres에 TCP 요청을 때리는 식으로 동작하는데, 그래서 TCP 통신을 위한 보안 수준 설정이 필요하다.</p>
+<p>일반적으로 권장되고 편리한 방법은, 그냥 로컬호스트 내에서는 자유롭게 통신이 가능하도록 열어주는 것이다.<br />
+pb_hba.conf 파일을 열어서 trust로 허용해주고</p>
+<p><img src="/images/img_c5f8c9327baa3e27.png" alt="" /></p>
+<p><img src="/images/img_10a7994952d29527.png" alt="" /></p>
+<p>postgresql.conf에도 다음 한줄을 추가해준 뒤에</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cron</span><span style="color: #94E2D5;">.</span><span>host</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;&#39;</span></span></code></pre>
+<p>리스타트를 때리면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl restart postgresql</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/citusdata/pg_cron">https://github.com/citusdata/pg_cron</a><br />
+<a rel="external" href="https://github.com/citusdata/pg_cron/issues/48#issuecomment-386207327">https://github.com/citusdata/pg_cron/issues/48#issuecomment-386207327</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223761188760/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana Tempo] Tempo를 통한 Trace 관리<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223755563107/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Grafana] 대시보드: 변수 (Variable)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

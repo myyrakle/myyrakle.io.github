@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 비동기 러스트: Pinning (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221915587415/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 비동기 러스트: Pinning (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221915587415/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2020-04-18T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221915587415/">[Rust] 비동기 러스트: Pinning (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-04-18T00:00:00+00:00"><time datetime="2020-04-18T00:00:00+00:00">2020.04.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="553 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221915587415" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>원문<br />
+https://rust-<a rel="external" href="http://lang.github.io/async-book/04_pinning/01_chapter.html">lang.github.io/async-book/04_pinning/01_chapter.html</a></p>
+<p>future들을 polling하기 위해서는, Pin<T>이라는 특수한 타입으로 future를 고정할 필요가 있습니다.</p>
+<p>만약 이전 섹션인 <a rel="external" href="https://rust-lang.github.io/async-book/02_execution/01_chapter.html">"Future와 Task의 실행"</a>에서 <a rel="external" href="https://rust-lang.github.io/async-book/02_execution/02_future.html">Future 트레잇</a>에 대한 설명을 읽었다면, Future::poll 메서드 정의에서 self: Pin&lt;&amp;mut Self&gt;의 형태로 Pin이 사용된 것을 봤을 겁니다.</p>
+<p>하지만 이게 뭘 의미하고, 뭘 위해 필요한 걸까요?</p>
+<br>
+<p><strong>Pinning을 왜 하나요?</strong></p>
+<p>Pinning은 해당 객체가 절대 이동되지 않을 거란 것을 보장할 수 있게 해줍니다.</p>
+<p>이것의 필요성을 이해하려면, async/await가 어떻게 동작하는지를 먼저 알아야 하는데요.</p>
+<p>다음 코드를 봐봅시다.</p>
+<p>**let fut_one = ***<em>/</em> ... */; **<br />
+**let fut_two = ***<em>/</em> ... */; **<br />
+**async move { **<br />
+**    <strong><a rel="external" href="http://fut_one.await">fut_one.await</a></strong>; **<br />
+**    <strong><a rel="external" href="http://fut_two.await">fut_two.await</a></strong>; **<br />
+**} **</p>
+<p>저 속을 들여다보면, 이건 Future를 구현하는 익명 타입을 생성해서 다음과 같은 poll 메서드를 제공합니다.</p>
+<p><strong>// <code>async { ... }</code> 블럭으로 생성될 Future 타입.</strong><br />
+**struct AsyncFuture **<br />
+**{ **<br />
+**    fut_one: FutOne, **<br />
+**    fut_two: FutTwo, **<br />
+**    state: State, **<br />
+**} **</p>
+<p>**// async 블럭에 들어갈 수 있는 상태의 목록 **<br />
+**enum State **<br />
+**{ **<br />
+**    AwaitingFutOne, **<br />
+**    AwaitingFutTwo, **<br />
+**    Done, **<br />
+**} **</p>
+<p>**impl Future for AsyncFuture **<br />
+**{ **<br />
+**    type Output = (); **<br />
+**    fn poll(mut self: Pin&lt;&amp;mut Self&gt;, cx: &amp;mut Context&lt;'_&gt;) -&gt; Poll&lt;()&gt; **<br />
+**    { **<br />
+**        loop **<br />
+**        { **<br />
+**            match <strong><a rel="external" href="http://self.state">self.state</a></strong> **<br />
+**            { **<br />
+**                State::AwaitingFutOne =&gt; match <strong><a rel="external" href="http://self.fut_one.poll">self.fut_one.poll</a></strong>(..) **<br />
+**                { **<br />
+**                    Poll::Ready(()) =&gt; <strong><a rel="external" href="http://self.state">self.state</a></strong> = State::AwaitingFutTwo, **<br />
+**                    Poll::Pending =&gt; return Poll::Pending, **<br />
+**                } **<br />
+**                State::AwaitingFutTwo =&gt; match <strong><a rel="external" href="http://self.fut_two.poll">self.fut_two.poll</a></strong>(..) **<br />
+**                { **<br />
+**                    Poll::Ready(()) =&gt; <strong><a rel="external" href="http://self.state">self.state</a></strong> = State::Done, **<br />
+**                    Poll::Pending =&gt; return Poll::Pending, **<br />
+**                } **<br />
+**                State::Done =&gt; return Poll::Ready(()), **<br />
+**            } **<br />
+**        } **<br />
+**    } **<br />
+**} **</p>
+<p>poll이 처음 호출되면, fut_one을 poll할 겁니다.<br />
+그리고 fut_one가 완료되지 않았다면 AsyncFuture::poll이 반환될 겁니다.</p>
+<p>그리고 poll로의 Future 호출은 이전의 것이 중단된 위치에서 계속될 거에요.<br />
+-&gt;Future calls to poll will pick up where the previous one left off.</p>
+<p>이러한 과정은 future가 성공적으로 완료될 때까지 계속 반복됩니다.</p>
+<p>그런데, 참조를 사용하는 async 블럭이 있다면 무슨 일이 일어날까요?<br />
+예를 들어보죠.</p>
+<p>**async { **<br />
+**    let mut x = [0; 128]; **<br />
+**    let read_into_buf_fut = read_into_buf(&amp;mut x); **<br />
+**    <strong><a rel="external" href="http://read_into_buf_fut.await">read_into_buf_fut.await</a></strong>; **<br />
+**    println!("{:?}", x); **<br />
+**} **</p>
+<p>이건 어떤 구조체로 컴파일될까요?</p>
+<p>**struct ReadIntoBuf&lt;'a&gt; **<br />
+**{ **<br />
+**    buf: &amp;'a mut [u8], **<strong>// 아래의 <code>x</code>를 가리킴</strong><br />
+**} **</p>
+<p>**struct AsyncFuture **<br />
+**{ **<br />
+**    x: [u8; 128], **<br />
+**    read_into_buf_fut: ReadIntoBuf&lt;'what_lifetime?&gt;, **<br />
+**} **</p>
+<p>여기에서 ReadIntoBuf future는 우리 구조체의 다른 필드 x에 대한 참조를 가집니다.<br />
+그런데, AsyncFuture가 이동된다면, x의 위치도 이동되겠죠? <a rel="external" href="http://read_into_buf_fut.buf.">read_into_buf_fut.buf</a>가 저장된 포인터도 무효화될 거고요.</p>
+<p>future를 메모리의 특정 지점에 고정하면(Pinning) 이러한 문제를 방지할 수 있습니다. async 블럭 내부의 값에 대한 참조를 안전하게 만들 수 있는거죠.</p>
+<br>
+<br>
+<p><strong>Pinning을 어떻게 사용하나요?</strong></p>
+<p>Pin 타입은 포인터 타입의 래퍼(wraps) 타입으로, 해당 포인터 뒤에 있는 값이 이동되지 않을 것임을 보장합니다.<br />
+가령 Pin&lt;&amp;mut T&gt;, Pin&lt;&amp;T&gt;, Pin&lt;Box<T>&gt; 등은 전부 T가 이동되지 않을 것이 보장됩니다.</p>
+<p>대부분의 타입은 이동에 대한 문제를 가지지 않는데요. 이러한 타입들은 Unpin 트레잇을 구현합니다.<br />
+Unpin 타입에 대한 포인터들은 자유롭게 Pin에 넣거나 빼낼 수 있습니다.<br />
+예를 들어, u8는 Unpin입니다. 그래서 Pin&lt;&amp;mut u8&gt;은 일반적인 &amp;mut u8처럼 동작할 거에요.</p>
+<p>일부 함수들은 future가 Unpin으로 동작하길 요구할 수도 있습니다.</p>
+<p>Unpin 타입을 필요로 하는 함수에 Unpin이 아닌 Future나 Stream을 쓰려면. 먼저 Box::pin이나 pin_utils::pin_mut! 매크로를 통해 값을 고정해야 합니다. Box를 쓸 경우엔 Pin&lt;Box<T>&gt;를, 매크로를 쓸 경우엔 Pin&lt;&amp;mut T&gt;를 생성하게 될 거에요.</p>
+<p>Pin&lt;Box<Fut>&gt;와 Pin&lt;&amp;mut Fut&gt;는 둘다 future로 사용될 수 있고, 동시에 Unpin을 구현하게 됩니다. </p>
+<p>아래는 그 예시입니다.</p>
+<p>**use pin_utils::pin_mut; **<strong>// pin_utils는 crate.io에 있는 유용한 크레이트입니다.</strong></p>
+<p>**// Unpin을 구현하는 Future를 받는 함수. **<br />
+**fn execute_unpin_future(x: impl Future&lt;Output = ()&gt; + Unpin) **<br />
+*<em>{ **<br />
+**   **** /</em> ... */ **<br />
+**} **</p>
+<p>**let fut = async { <em><strong><em>/</em> ... <em>/</em></strong></em> }; execute_unpin_future(fut); ****// Error: fut이 Unpin 트레잇을 구현하지 않음 **</p>
+<p>**// Box로 Pinning: **<br />
+**let fut = async { <em><strong><em>/</em> ... <em>/</em></strong></em> }; **<br />
+**let fut = Box::pin(fut); execute_unpin_future(fut); ****// OK **</p>
+<p>**// pin_mut!으로 Pinning: **<br />
+**let fut = async { <em><strong><em>/</em> ... <em>/</em></strong></em> }; **<br />
+**pin_mut!(fut); **<br />
+**execute_unpin_future(fut); **<strong>// OK</strong></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221917842864/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] 맵<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221908296398/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>코루틴에 대하여<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

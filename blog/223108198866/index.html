@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] Lock | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223108198866/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] Lock">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223108198866/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-05-22T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223108198866/">[MongoDB] Lock</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-22T00:00:00+00:00"><time datetime="2023-05-22T00:00:00+00:00">2023.05.22</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="394 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223108198866" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>MongoDB도 여타 DB들과 마찬가지로 동시성 제어를 위한 Lock 기능을 제공한다.</p>
+<br>
+<br>
+<h2 id="lock-mode">Lock mode</h2>
+<p>MongoDB는 크게 2가지의 Lock 매커니즘을 지원한다.</p>
+<br>
+<ol>
+<li>
+<p>Shared Lock: lock을 점유한 데이터는 다른 write가 들어올 수 없다. 하지만 여러개의 read는 허용한다.(RWLock)</p>
+</li>
+<li>
+<p>Exclusive Lock: lock을 점유한 데이터는 다른 read/write가 전부 들어올 수 없다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>세분화하면 Intent.. 어쩌고 하는게 더 있긴 한데, 기본적인 원리는 여기에서 벗어나지 않는다.</p>
+<p>그리고 각 연산의 기본 Lock 동작은 다음과 같다. r이 Shared Lock이고, w가 Exclusive Lock이다.</p>
+<p><img src="/images/img_d251b6a4b8953a02.png" alt="" />
+<a rel="external" href="https://www.mongodb.com/docs/manual/faq/concurrency/">https://www.mongodb.com/docs/manual/faq/concurrency/</a><br />
+대부분의 mutable 연산이 Exclusive Lock이고 readonly 연산이 Shared Lock임을 알 수 있다.</p>
+<p>이러한 Lock 기능을 통해 MongoDB는 document 단위의 atomic을 보장한다.</p>
+<br>
+<br>
+<br>
+<h2 id="lock-cungdolsiyi-dongjag">Lock 충돌시의 동작</h2>
+<p>동시에 여러개의 operation들을 수행하다보면, Lock이 이미 걸린 상태에서 또다른 write operation이 들어올 경우가 많을 것이다.<br />
+이럴 때 기존의 RDB들은 Lock이 풀릴때까지 기다렸다가 Lock이 풀리면 마저 처리를 하는 방식을 취하는데, MongoDB의 해결방식은 꽤 독특하다.</p>
+<p><img src="/images/img_60d7e234098d5948.png" alt="" />
+<a rel="external" href="https://rastalion.me/mongodb-transaction-management/">https://rastalion.me/mongodb-transaction-management/</a><br />
+이미 Lock이 걸려있는 데이터에 write를 시도하면, 몽고 서버는 그에 대해 에러를 던진다.<br />
+그리고 에러가 나면 다시 시도하고, 다시 시도하고... 의 방법을 계속 사용한다.</p>
+<p>MongoDB 내부에서만 일어나는 일이라 사용에 큰 불편함은 없지만, 이게 너무 늘어나면 성능에 지장을 주게 된다.<br />
+CPU 사용량도 매우 커지고, 내부의 WiredTiger 캐시에도 부담을 줘서 전체적인 성능을 저하시키기 때문이다...</p>
+<br>
+<br>
+<br>
+<h2 id="multi-document-transaction">multi-document transaction</h2>
+<p>이게 뭐냐면, RDB에서 쓰던 그 수동 트랜잭션 기능을 말한다.<br />
+여러개의 operation을 하나로 묶어서 하나의 Lock 단위로 처리하는 것이다.</p>
+<p>MongoDB는 NoSQL이면서도 RDB의 영역까지 노리는 애매한 녀석이라서, 이런것도 비슷하게 지원한다...</p>
+<p>리소스를 대단히 많이 먹을 수 있는 기능이라 권장되지는 않는다.</p>
+<p>사전 조건이 하나 있다. MongoDB 서버가 무조건 단일 인스턴스가 아니라 replicaset 모드여야 한다는 것이다.<br />
+근데 레플리카인거랑 트랜잭션 작동여부가 대체 무슨 상관이지...? 이건 몽고 개발자들 실수인거같다.</p>
+<p>아래는 Node.js 기반의 간단한 transaction  사용 예제다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span style="color: #9399B2;"> {</span><span> MongoClient</span><span style="color: #9399B2;"> }</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;mongodb&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> url</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;mongodb://127.0.0.1:27017/?directConnection=true&amp;serverSelectionTimeoutMS=2000&amp;appName=mongosh+1.6.0&amp;replicaSet=rs0&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> client</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> MongoClient</span><span>(url)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> main</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  await</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">connect</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">  // 세션 시작</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> session</span><span style="color: #94E2D5;"> =</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">startSession</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">  // 트랜잭션 옵션 설정</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> transactionOptions</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    readPreference</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;primary&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    readConcern</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span> level</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;local&quot;</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span>    writeConcern</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span> w</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;majority&quot;</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> session</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">withTransaction</span><span>(</span><span style="color: #CBA6F7;">async</span><span style="color: #9399B2;"> ()</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      const</span><span> coll1</span><span style="color: #94E2D5;"> =</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">db</span><span>(</span><span style="color: #A6E3A1;">&quot;mydb1&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">collection</span><span>(</span><span style="color: #A6E3A1;">&quot;foo&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      const</span><span> coll2</span><span style="color: #94E2D5;"> =</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">db</span><span>(</span><span style="color: #A6E3A1;">&quot;mydb2&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">collection</span><span>(</span><span style="color: #A6E3A1;">&quot;bar&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">      // Important:: You must pass the session to the operations</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      await</span><span> coll1</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insertOne</span><span>(</span><span style="color: #9399B2;">{</span><span> abc</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;"> }, {</span><span> session</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      await</span><span> coll2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insertOne</span><span>(</span><span style="color: #9399B2;">{</span><span> xyz</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 999</span><span style="color: #9399B2;"> }, {</span><span> session</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    },</span><span> transactionOptions)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> finally</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 세션 종료</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> session</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">endSession</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">main</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_e448d6094040a6a9.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://rastalion.me/mongodb-lock-%EC%9E%A0%EA%B8%88/">https://rastalion.me/mongodb-lock-%EC%9E%A0%EA%B8%88/</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/core/write-operations-atomicity/">https://www.mongodb.com/docs/manual/core/write-operations-atomicity/</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/core/transactions/">https://www.mongodb.com/docs/manual/core/transactions/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/51461952/mongodb-v4-0-transaction-mongoerror-transaction-numbers-are-only-allowed-on-a">https://stackoverflow.com/questions/51461952/mongodb-v4-0-transaction-mongoerror-transaction-numbers-are-only-allowed-on-a</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/core/write-operations-atomicity/">https://www.mongodb.com/docs/manual/core/write-operations-atomicity/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223108175228/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] From&#x2F;Into chaining<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223107501813/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>로드 밸런싱(Load Balancing)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

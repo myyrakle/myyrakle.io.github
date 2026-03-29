@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] SQS FIFO: 실시간 거래 시스템 설계 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223017245405/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] SQS FIFO: 실시간 거래 시스템 설계">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223017245405/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-02-16T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223017245405/">[AWS] SQS FIFO: 실시간 거래 시스템 설계</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-02-16T00:00:00+00:00"><time datetime="2023-02-16T00:00:00+00:00">2023.02.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="523 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223017245405" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>매우 빠른 응답시간과 정확성을 가지는 실시간 거래 시스템을 설계한다고 가정해보겠다.</p>
+<p><img src="/images/img_ecbaef6fdcb34b69.png" alt="" />
+이런거말이다.</p>
+<p>이런 거래 시스템은 대충 이런 기능과 요구사항을 가진다.</p>
+<ol>
+<li>
+<p>사용자는 들고있는 코인을 원하는 가격에 매도 요청을 할 수 있다.</p>
+</li>
+<li>
+<p>사용자는 사기를 원하는 코인을 원하는 가격에 매수 요청을 할 수 있다.</p>
+</li>
+<li>
+<p>만약 같은 가격의 매수 요청과 매도 요청이 만난다면, 해당 매수와 매도를 한쌍으로 맞춰서 거래를 체결한다.</p>
+</li>
+<li>
+<p>매수/매도 요청은 요청한 시간 순서대로 엄격하게 처리되어야 한다.</p>
+</li>
+<li>
+<p>초당 수백-천건까지의 매도-매수 요청이 들어올 수 있다. 그럼에도 빠른 처리 속도를 가져야 한다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>그래서 내가 설계한 구조는 대강 아래와 같다.</p>
+<p><img src="/images/img_8174d95971b77b84.png" alt="" />
+매도/매수 요청을 날리면 일단 각 FIFO 큐로 날려서 받은 다음에, 그걸로 Lambda를 호출해서 처리를 하도록 하는 것이다.</p>
+<p>SQS FIFO는 말 그대로 선입선출을 지원하는 큐 서비스인데, 따로 관리가 필요하지 않고 비용이 온디맨드라서 꽤 편리한 기능이다. 다만 단점이 있다.<br />
+순서를 엄격하게 처리하다보니 TPS에 제한이 좀 있다.<br />
+"높은 처리량"을 활성화했을 경우 서울 리전은 1500TPS라서 초당 1500건까지만 받아낼 수 있고, 도쿄나 싱가포르 리전은 3000TPS라서 초당 3000건까지만 버틸 수 있다.<br />
+미국에 있는 일부 진골 리전들은 6000TPS까지 지원되기도 한다.</p>
+<p>이걸 넘는 정말 초대형 트래픽을 감당해야 한다면, 그때는 키네시스 같은 대규모 큐를 쓰는 편이 좋을 것이다.</p>
+<p>이 경우에는 순서가 중요해서 FIFO를 쓰긴 했지만 기본 스탠다드 큐는 이런 제한이 없고 더 저렴하다. 일반적인 상황이라면 스탠다드를 쓰는게 좋다.</p>
+<p>그리고 DB는 일반 RDB와 Redis를 혼용했다.<br />
+매도/매수에 대한 요청을 다 레디스에 무작정 때려박아서 읽기/쓰기 성능을 최적화하고, 거래가 체결되었을 경우에는 그 유저들의 보유액 관련 데이터를 RDB에 반영시키는 구조다.</p>
+<p>RDB 같은 경우는 RDS를 쓴다면 RDS Proxy를 쓰는게 좋다.<br />
+그래서 커넥션이 터지지 않기 때문이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222576013561">https://blog.naver.com/sssang97/222576013561</a></p>
+<br>
+<br>
+<br>
+<h2 id="kyu-mandeulgi">큐 만들기</h2>
+<p>한번 만들면서 봐보자.</p>
+<p><img src="/images/img_c9a61bbb8d95f98e.png" alt="" />
+이름 짓고, "높은 처리량" 옵션은 넣어주면 좋겠다.</p>
+<p>대충 이렇게 해서 "매수"용 큐와 "매도"용 큐를 하나씩 만들어주면 된다.</p>
+<p><img src="/images/img_4f9a469a840a428e.png" alt="" /></p>
+<p><img src="/images/img_12ab488af1bd9426.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="lambda-saengseong">Lambda 생성</h2>
+<p>큐에 뭐가 들어오면 이제 Lambda가 받아서 실질적인 로직들을 수행해주도록 할 것이다.</p>
+<p>먼저 Lambda용 보안그룹을 하나 파주고</p>
+<p><img src="/images/img_b4f1ee3f3a4704e4.png" alt="" /></p>
+<p>함수 하나 만들면서</p>
+<p><img src="/images/img_7da82f4555bfbed5.png" alt="" /></p>
+<p>VPC를 할당하고, 방금 만든 보안그룹을 달아준다.</p>
+<p><img src="/images/img_5e9e8c65421be0c5.png" alt="" />
+이래야 동일 VPC 내에 있는 리소스들에 자유롭게 접근할 수 있다.</p>
+<p><img src="/images/img_7251fc32b1d5d697.png" alt="" /></p>
+<p>만든 함수의 실행역할에는 "SQS"가 트리거를 걸 수 있도록 "AWSLambdaSQSQueueExecutionRole"을 붙여줘야 하고, 또 읽은 메세지는 지워줘야 하니 SQSFullAccess같은거도 넣어줘야 한다.</p>
+<p><img src="/images/img_f84549006228b58c.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="kyue-teurigeo-geolgi">큐에 트리거 걸기</h2>
+<p>한번 어떻게 받아지나 트리거를 붙여보자.</p>
+<p><img src="/images/img_e8ba740302452153.png" alt="" />
+저 탭으로 이동해서</p>
+<br>
+<p><img src="/images/img_5e9850c9cc7bc046.png" alt="" />
+방금 만든 함수를 달아준다.</p>
+<br>
+<p><img src="/images/img_457e4bb472b897c3.png" alt="" />
+그럼 이렇게 생길텐데, 이제 저 큐로 메세지를 쏘면 저 함수를 호출하면서 그 메세지가 전달되게 되는 것이다.</p>
+<p>한번 쏴보겠다.</p>
+<p><img src="/images/img_4dc1c7fc8a9c4408.png" alt="" /></p>
+<p>쏘면 이제</p>
+<p><img src="/images/img_20c8b1dc145f124e.png" alt="" /></p>
+<p>함수가 호출돼서 로그가 찍히는 것을 볼 수 있겠다.</p>
+<p><img src="/images/img_cb55c423bb1ee240.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>  Records</span><span style="color: #9399B2;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>      messageId</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;11172afe-543f-4a90-98de-ac221bbab9f5&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      receiptHandle</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;AQEBWXTN+./c9HDpvDv7Ktx6dS+...+.+.../JW3ylny4gdeTS/....+rlML94sWswIKkEJNSlwlbBoOCX2Dm2McSqIGdUETeLy2oKaDYbNcM6leBIEIRRTupi1kxTyJ2ZMNh4Y=&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      body</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;{&quot;user_id&quot;: 1, &quot;amount&quot;: 1000 }&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      attributes</span><span style="color: #94E2D5;">:</span><span> [Object]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      messageAttributes</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {},</span></span>
+<span class="giallo-l"><span>      md5OfBody</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;f542f4e2910e233be7e075b76ed22871&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      eventSource</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;aws:sqs&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      eventSourceARN</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;arn:aws:sqs:ap-northeast-2:...:bitcoin_buy_dev.fifo&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      awsRegion</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;ap-northeast-2&#39;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>  ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이런식으로 event에 들어온다.</p>
+<p>그럼 결국 이런식으로 받아서 처리하면 되는 것이다.</p>
+<p><img src="/images/img_0894a229bfee81e6.png" alt="" />
+코드를 다 적지는 않았다.</p>
+<p>redis에 lock을 걸어서 동시성 버그를 잘 잡는 것만 신경쓰면 되겠다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html">https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/general/latest/gr/sqs-service.html">https://docs.aws.amazon.com/ko_kr/general/latest/gr/sqs-service.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/high-throughput-fifo.html#enable-high-throughput-fifo">https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/high-throughput-fifo.html#enable-high-throughput-fifo</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223018850973/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Restful: 멱등성 키(Idempotency-Key)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223016024551/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Resourceinitializationerror: unable to pull secrets or registry auth: ...<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

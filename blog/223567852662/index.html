@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] aggregate: 기본 구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223567852662/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] aggregate: 기본 구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223567852662/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-09-01T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223567852662/">[MongoDB] aggregate: 기본 구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-09-01T00:00:00+00:00"><time datetime="2024-09-01T00:00:00+00:00">2024.09.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="460 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223567852662" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>mongodb는 aggregate라는 기능을 통해서 aggregation 기능을 제공한다.<br />
+기존에는 map-reduce를 통해서 이런 그룹화된 데이터 처리 기능을 제공했었는데, 그걸 제거하고 이걸로 대체한 상태다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p><img src="/images/img_b43fb06e12e6ca16.png" alt="" />
+만약 이런 형태의 데이터셋이 있다면</p>
+<br>
+<p><img src="/images/img_10ff6cbe6fd8b7e0.png" alt="" />
+aggregate는 배열의 형태로 여러개의 스텝을 순서대로 정의해서, 파이프라인처럼 입출력을 뽑아내는 형태로 동작한다.<br />
+하나씩 뜯어보자.</p>
+<br>
+<br>
+<br>
+<h2 id="match-seuteb">match 스텝</h2>
+<p>가장 기본이 되는 stage다. 이건 말 그대로 필터 역할만을 수행한다.</p>
+<p><img src="/images/img_a66c5088cb26123e.png" alt="" />
+기본적인 find 절과 다를게 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="skipgwa-limit">skip과 limit</h2>
+<p>Limit와 Offset을 구현하는 stage다.</p>
+<p><img src="/images/img_a2d0f6afb1ec6e11.png" alt="" />
+별로 특별할건 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="project-seuteb">project 스텝</h2>
+<p>이건 필드에 대해서 프로젝션을 제공하는 기능이다.</p>
+<p><img src="/images/img_c9b9d817aff57d72.png" alt="" />
+특정 필드만 골라내서 다음 스텝으로 넘긴다. 뽑을것만 뽑아서 미리 넘기면 사이즈가 작아지기 때문에, 최적화를 위해서 사용된다.</p>
+<br>
+<br>
+<br>
+<h2 id="unwind-seuteb">unwind 스텝</h2>
+<p>이건 배열 필드를 강제로 펼쳐내는 특수한 기능이다.</p>
+<p><img src="/images/img_2ddefc9f4c50d8c0.png" alt="" />
+만약 이런 배열 필드가 있다면</p>
+<br>
+<p><img src="/images/img_584cab170552ede6.png" alt="" />
+그 필드를 기준으로 이렇게 row 단위를 강제로 쪼갤 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="group-seuteb">group 스텝</h2>
+<p>group by를 처리하는 기능이다.</p>
+<p><img src="/images/img_d7057b274ebecd0f.png" alt="" />
+일단 그룹이 되는 기준점을 정의해야 하는데, 그게 여기서는 _id라는 기본키로 고정되어있다.</p>
+<br>
+<p><img src="/images/img_54ed9b5f42c858c4.png" alt="" />
+그리고 나머지 집계되는 값들을 다른 필드로 정의하고, 값을 계산하게 하면 된다.<br />
+이건 각 row에 대해서 1로 치고서 합산한다는 뜻이다. 그러니까 결국에는 count 쿼리가 되는 것이다.</p>
+<br>
+<p><img src="/images/img_1b79943b06388d45.png" alt="" /></p>
+<p>이 경우에는 shopTaskItem.price를 합산하도록 했다. 그러면 그룹 기준으로 가격이 합산된다.</p>
+<br>
+<p><img src="/images/img_1d5c93b2d7a87e28.png" alt="" />
+이외에도 avg도 있고 연산자가 이것저것 있다.</p>
+<p>나머지는 문서를 참조한다.</p>
+<br>
+<br>
+<br>
+<h2 id="sort-seuteb">sort 스텝</h2>
+<p>정렬을 위한 기능이다.</p>
+<p><img src="/images/img_db8acc4f890a6944.png" alt="" />
+-1로 주면 역순이고, 1로 주면 오름차순정렬이다.</p>
+<p>기본적인 step, 그러니까 stage들은 이정도다.<br />
+더 많긴 한데, 이정도가 자주 쓰이는 것들이다.<br />
+나머지는 별도 문서를 참조한다.<br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/reference/operator/aggregation-pipeline/#std-label-aggregation-pipeline-operator-reference">https://www.mongodb.com/docs/manual/reference/operator/aggregation-pipeline/#std-label-aggregation-pipeline-operator-reference</a></p>
+<br>
+<br>
+<br>
+<h2 id="danjeom">단점</h2>
+<p>MongoDB를 메인으로 사용할 생각이 있다면, 일단 이걸 먼저 확인해봐야 한다.</p>
+<br>
+<h4 id="seongneung">성능</h4>
+<p>일단 이거 별로 빠르진 않다. RDB와 비교하면 체감상 오히려 더 느린 것 같다.</p>
+<br>
+<br>
+<h4 id="memori-keugi-jehan">메모리 크기 제한</h4>
+<p>가장 치명적인 문제다. 놀랍게도, aggregate의 각 스텝은 100MB라는 하드코딩된 메모리 제한을 갖고 있다.<br />
+이 제한을 넘어서면 어떻게 되느냐 하면, 그냥 스텝이 처리되지 않고 애매한 값을 뭉개서 반환한다.<br />
+오류를 반환하지도 않고, 그냥 응답을 망가뜨려서 반환하는 것이다. 참으로 mongo스럽다고 할 수 있다.</p>
+<p>그래서 빅데이터는 커녕 미디엄급 데이터도 처리하지 못한다. 조금이라도 데이터 처리 단위가 커질 수 있다면, aggregate 기능에 의존하지 않고 직접 응용프로그램 레벨에서 직접 처리를 해야 한다.</p>
+<p>메모리 초과할 때를 대비해서 useDisk... 같은 디스크 사용 옵션이 있는데, 모든 기능에 대해 동작하는 것도 아닌 것 같고, 잘 안먹히더라. 제대로 만든건지는 의심스럽다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/core/aggregation-pipeline/">https://www.mongodb.com/docs/manual/core/aggregation-pipeline/</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/reference/operator/aggregation-pipeline/#std-label-aggregation-pipeline-operator-reference">https://www.mongodb.com/docs/manual/reference/operator/aggregation-pipeline/#std-label-aggregation-pipeline-operator-reference</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223570481394/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] 부팅 안되고 뻗을때 해결하기 (Ubuntu)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223565728766/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[MongoDB] 클러스터: 부하 분산 매커니즘<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

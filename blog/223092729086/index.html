@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Route53: Geolocation routing | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223092729086/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Route53: Geolocation routing">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223092729086/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-05-03T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223092729086/">[AWS] Route53: Geolocation routing</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-03T00:00:00+00:00"><time datetime="2023-05-03T00:00:00+00:00">2023.05.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="237 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223092729086" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_94a15edaebf500e7.jpg" alt="" />
+전세계에 서비스를 제공하는 글로벌 시스템을 구현할때, 가장 중요한 것 중 하나가 유저들에게 균일한 성능을 보장하는 것이다.</p>
+<p>하지만 단일리전에 서버를 배포해서는, 균일한 성능을 이룰 수가 없다.<br />
+서울 리전의 서버를 한국에서 호출하는 것과, 남아메리카에서 호출하는 것이 같겠는가? 그럴 수는 없다.</p>
+<p>이런 지리적 레이턴시를 낮추기 위해서 사용하는 방법이 멀티리전으로 전세계 이곳저곳에 서버를 박아놓고, 가까운 위치의 서버를 호출하게 유도하는 것이다.</p>
+<p>Route53은 이에 대한 지리적 라우팅 기능을 제공한다.</p>
+<p>이걸 쓰려면 도메인을 Route53으로 관리해야한다. 도메인을 Cloudflare로 쓸 경우에는 traffic load balancer로 비슷한 결과를 달성할 수 있다.</p>
+<p>우선 한국 서버와 브라질 서버를 마련해봤다.</p>
+<p><img src="/images/img_96727be6310125a7.png" alt="" /></p>
+<p><img src="/images/img_a33f29611af34c10.png" alt="" />
+저걸 서울과 브라질 유저가 각각 알아서 호출할 수 있게끔 구성해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="rauting-saengseong">라우팅 생성</h2>
+<p>원하는 호스팅 영역의 레코드 생성 페이지로 이동해서</p>
+<p><img src="/images/img_c1f1c9ff33b043bb.png" alt="" />
+지리적 위치를 선택</p>
+<br>
+<p><img src="/images/img_ff9849b0ddbf5d0f.png" alt="" />
+원하는 target 레코드 유형을 선택한다.<br />
+내 경우에는 쌩 ipv4라서 A 타입으로 했다.</p>
+<p>그리고 아래에서</p>
+<p><img src="/images/img_789c727f7188cd16.png" alt="" />
+레코드들을 적절히 지정한다.</p>
+<br>
+<p><img src="/images/img_43e5fb6c6e585234.png" alt="" />
+대륙과 일부 땅이 큰 국가 단위로 구분이 되어있다.<br />
+한국이나 일본처럼 쪼만한 땅은 분리가 되어있지 않고, 아시아에 포함된다.</p>
+<br>
+<p><img src="/images/img_028465dd4965f49f.png" alt="" />
+그래서 이런식으로 구성했다.<br />
+아시아는 한국 서버로 포워딩, 남아메리카는 브라질 서버로 포워딩, 나머지는 전부 다시 한국서버로 넘기게 했다.</p>
+<p>그렇게 배포하고 테스트해보면</p>
+<p><img src="/images/img_c62c788d06d02ab9.png" alt="" />
+한국에서는 한국 서버가 라우팅될 것이고</p>
+<br>
+<p><img src="/images/img_7fb36ab9989dadbb.png" alt="" />
+브라질에서는 브라질 서버가 라우팅될 것이다.<br />
+저 테스트 환경은 gcp compute engine 브라질 리전이다.</p>
+<p>대충 이런 형태로 사용하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-geo.html">https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-geo.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223092585673/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] RDS: Aurora 멀티 리전 구성<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223089853932/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] EKS<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 최적화: 실행 계획 분석 -1 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222001095737/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 최적화: 실행 계획 분석 -1">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222001095737/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2020-06-15T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222001095737/">[PostgreSQL] 최적화: 실행 계획 분석 -1</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-06-15T00:00:00+00:00"><time datetime="2020-06-15T00:00:00+00:00">2020.06.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="334 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222001095737" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>대다수의 RDB들과 마찬가지로, postgres 또한 비용 기반의 쿼리 최적화 기능을 구현한다.</p>
+<p>특정 연산들에 경험을 통한 비용 점수를 매겨놓고, 가장 낮은 비용의 실행이 되도록 쿼리를 구체화하는 것이다.<br />
+예를 들어 seq scan 방식으로 블록을 하나 읽는건 1점이고, index scan 방식으로 읽는건 4점이다.<br />
+그럼 옵티마이저는 seq과 index를 선택할 수 있는 상황이라면 seq을 사용하는 방향으로 최적화를 수행할 것이다. (물론 여기엔 여러가지 변수가 있다.)</p>
+<p>postgres에서는 explain 명령을 통해 특정 쿼리의 비용을 계산할 수 있다.<br />
+기본적으로 이건 실제로 쿼리를 수행하지는 않고 비용만 계산한다.</p>
+<p><img src="/images/img_91c1fca6a0e72539.png" alt="" />
+첫번째 숫자 0.00은 첫번째 레코드를 fetch하는 데 드는 비용.<br />
+두번째 11.40는 마지막까지 fetch하는 데 드는 비용이다.<br />
+물론 이건 postgres에서 임의로 정해놓은 비용 점수라서 실제와는 다를 수 있다.</p>
+<p>실제로 실행해서 시간을 보고 싶다면 analyze 명령을 추가하면 된다.</p>
+<p><img src="/images/img_7e7b613fb71bde23.png" alt="" /></p>
+<br>
+<br>
+<h2 id="biyong-gyesanhaebogi-dansun-johoe">비용 계산해보기: 단순 조회</h2>
+<p>기본 명령어 사용법은 됐고, 한번 비용계산 구조를 역산해보자.<br />
+넉넉한 테스트를 위해 좀 든든한 양의 데이터를 만들겠다.</p>
+<p><img src="/images/img_cffb97a74c98f844.png" alt="" /></p>
+<p><img src="/images/img_a4bdb3f190df34c0.png" alt="" />
+간단한 테이블을 만들고 1000000개의 데이터를 삽입했다.</p>
+<p>그리고 실행 계획을 보면</p>
+<p><img src="/images/img_875c249130ccaf45.png" alt="" />
+14425.50로 나왔다.</p>
+<p>여기서의 비용 계산과정을 더듬어보면, seq scan으로 블록을 읽어오는 IO 비용과 모든 Row를 추출하는 CPU 비용을 합산한 값이라고 할 수 있다.</p>
+<p>그리고 내부 테이블인 pg_class를 보면 그것들을 대략 유추할 수 있다.</p>
+<p><img src="/images/img_9fc1d00e2d1839ee.png" alt="" />
+relpage가 블럭의 개수고, reltuple이 Row 데이터 개수다.<br />
+따라서 위의 비용은 4425<em>1(seq_scan) + 1000000</em>0.01(cpu_tuple 조회) + a의 합산으로 생각할 수 있다.</p>
+<p>이번엔 where절로 조건을 달고 측정해보자<br />
+기본키인 id로 검색을 해봤다.</p>
+<p><img src="/images/img_c7a7dbec92aab4a0.png" alt="" />
+그럼 탐색하는 개수만큼 비용이 줄어든 것을 확인할 수 있다.<br />
+근데 이건 기본키만 그런거고, 키가 아닌 목록으로 조건을 달 때는 얘기가 달라진다.</p>
+<br>
+<p><img src="/images/img_e6563d93d6222f84.png" alt="" />
+비용이 크게 줄지 않았다!<br />
+seq scan은 기본적으로 모든 레코드를 읽어오는 녀석이라 그렇다.<br />
+그리고 거기에 더해 레코드에 비교를 수행하는 개수만큼의 필터링비용(0.0025)이 추가된다.<br />
+그리고 조건이 추가될때마다 레코드*필터링비용이 계속 더해지는 것이다.</p>
+<p>그래서 내가 참고한 책에 따르면 이전의 비용 14425보다 오히려 더 증가해야 할텐데.. 뭔가 달라진게 있거나 변수가 있는 것 같다.</p>
+<p>일단 여기서 끊고 다음 포스트에서 이어나가도록 하겠다.</p>
+<br>
+<br>
+<p>참조<br />
+"김시연&amp;최두원 저, 『PostgreSQL 9.6 성능 이야기』, 시연아카데미(2017)"<br />
+<a rel="external" href="https://postgresql.kr/docs/9.6/sql-explain.html">https://postgresql.kr/docs/9.6/sql-explain.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222003059142/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C] C-STL 원형리스트 구현<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222000521063/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>MS:&quot;러스트는 시스템 프로그래밍에 대한 최고의 기회&quot;<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

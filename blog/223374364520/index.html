@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Linux] systemd 데몬 만들기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223374364520/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Linux] systemd 데몬 만들기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223374364520/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-03-05T00:00:00+00:00">
+    <meta property="article:tag" content="Linux">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223374364520/">[Linux] systemd 데몬 만들기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-05T00:00:00+00:00"><time datetime="2024-03-05T00:00:00+00:00">2024.03.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="242 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/linux/">Linux</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223374364520" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Linux에서 뭔가 환경을 구성해본 경험이 있다면 systemctl 같은 명령을 통해 백그라운드 프로세스를 다뤄본 경험이 있을 것이다. 이를테면 DB나 Docker 같은 기반시스템들 말이다.</p>
+<p>이런건 Linux에서 자체적으로 제공하는 데몬 시스템에 의해서 실행되고 관리된다. 이게 일반 프로그램 실행과 다른 점은, 컴퓨터가 켜기면 자동으로 실행되고 실패해서 터지더라도 재실행을 보장해준다는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>systemctl list</span><span style="color: #94E2D5;">-</span><span>units</span><span style="color: #94E2D5;"> --</span><span>type</span><span style="color: #94E2D5;">=</span><span>service</span><span style="color: #94E2D5;"> --</span><span>state</span><span style="color: #94E2D5;">=</span><span>running</span></span></code></pre>
+<p><img src="/images/img_96c34866c63d8153.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="junbi">준비</h2>
+<p>먼저 적당한 프로그램을 하나 준비했다.</p>
+<p><img src="/images/img_e89151f06724ea42.png" alt="" /></p>
+<p><img src="/images/img_e53682981b223e85.png" alt="" />
+이놈을 데몬으로 한번 띄워보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="service-pail-jagseong">Service 파일 작성</h2>
+<p>먼저 특수한 설정파일로 서비스에 대한 동작을 정의해줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>systemd</span><span style="color: #94E2D5;">/</span><span>system</span><span style="color: #94E2D5;">/</span><span>nosyman</span><span style="color: #94E2D5;">.</span><span>service</span></span></code></pre>
+<p>/etc/systemd/system/ 경로에 *.service의 형태로 파일을 만들고</p>
+<p>다음과 같은 형태로 작성해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[Unit]</span></span>
+<span class="giallo-l"><span>Description</span><span style="color: #94E2D5;">=</span><span>Test system</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[Service]</span></span>
+<span class="giallo-l"><span>Type</span><span style="color: #94E2D5;">=</span><span>simple</span></span>
+<span class="giallo-l"><span>Restart</span><span style="color: #94E2D5;">=</span><span>on</span><span style="color: #94E2D5;">-</span><span>failure</span></span>
+<span class="giallo-l"><span>RestartSec</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>User</span><span style="color: #94E2D5;">=</span><span>myyrakle</span></span>
+<span class="giallo-l"><span>WorkingDirectory</span><span style="color: #94E2D5;">=/</span><span>home</span><span style="color: #94E2D5;">/</span><span>myyrakle</span><span style="color: #94E2D5;">/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>bin</span></span>
+<span class="giallo-l"><span>ExecStart</span><span style="color: #94E2D5;">=/</span><span>home</span><span style="color: #94E2D5;">/</span><span>myyrakle</span><span style="color: #94E2D5;">/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>nosyman</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[Install]</span></span>
+<span class="giallo-l"><span>WantedBy</span><span style="color: #94E2D5;">=</span><span>network</span><span style="color: #94E2D5;">-</span><span>online</span><span style="color: #94E2D5;">.</span><span>target</span></span></code></pre>
+<p>Unit은 여러가지 실행조건 등을 설정할 수 있는 섹션인데, 여기서는 설명 정도만 넣어뒀다. 단순한 사용사례에서는 이정도면 충분하다.</p>
+<p>Service에는 여러가지 설정들이 들어있다.</p>
+<ol>
+<li>Restart=on-failure는 프로세스가 실패하면 재시작하라는 뜻이고</li>
+<li>RestartSec은 실패 후에 얼마다 있다가 재시작할지를 정의한다. 프로세스가 터지면 1초까지 기다렸다가 재시작한다는 뜻이다.</li>
+<li>User는 당연히 실행 주체가 될 유저명</li>
+<li>WorkingDirectory는 실행 경로</li>
+<li>ExecStart는 실행할 명령어다.</li>
+</ol>
+<p>Install 섹션의 WantedBy=network-online.target는 네트워크 온라인 상태가 되었을때만 데몬을 실행하라는 뜻이다.</p>
+<p>이정도가 다다.</p>
+<br>
+<br>
+<br>
+<h2 id="demon-silhaenghagi">데몬 실행하기</h2>
+<p>systemctl enable 명령어로 만들어뒀던 설정을 트리거하면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl enable</span><span style="color: #94E2D5;"> --</span><span>now nosyman</span><span style="color: #94E2D5;">.</span><span>service</span></span></code></pre>
+<p><img src="/images/img_b894daacfc017376.png" alt="" />
+이제 서비스로 등록이 돼서 시작된다.</p>
+<p>그럼 리스트에도 뜨고</p>
+<p><img src="/images/img_525d7338f6f022e1.png" alt="" /></p>
+<p>status 등의 명령어로도 상태를 확인하고</p>
+<p><img src="/images/img_1b83f80cac60dee4.png" alt="" /></p>
+<p>stop과 restart 같은 명령을 사용해서 통제를 할 수도 있다.</p>
+<p><img src="/images/img_e754247c65c97b8a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="dibeoging-siseutem-rogeu-hwagin">디버깅: 시스템 로그 확인</h2>
+<p>뭔가 잘 안된다 싶을때는 status 명령으로도 간단한 로그는 볼 수 있다.</p>
+<p><img src="/images/img_fb9e0c45677f6df6.png" alt="" /></p>
+<p>더 많은 정보를 원한다면 journalctl까지 사용해야 한다.<br />
+이런 식이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>journalctl</span><span style="color: #94E2D5;"> -</span><span>u nosyman</span></span></code></pre>
+<p><img src="/images/img_ddec89200a6bd893.png" alt="" /></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223376716945/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 문자열: 인코딩<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223372190032/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] GUI: egui<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 재귀 타입 (Recursive Type) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223971971418/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 재귀 타입 (Recursive Type)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223971971418/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-08-16T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223971971418/">[Rust] 재귀 타입 (Recursive Type)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-16T00:00:00+00:00"><time datetime="2025-08-16T00:00:00+00:00">2025.08.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="184 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223971971418" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>타입 내에 스스로의 타입을 또 넣는 것은 흔한 구현 패턴 중 하나다.<br />
+특히 자료구조 같은 기반구조를 구현할 때는 상습적으로 사용된다.</p>
+<p>Rust도 재귀 타입 표현을 지원하긴 하나, 아주 약간의 제한사항이 존재한다.</p>
+<br>
+<p>재귀 타입의 기본 원칙 중 하나는, 값 타입을 무작정 쑤셔넣는 형태로는 넣을 수가 없다는 것이다.</p>
+<p><img src="/images/img_32655655f07a8470.png" alt="" /></p>
+<p><img src="/images/img_b2a3f1e358db1411.png" alt="" />
+그냥 이렇게 넣어버리면 오류가 난다.<br />
+당연하다. 그냥 저렇게 넣으면 타입시스템은 저 구조체 타입의 크기를 알아낼 수가 없기 때문이다.<br />
+Node 안에 또 Node가 있고, 또 있고를 반복하니, 구조체 크기 파악하는데서 무한 재귀가 발생한다.</p>
+<p>그래서 재귀 타입을 표현하기 위해서는, Box 같은 포인터 타입으로 래핑해서 제한을 해줘야 한다.</p>
+<p><img src="/images/img_ffaf0d2ee635f554.png" alt="" />
+이러면 Box 자체는 어차피 고정된 포인터 크기로 평가되기 때문에 문제가 발생하지 않는다.</p>
+<p>재귀 타입은 struct에만 사용할 수 있는 것은 아니다. union과 enum에도 사용할 수 있다.<br />
+recursive enum의 경우에는 다음과 같이 계층적인 순환구조를 사용할 때 응용할 수 있다. 대표적인 사용사례로는 JSON 구조 정의를 들 수 있겠다.</p>
+<p><img src="/images/img_17435547ed506c00.png" alt="" />
+이 경우에는 Vec과 HashMap이 방금 Box의 역할을 대체한다.<br />
+저 컬렉션 구조체들의 타입 자체는 고정 크기이기 때문에 Box와 마찬가지로 유효하다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/reference/types.html#r-type.recursive">https://doc.rust-lang.org/reference/types.html#r-type.recursive</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223973565751/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] Asynchronous Insert<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223963054318/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Lambda: 특징과 주의사항<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] predule.rs로 import를 정리해보자 (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222787700382/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] predule.rs로 import를 정리해보자 (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222787700382/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2022-06-25T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222787700382/">[Rust] predule.rs로 import를 정리해보자 (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-06-25T00:00:00+00:00"><time datetime="2022-06-25T00:00:00+00:00">2022.06.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="414 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222787700382" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>원문<br />
+<a rel="external" href="https://justinwoodring.com/blog/tidy-your-rust-imports-with-prelude/">https://justinwoodring.com/blog/tidy-your-rust-imports-with-prelude/</a></p>
+<p>저는 러스트를 사랑합니다.<br />
+진지하게, 정말 놀라운 언어죠. 단점도 있지만 충분히 좋습니다.</p>
+<p>하지만 저를 미치게 만드는 한 가지는 모든 단일 파일에서 태양 아래의 모든 것을 가져와야 한다는 것입니다.<br />
+이런 경험은 해봤을 수도 있고 아닐 수도 있습니다. 저는 Rust에서 웹 API를 구축하기 전까지는 해보지 않았습니다.</p>
+<p>예를 들면, 이런거에요.</p>
+<p><strong>use crate::models::clubs_md::{</strong><br />
+**    Club, NewClub, ClubDetails**<br />
+<strong>}; **<br />
+<strong>use crate::models::users_md::{</strong><br />
+**    User, UserDetails, NewUser, Admin</strong><br />
+<strong>}; **<br />
+<strong>use crate::models::club_members_md::{</strong><br />
+**    MembershipStatus, **<br />
+**    ClubMember, **<br />
+**    NewClubMember</strong><br />
+**}; **<br />
+**use crate::Db; **</p>
+<p>제 경우에는 비교적 간단한 웹 응용 프로그램을 구축했는데요. 20가지 타입과 이 타입들의 대부분에 접근할 필요가 있는 특정 웹 핸들러가 있었습니다.<br />
+그리고 이게 하나의 핸들러 파일이라고 가정하면 괜찮을 수 있지만 핸들러를 여러 파일로 분리하면 불편해보입니다.</p>
+<br>
+<br>
+<h2 id="c-javawaneun-dareuge-neimseupeiseuga-gibonjeogeuro-jonjaehaji-anhseubnida">C#, Java와는 다르게, 네임스페이스가 기본적으로 존재하지 않습니다.</h2>
+<p>Java나 C#에서 네임스페이스는, 네임스페이스의 파일에 있는 모든 것이 해당 네임스페이스의 다른 파일에서 접근할 수 있도록 처리됩니다.<br />
+이게 C#나 Java에서 mod.rs 파일이 없고 파일의 가시성을 보장하기 위해 <strong>use super::other_child::other_function</strong>을 사용할 필요도 없는 이유입니다.<br />
+결과적으로, 모듈을 가져온다고 그 모든 하위 모듈을 가져올 것이라고 가정할 수가 없죠. 수동으로 모두 가져와야 해서 지저분해질 수도 있고요.</p>
+<br>
+<br>
+<h2 id="prelude-rsreul-eodida-dweoyo">prelude.rs를 어디다 둬요?</h2>
+<p>프로젝트에서 prelude.rs를 활용하는 매우 다른 두 가지 유용한 방법을 찾았습니다.</p>
+<p>소규모 프로젝트의 경우엔 프로젝트에 대한 대부분의 import를 포함하는 간단한 crate 레벨의 prelude.rs가 좋아요.</p>
+<p>더 큰 프로젝트의 경우엔 웹 핸들러를 그룹화하고 빌드할 때처럼 crate 서브모듈에 대해 prelude.rs 파일을 작성하는 것이 특히 유용할 수 있습니다.</p>
+<p>이 두 가지 아이디어가 결합될 수 있고, 충분히 크고 세분화된 프로젝트에 실용적일 수 있다는 점에 주목할 필요가 있습니다.</p>
+<p>예를 들어, 다른 프로젝트에 포함할 수 있도록 여러 개의 re-export 작업을 수행해야 하지만 모든 파일에서 Rust import의 사용 빈도를 숨기려는 라이브러리를 예로 들 수 있습니다.</p>
+<p>기존 코드에 이 predule.rs들을 적용하는 과정은 이유나 정확한 구현에 상관없이 꽤 비슷비슷할거에요.</p>
+<ol>
+<li>
+<p>주어진 파일에서 import를 모두 가져옵니다.</p>
+</li>
+<li>
+<p>이러한 import를 'use'가 아닌 'pub use'로 인접한 prelude.rs에 배치합니다.</p>
+</li>
+<li>
+<p>모듈 트리에서 prelude이 보이는지 확인하십시오.</p>
+</li>
+<li>
+<p>마지막으로, 이러한 모든 import가 필요한 각 파일에서 "<strong>use super::prelude::*;</strong>"로 바꾸고, prelude이 crate 레벨인 경우에는 "<strong>use crate::prelude::*;</strong>"로 바꾸세요.</p>
+</li>
+</ol>
+<br>
+<br>
+<h2 id="pail-gujo-yeje">파일 구조 예제</h2>
+<p>다음은 **use super::prelude::*;**를 사용하는 파일 트리의 예입니다.</p>
+<ul>
+<li>main.rs</li>
+<li>features</li>
+<li>mod.rs</li>
+<li>feature1.rs</li>
+<li>feature2.rs</li>
+<li>feature3.rs</li>
+<li>prelude.rs</li>
+</ul>
+<p>다음은 **use crate::prelude::*;**를 사용하는 파일 트리의 예입니다.</p>
+<ul>
+<li>main.rs</li>
+<li>prelude.rs</li>
+<li>some_other_feature.rs</li>
+<li>related_features.rs</li>
+<li>mod.rs</li>
+<li>feature1.rs</li>
+<li>feature2.rs</li>
+<li>feature3.rs</li>
+</ul>
+<br>
+<br>
+<h2 id="gyeolron">결론</h2>
+<p>하나의 파일에서 정말 방대한 import를 정리해 prelude.rs를 만들어 사용하는건 정말 유용합니다.</p>
+<p>이건 개인적으로 제 프로젝트에서 import를 유지하는 것을 더 쉽게 만들었으며, 이 팁이 당신에게도 도움이 되기를 바랍니다!  😁</p>
+<br>
+<br>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222791483914/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] 외부 도메인 연결하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222769428573/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] Arc와 Mutex에 대한 글.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

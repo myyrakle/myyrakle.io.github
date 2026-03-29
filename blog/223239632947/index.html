@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] EBS: IOPS | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223239632947/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] EBS: IOPS">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223239632947/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-10-18T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223239632947/">[AWS] EBS: IOPS</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-18T00:00:00+00:00"><time datetime="2023-10-18T00:00:00+00:00">2023.10.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="477 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223239632947" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223108145968">https://blog.naver.com/sssang97/223108145968</a><br />
+IOPS(IO Operations Per Second, IOPS:초당 IO)는 디스크의 성능을 측정하는 주요 지표 중 하나다.<br />
+이건 1초에 얼마나 많은 io를 수행할 수 있느냐에 대한 것이다.</p>
+<p>보통 크기가 클수록 IOPS도 높고, 돈을 더 줄수록 더 급격하게 높아진다.<br />
+요즘 비싸고 좋은 SSD 장비들은 수십만 IOPS도 잘 나온다.</p>
+<p>그리고 물리적 장비를 다룰때뿐만 아니라, 클라우드 서비스에서 디스크를 사용할때도 항상 IOPS라는 스펙이 명시된다. 이건 엄밀히 말하면 소프트웨어 수준의 제한이긴 하지만, 마찬가지로 주요 성능에 영향을 주는 부분이다.</p>
+<p>AWS에서 EBS를 생성한다고 하면, 기본적으로 IOPS가 다 걸린다.</p>
+<p>예를 들어, gp2 타입에서 크기를 100기가로 잡으면 최소 300 - 최대 3000만큼 IOPS 제한이 걸린다.</p>
+<p><img src="/images/img_ac2d2ddbadf62223.png" alt="" />
+이는 평상시에는 최대 처리량이 300이다가 사용량이 치솟으면 3000까지 제한이 늘어날 수 있다는 뜻이다.<br />
+이 사용량 변동은 미세한 딜레이가 있는 것 같다.</p>
+<p>그리고 이 제한은 크기를 늘림에 따라 비례해서 늘어난다.</p>
+<p><img src="/images/img_241e6a5c6ba60a08.png" alt="" />
+gp2의 경우에는 IOPS를 직접 조정할 수는 없고, 크기를 늘려서 자동으로 늘어나게만 할 수 있다.</p>
+<p>gp3도 비슷하지만 조금 다르다.</p>
+<p><img src="/images/img_fefa72848eb8ec76.png" alt="" />
+대신 gp2에 비해서 크기당 제공하는 IOPS 제한이 조금 더 높고, 크기와 상관없이 3000 IOPS부터 시작한다.<br />
+크기와 상관없이 IOPS을 어느정도 조정할 수 있다. 크기를 늘림에 따라서 제한범위도 더 넓어진다.</p>
+<p>IO 집약적인 경우에는 gp2에 비해서 약간은 비용 효율적일 수 있다.<br />
+근데 저것만으로도 부족하다면 프로비저닝된 IOPS를 써야 한다.</p>
+<p>프로비저닝된 IOPS 버전 1는 gp3보다도 못하다. 이건 예외로 둔다.</p>
+<p><img src="/images/img_ed1b92e61be0551d.png" alt="" />
+"EBS 다중 연결"이 가능하단 것을 빼면 gp3에 비해 이점이 하나도 없다. 레거시 포맷이라 그런 것 같다.</p>
+<p>반면 버전 2는 크기가 작아도 IOPS를 극단적으로 늘릴 수 있다.</p>
+<p><img src="/images/img_f03d769372822da6.png" alt="" /></p>
+<p><img src="/images/img_0c4d788ea0f659c5.png" alt="" />
+마찬가지로 크기가 늘면 제한도 더 늘어난다.</p>
+<p>이건 당연히 엄청나게 비싸다.<br />
+욕심이 과해서 30000IOPS를 예약하면 한달에 2010달러-&gt;270만원이 나오게 된다.</p>
+<p>하지만 gp3 같은 범용을 쓰면 좀 줄여서 16000 IOPS를 쓰더라도 한달에 90달러-&gt;10만원 정도가 나온다. 물론 디스크 크기 비용이나 잡비용이 나가긴 하지만, 그리 크진 않다.</p>
+<p>빠르긴 빠르겠지만 일반적인 경우에는 프로비저닝된 IOPS가 필요하지 않고, gp3 같은 범용 EBS를 쓰는 것이 훨씬 효율적이다. 진짜 gp3 제한으로도 후달린다 싶으면 적용하자</p>
+<br>
+<br>
+<br>
+<h2 id="rds">RDS</h2>
+<p>이 IOPS 옵션을 가장 잘 체감할 수 있는 부분은 RDS 같은 DB를 띄울때다.<br />
+RDS도 마찬가지로 EBS를 기반으로 스토리지를 관리하므로, 생성이나 수정 페이지에 가면 스토리지 타입과 IOPS를 지정할 수 있다.</p>
+<p>아래는 기본 생성옵션이다.</p>
+<p><img src="/images/img_88ce05f723f18430.png" alt="" />
+원체 DB가 하는 일이 I/O 집약적인 것이다보니 이 제한이 성능에 상당히 중요한 영향을 미친다.</p>
+<p>내 과거의 경험을 반추해봤을때도 write 부하가 심해서 deadlock이나 성능저하가 발생했을때, IOPS 제한을 늘리는 것만으로도 큰 성능 향상을 체감할 수 있었다.</p>
+<p>근데 DB 사용량이 막 그렇게 많은게 아니라면 사실 저걸 굳이 쓰지 않는게 좋을 수 있다. 내 경우에는 일일 업데이트거 수백만-수천만에 달해서 그런 것도 있었다..</p>
+<p>조금 낮은 옵션으로 고르면 프로비저닝된 디스크를 버리고</p>
+<p><img src="/images/img_f9668d4d256f20d6.png" alt="" />
+범용 디스크를 골라서 비용을 최적화할 수 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/ebs/provisioned-iops/">https://aws.amazon.com/ko/ebs/provisioned-iops/</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/IOPS">https://en.wikipedia.org/wiki/IOPS</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/70020876/benefits-of-ebs-io1-over-gp3-volume-type">https://stackoverflow.com/questions/70020876/benefits-of-ebs-io1-over-gp3-volume-type</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223240557533/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] atlas search: fuzzy<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223237551660/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] pprof: 프로파일 시각화하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

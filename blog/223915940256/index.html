@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Rust의 오류처리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223915940256/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Rust의 오류처리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223915940256/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-06-29T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223915940256/">Rust의 오류처리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-29T00:00:00+00:00"><time datetime="2025-06-29T00:00:00+00:00">2025.06.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1051 words"><time datetime="PT6M">6 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223915940256" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_b86257be0fe2a075.jpg" alt="" />
+Rust가 장점으로 내세우는 부분들은 여러가지가 있지만, 그 중 대표적인 특징 중 하나가 남다른 오류처리다.</p>
+<p>잘 만든 소프트웨어는 돌아갈 때만 잘 돌아가는게 아니라, 문제가 생겼을 때도 잘 대응하는 프로그램을 말한다.<br />
+그런 부분에서 오류처리와 관련된 부분은 언어에서 핵심이 되는 부분이라고 할 수 있겠다.</p>
+<p>여기서는 Rust에서 오류를 처리하는 방법과 그 이디엄들을 대강 정리해보겠다.<br />
+Rust를 잘 알지 못해도 이해할 수 있도록 적어보려 한다.</p>
+<br>
+<p>보통 프로그래밍 언어에서 오류처리로 사용하는 방식은 3가지 정도가 있다.</p>
+<br>
+<h4 id="1-oryureul-riteoneuro-daecung-banhwanhago-ceorihagi">1. 오류를 리턴으로 대충 반환하고 처리하기</h4>
+<p>C 언어 같은 예외 개념이 생기기 전의 고대 언어들, 그리고 역사를 무시하고 대충 만든 Go 정도가 이에 속한다.</p>
+<p>오류를 나타내는 값을 그냥 함수의 반환값으로 내보내고, 호출자가 책임지고 오류를 핸들링하게 하는 방식이다.<br />
+구현이 단순해서 "언어 개발자"에게는 좋지만, 오류에 대한 처리를 담보할 수 없어서 프로그램의 신뢰성을 크게 떨어뜨릴 수 있다는게 단점이다. 오류의 전파를 제어하는 것도 좀 까다롭다.</p>
+<br>
+<br>
+<h4 id="2-try-catch-bangsig">2. Try-Catch 방식</h4>
+<p>C++, Java, Python 같은 대부분의 주류 언어들이 이에 속한다.</p>
+<p>오류를 감지했을때 함수에서 "예외(exception)"라는 값을 던지는데, 이 예외는 함수 호출을 역순으로 거슬러올라가면서 오류를 전파시킨다. 이 전파는 catch를 할때까지 지속되며, root에서도 catch가 되지 않는다면 프로그램이 중단된다.</p>
+<p>try-catch를 꼬박꼬박 잘 단다면, 오류가 다양한 경우에도 퉁쳐서 처리하거나 오류의 전파를 연속적으로 처리하기에 썩 나쁘지 않다는게 장점이다.<br />
+하지만 오류 처리를 오히려 대충 할 수 있다는 단점도 조금 있고, 경우에 따라서 성능이 그다지 좋지 않게 나올 수도 있다.</p>
+<br>
+<br>
+<h4 id="3-monad-bangsig">3. Monad 방식</h4>
+<p>Rust, 혹은 Haskell을 비롯한 함수형 언어들이 이런 방식을 사용한다.<br />
+함수형 프로그래밍에서 고안된 개념이고, 1번에서 발전한 형태라고 보면 된다.</p>
+<p>오류를 처리하기 위한 Wrapper 타입을 정의해두고, 그 안에 오류와 반환값을 감싸서 반환한다.<br />
+그리고 이 반환값에서 값을 꺼내쓰기 위해서는 오류 처리를 반드시 하게끔 만들어놨다.</p>
+<p>오류처리를 필수적으로 요구할 수 있으면서, 오류의 전파나 복잡한 핸들링에 있어서 보일러플레이트가 적다는 장점이 있다.</p>
+<br>
+<p>Rust는 여기서 3번째 방식을 기본 오류처리 방식으로 사용한다.<br />
+panic을 적극적으로 활용한다면 2번째 방식도 사용할 수 있지만, 권장되지는 않는다. 여기서 다루지는 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="optiongwa-result-enum">Option과 Result, enum.</h2>
+<p>Rust는 Result와 Option을 기본적인 오류 처리 타입으로 사용한다.<br />
+이게 특별한 동작을 가지는 것은 아니다. 실제로 까보면 단순히 generic enum에 불과하다.</p>
+<p>물론 Rust의 enum이 여타 언어의 enum과는 다르다는 것은 염두에 둬야 한다.<br />
+Rust의 enum은 단순 integer enum이 아닌, tagged union의 구조를 가진다. C++로 치면 std::variant이다.</p>
+<br>
+<br>
+<h2 id="option-taib">Option<T> 타입</h2>
+<p>Option<T>은 값이 있고 없고 정도만 처리할 수 있는 간단한 래퍼 타입이다. 값이 있으면 Some이고, 값이 없으면 None이다.<br />
+사용자 측면에서 보자면 다른 언어들의 Nullable과 비슷하다고 보면 된다. (실제 내부 동작은 다르다.)</p>
+<p>만약 정수를 반환할 수도 있고, 반환하지 않을 수도 있는 함수를 구현해본다고 해보자.</p>
+<p><img src="/images/img_5c298ae03c63a58d.png" alt="" />
+그럼 이런 느낌으로 작성을 할 수 있다.<br />
+None이 사실상 null과 동등하다.</p>
+<p>그리고 저걸 호출해서 사용할 때는 Option을 벗겨서 처리해야 한다.</p>
+<p><img src="/images/img_98dce2dcf9d17807.png" alt="" />
+이렇게 패턴매칭 구문을 사용해서 처리할 수도 있고</p>
+<br>
+<p><img src="/images/img_60cd505e73ccec81.png" alt="" /></p>
+<p><img src="/images/img_e5cd93cc15759867.png" alt="" /></p>
+<p><img src="/images/img_31e3a4967bfcbc63.png" alt="" />
+Option 내에서 제공되는 여러가지 유틸 함수를 통해서 벗겨서(unwrap) 사용할 수도 있다.</p>
+<p>아무튼 요점은, 반드시 Option에 대한 오류 처리를 호출자(caller)가 명시적으로 수행해야 한다는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="result-t-e">Result&lt;T, E&gt;</h2>
+<p>Result&lt;T, E&gt;는 값이 정상 상태인지 오류 상태인지를 처리할 수 있는 진지한 래퍼 타입이다.<br />
+문제가 없으면 Ok고, 오류가 있으면 Err다.</p>
+<p>오류 타입으로 들어갈 값에는 딱히 제약이 없다. 아무거나 넣어도 된다.</p>
+<p>예를 들어 음수를 받으면 실패하는 덧셈 함수를 만들고, 오류 타입은 그냥 오류 내용에 대한 문자열로 해야 한다면, 이렇게 작성할 수 있다.</p>
+<p><img src="/images/img_3237232c130ca765.png" alt="" /></p>
+<p><img src="/images/img_2c5be4042b9af260.png" alt="" /></p>
+<p><img src="/images/img_d871f5ab9bd2e4dc.png" alt="" />
+Option과 마찬가지로 패턴 표현식으로 처리하는게 가장 명시적이고, 그게 아니라면 Result 내에서 제공하는 unwrap 등의 유틸 메서드들을 사용할 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="geureom-oryu-taibeun-eoddeohge">그럼 오류 타입은 어떻게?</h2>
+<p>위에서는 대충 문자열로 퉁쳤는데, 그러면 에러 타입을 어떻게 정의해서 사용해야 할까?</p>
+<p>여기에는 사실 크게 3가지 정도의 접근법이 존재한다.<br />
+그리고 2가지 방식에는 대해서 널리 알려진 라이브러리가 2개 존재한다. anyhow와 thiserror다.</p>
+<p><img src="/images/img_a61b91f4e1079c61.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="error-box">- Error: Box<dyn Error></h2>
+<p>하나의 방법은, 그냥 Error 표준 인터페이스(trait)을 기반으로 아무 값이나 동적으로 쑤셔넣는 것이다.</p>
+<p>에러 타입을 적당히 정의해서 Error 인터페이스에 맞춰서 구현해두고</p>
+<p><img src="/images/img_dfdae4b44b2efc6c.png" alt="" /></p>
+<p>인터페이스 다 퉁쳐서 받게 처리해두는 것이다.</p>
+<p><img src="/images/img_2d4a5e5b0adaca20.png" alt="" />
+조금 써봤지만, 내가 느끼기에 별로 좋은 방법은 아니었다.<br />
+anyhow 방식과 사용감이 거의 비슷하다. 오류처리를 섬세하게 하기 어렵다.</p>
+<br>
+<br>
+<br>
+<h2 id="error-anyhow-bangsig">- Error: anyhow 방식</h2>
+<p>또 하나의 방법은, 오류 구조체를 하나 정해서 문자열 텍스트 값만을 유효한 값으로 갖는 통일된 오류 형식을 만드는 것이다.</p>
+<p><img src="/images/img_8a12bd9c47126454.png" alt="" />
+이런 식으로 쓸 수 있는데, 에러를 생성하는 입장에서는 따로 추가 타입을 정의해야 하는건 없어서 매우 간편하다는 장점이 있다.<br />
+하지만 의미 있는 값이 문자열 오류 텍스트밖에 없어서, 오류를 처리하는 입장에서는 문자열의 내용에 의존해야해서 좀 구린 부분이 존재한다. 섬세한 오류 처리가 중요하지 않은 간단한 사용사례에만 적합하다.</p>
+<p>anyhow의 오류 타입을 실제로 까보면</p>
+<p><img src="/images/img_6661b0de8a354818.png" alt="" />
+사실 이렇게 오류 타입 하나 정의해두고, Error 인터페이스들 맞춰둔 것에 불과하다.</p>
+<p>anyhow에 대한 자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223292046219">https://blog.naver.com/sssang97/223292046219</a></p>
+<br>
+<br>
+<br>
+<h2 id="error-thiserror-bangsig">- Error: thiserror 방식</h2>
+<p>혹은, Rust가 자랑하는 enum을 활용해서 오류를 정의할 수도 있다. 개인적으로는 가장 선호하는 방식이다.</p>
+<p><img src="/images/img_a6b5a8717d587314.png" alt="" />
+적당히 오류 항목을 나열하는 전체 오류 타입을 정의해두고</p>
+<br>
+<p><img src="/images/img_7ef346c568c7a16c.png" alt="" />
+그걸 그냥 쓰는 것이다.</p>
+<p>오류 메세지나 다운캐스팅 등에 의존하는 것이 아니고, enum의 강력한 타입 기능에 기반해서 오류를 처리할 수 있기 때문에, 굉장히 명시적이고 실수를 할 확률이 적다는 장점이 있다.</p>
+<p>thiserror가 하는 역할이 이런 오류 trait 정의나 자잘한 변환에 대한 코드를 매크로로 자동 생성해주는 것이다.</p>
+<p>근데 사실 직접 만드는게 손이 많이 가는 것도 아니고, 커스텀하기도 훨씬 쉬워서 나는 그냥 만들어쓰는걸 권장하고 싶다.</p>
+<p>thiserror에 대한 자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222979785124">https://blog.naver.com/sssang97/222979785124</a></p>
+<br>
+<br>
+<br>
+<h2 id="oryuyi-yeonsogjeogin-jeonpa-propagation">오류의 연속적인 전파 (propagation)</h2>
+<p>오류를 그냥 손으로 매번 처리하는건 상당히 번거로운 일이다.</p>
+<p>오류에 대해 특별히 로직 처리를 해야하는 경우라면 하는게 맞는데, 다음과 같이 상위로 전파만 하는 경우에는 사실 무의미한 반복에 불과하다.</p>
+<p><img src="/images/img_066aa43d8357fec4.png" alt="" /></p>
+<p>하지만 Rust는 Go와는 다르게 항상 인체공학성을 우선으로 생각한다.<br />
+이건 ?라는 연산자 하나로 간단하게 함축할 수 있다.</p>
+<p><img src="/images/img_ad40846374bac141.png" alt="" /></p>
+<p>자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223908197307">https://blog.naver.com/sssang97/223908197307</a></p>
+<br>
+<br>
+<br>
+<h2 id="oryuwa-backtrace">오류와 Backtrace</h2>
+<p>Java처럼 예외 시스템을 제공하는 언어들을 쓰면, 예외를 던질때 예외가 발생한 지점을 자동으로 캡쳐해서 예외 정보에 저장해둔다. 따라서 예외 값을 찍으면 호출 스택을 따라가면서 디버깅을 하는 경험을 할 수 있다.</p>
+<p>Rust도 이를 위해서 Backtrace라는 기능을 제공한다.</p>
+<p><img src="/images/img_5070adfa211c218e.png" alt="" />
+이렇게 오류 객체 초기화할때 함수 하나 불러서 저장하게 하면 된다.</p>
+<p>자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223136396480">https://blog.naver.com/sssang97/223136396480</a></p>
+<br>
+<br>
+<br>
+<h2 id="beonoe-panic">번외: panic</h2>
+<p>panic은 정말 시스템이 중단되어야 하는 심각한 수준의 오류를 말한다.<br />
+일반적으로 잘 다뤄지는 부분은 아니지만, panic도 Rust 오류처리 시스템의 핵심을 차지하는 부분이라고 할 수 있겠다.</p>
+<p>흥미롭게도 try-catch 시스템처럼 동작하기 때문에.. 그런 방식의 오류처리를 원한다면 이걸 쓸 수도 있다.</p>
+<p>자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223468200071">https://blog.naver.com/sssang97/223468200071</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223915784959/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Go - 단순함의 환상.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223914224979/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.88.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

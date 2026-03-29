@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] vacuum | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222939603415/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] vacuum">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222939603415/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2022-11-27T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222939603415/">[PostgreSQL] vacuum</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-11-27T00:00:00+00:00"><time datetime="2022-11-27T00:00:00+00:00">2022.11.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="259 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222939603415" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PostgreSQL이 다른 RDB들과 비교해서 이질적인 부분 중 하나가 vacuum이다.</p>
+<p>사실 그냥 DB를 갖다쓰기만 하는 개발자면 신경을 쓰지 않아도 되는데, DBA라면 잘 알아야 한다. 기능적인 부분이 아니라, 운영-관리적인 측면에서 말이다.</p>
+<p>vacuum은 쉽게 말하면 DB에 "디스크 조각 모음"을 행하는 것이라고 할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="ige-wae-pilyohanya">이게 왜 필요하냐?</h2>
+<p>PostgreSQL은 좀 특이하게, UPDATE나 DELETE를 하더라도 원본을 진짜로 수정하거나 없애지는 않는다. 보이지 않게만 숨겨놓을 뿐이다.</p>
+<p>여기서 그 숨김 공간을 Free Space Map이라고 하고, 가짜로 삭제된 값을 dead tuple이라고 한다.</p>
+<p>트랜잭션 처리시 롤백을 구현하기 위해서 이렇게 한다는 것 같다.<br />
+MySQL이나 Oracle의 경우에는 롤백 로그를 별도로 관리해서 이 문제를 해결한다고 한다. 물론 각자 장단점이 있고, 둘다 귀찮은 관리포인트는 존재한다.</p>
+<p>아무튼 그렇기 때문에, UPDATE나 DELETE를 많이 때릴수록 테이블의 저장공간은 점점 비대해진다. 당연히 이런게 성능에 좋을리가 없다.<br />
+게다가 Free Space Map 공간도 무한정 제공되는 것이 아니라서, 웬만하면 정기적으로 vaccum을 돌려주는 편이 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="vacuum-sayongbeob">Vacuum 사용법</h2>
+<p>이건 기본적으로 무거운 작업일뿐더러, 처리중에 필요한 테이블들을 다 Lock처리한다.<br />
+시스템이 뻗을 수 있으니, 서버 점검시간 같은 때 사용해주는 편이 좋다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">--</span><span> DB 전체에 실행</span></span>
+<span class="giallo-l"><span>vacuum full analyze</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">--</span><span> DB 전체에 간단하게만 실행</span></span>
+<span class="giallo-l"><span>vacuum verbose analyze</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">--</span><span> 해당 테이블만 간단하게 실행</span></span>
+<span class="giallo-l"><span>vacuum analyse [테이블명]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">--</span><span> 특정 테이블만 풀 실행</span></span>
+<span class="giallo-l"><span>vacuum full [테이블명]</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_88b2090ef8af244a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="auto-vacuum">Auto Vacuum</h2>
+<p>근데 저런걸 매번 신경쓰면서 날려주는것도 하다보면 고역일 것이다.<br />
+그래서 자동으로 vacuum을 해주는 auto vacuum이란 것이 있다.</p>
+<p>그냥 어느 기준이 될때마다 자동으로 vacuum 처리를 해주는 것이다.<br />
+물론 이것도 완벽하지는 않아서 커스텀 설정을 좀 해주거나, 수동 vacuum을 써주기도 해야 한다.</p>
+<p>설정값은 postgresql.conf 설정파일에 있다.</p>
+<p><img src="/images/img_61395ec38d43a5ed.png" alt="" /></p>
+<p>자세한 내용은 문서를 참조하면 좋겠다.<br />
+<a rel="external" href="https://www.postgresql.org/docs/current/runtime-config-autovacuum.html">https://www.postgresql.org/docs/current/runtime-config-autovacuum.html</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://blog.gaerae.com/2015/09/postgresql-vacuum-fsm.html">https://blog.gaerae.com/2015/09/postgresql-vacuum-fsm.html</a><br />
+<a rel="external" href="https://nrise.github.io/posts/postgresql-autovacuum/">https://nrise.github.io/posts/postgresql-autovacuum/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222940538255/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] Clickhouse Cloud로 시작해보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222937526849/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] C++20: 우주선 연산자<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

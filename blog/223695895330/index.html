@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] timestream - LiveAnalytics | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223695895330/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] timestream - LiveAnalytics">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223695895330/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-12-17T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223695895330/">[AWS] timestream - LiveAnalytics</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-12-17T00:00:00+00:00"><time datetime="2024-12-17T00:00:00+00:00">2024.12.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="827 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223695895330" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_6d3f5ad6d62594ab.png" alt="" />
+AWS timestream은 시계열 데이터베이스를 관리형으로 제공하는 서비스다.<br />
+그렇게 많이 쓰는지는 모르겠는데, 종종 데이터 파이프라인 같은데에 쓰긴 하는 것 같더라.</p>
+<p>사용량이 미묘해서 그런지, 실제로도 리전 지원 수준이 높지 않다.<br />
+현재 작성 기준으로 일단 서울 리전에는 제공되지 않는다. 그래서 만약 한국에서 서비스를 한다면 도쿄에다가 둬야 할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="silhaeng-obsyeon">실행 옵션</h2>
+<p>Timestream은 2가지의 실행 옵션을 제공한다.</p>
+<p>하나는 서버를 특정 스펙으로 프로비저닝해서 사용하는 Timestream for InfluxDB다. 이거는 그냥 InfluxDB와 크게 다를 것이 없으니 대충 넘어가겠다.</p>
+<p>두번째는 서버리스형 DB인 Timestream for LiveAnalytics다. InfluxDB와는 관계가 없다.<br />
+이건 사용한 저장공간, 쓰기 사용량, query에 대해서만 요금을 지불하고, 사용량에 따라서 자동으로 확장된다.<br />
+서버리스하게 관리되며, 페타바이트급의 빅데이터에 대해서도 초단위 query를 제공한다는게 장점이다.</p>
+<p>다만 Timestream for InfluxDB보다도 리전 지원 수준이 좁다.</p>
+<p>여기서는 자체 시스템인 LiveAnalytics를 위주로 다룬다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://aws.amazon.com/ko/timestream/pricing/">https://aws.amazon.com/ko/timestream/pricing/</a></p>
+<p><img src="/images/img_6987aff6f70d1605.png" alt="" />
+비용 측정 방식은 꽤 간단하고 직관적인 편이다.</p>
+<p>100만개 쌓을때마다 비용을 뜯는다. 일단 쓰기 비용 자체는 나름 저렴한 축이다.<br />
+저장된 데이터 크기에 대해서도 요금을 뜯는다. RAM인지, 디스크인지에 따라서 차이가 좀 난다.</p>
+<p>디스크 저장비용은 그리 비싸진 않다.<br />
+S3가 GB당 0.025달러고, DynamoDB가 GB당 0.285달러인걸 생각하면 무난한 편이다.<br />
+그래서 데이터 파이프라인의 첫번째 데이터소스로도 종종 쓰더라</p>
+<p>그리고 여기서 좀 헷갈릴 수 있는건, 쿼리에 사용되는 TCU라는 단위다.<br />
+하나의 TCU는 추상적인 단위가 아니라, 4개의 vCPU와 16GB로 구성된 하나의 노드 단위다. 쿼리를 날리면 데이터 규모에 맞춰서 TCU 노드를 여러개 띄워서 병렬처리를 하고, 그에 비례해서 과금을 하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jehansahang">제한사항</h2>
+<p>timestream은 특수화된 시계열 데이터베이스라서, 몇가지 제한사항이 존재한다.</p>
+<p>단일 레코드, 그러니까 하나의 행에는 크기 제한이 존재한다. 현재는 2kb다.<br />
+그래서 엄청 큰 데이터를 넣을 수가 없다.</p>
+<p>그 외에도, 데이터가 영구적이지 않아서 언젠가는 증발한다거나 하는 부분들이 존재한다.<br />
+그래서 결국 그 전에 수집에서 어딘가 다른 곳에 넣어야 한다. 보통은 그게 S3가 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="diseukeuwa-memori">디스크와 메모리</h2>
+<p>위의 비용 표에서 봤을테지만, timestream은 메모리와 디스크 2가지 레이어로 데이터를 관리하고, 요금도 2가지를 혼합해서 부과한다.</p>
+<p>데이터가 들어오면, 일단 timestream은 그걸 메모리에 올린다.<br />
+그리고 메모리 보존 기간이 지나면 디스크로 옮기는 것이다.</p>
+<p>그래서 이에 대한 보존 기간 설정이 테이블 설정에 들어있다.<br />
+이런 식이다.</p>
+<p><img src="/images/img_898926076a819491.png" alt="" /></p>
+<p>메모리 레이어는 조금 특수한 목적을 위해 존재한다. 쿼리 성능을 높이려고 있는게 아니라 write 부하를 감당하기 위해 존재하는 것이다.</p>
+<p>그래서 키값이 되는 time 값도 메모리 스토어의 보존기간에 의존적이다.<br />
+뭔 소리냐면, 예를 들어 메모리 보존 기간이 24이라면 time 값은 현재를 기준으로 24시간 전까지의 값으로만 insert할 수 있다는 것이다. 그 이전 범위로는 time key 값을 넣을 수 없다.</p>
+<p>디스크에 있는 데이터는 언제든지 쿼리로 조회할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="db-saengseong">DB 생성</h2>
+<p>한번 직접 DB를 만들고 데이터를 쿼리해보자.</p>
+<p><img src="/images/img_88d920f1bfbe186b.png" alt="" /></p>
+<p><img src="/images/img_7aaa060eab347f8d.png" alt="" />
+생성에는 2가지 옵션이 있는데, 샘플로 생성하더라도 DB 형태 자체는 동일하다. 그 아래에 샘플 테이블이 하나 생기는 것일 뿐이다.</p>
+<p>나는 일단 IoT 샘플 베이스로 생성해봤다.</p>
+<br>
+<p><img src="/images/img_b1b8a09b7481aaa0.png" alt="" /></p>
+<p><img src="/images/img_585afdef3d204b67.png" alt="" />
+프로비저닝 시간은 굉장히 짧은 편이다. 거의 바로 만들어진다.</p>
+<br>
+<p><img src="/images/img_a99f48d626e37a66.png" alt="" />
+그리고 테이블 탭에서 데이터베이스에 속한 테이블들을 조회하거나 관리할 수 있다.</p>
+<p>일반적인 DB들과 동일하게, 하나의 DB에 여러개의 테이블이 별도로 생성될 수 있는 구조다.</p>
+<br>
+<br>
+<br>
+<h2 id="saempeul-teibeul-sayonghaebogi">샘플 테이블 사용해보기</h2>
+<p>샘플 테이블에 들어가보면 이런 식으로 생성이 되어있을 것이다.</p>
+<p><img src="/images/img_c9da613d65e1f1a8.png" alt="" />
+여기서 뭔가 바로 볼 수 있는건 없다.</p>
+<p>뭔가 데이터를 까보려면, 쿼리 편집기로 가서 직접 쿼리를 날려야 한다.</p>
+<p><img src="/images/img_afe12e89c09244e8.png" alt="" />
+쿼리는 SQL 형태로 제공하긴 하나, 정확한 세부사항들을 알고 싶다면 문서를 참조하는게 좋을 것이다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/timestream/latest/developerguide/reference.html">https://docs.aws.amazon.com/timestream/latest/developerguide/reference.html</a></p>
+<p>아무튼 저기서 실행을 누르면</p>
+<p><img src="/images/img_69203acab240662a.png" alt="" /></p>
+<p><img src="/images/img_94fe44037841165e.png" alt="" />
+이런 식으로 데이터를 긁어올 수 있다.</p>
+<p>이 시점에 TCU 소모하면서 비용을 부과하는 것이다.<br />
+그래서 데이터 규모가 크다면 이거 쿼리 날리는 한번 한번이 비용이 크게 터질 수도 있다.</p>
+<p>그리고 쿼리 결과에 대해서 저장을 누르면</p>
+<p><img src="/images/img_4bcdd0612ab81927.png" alt="" /></p>
+<p><img src="/images/img_fa7c141f09945011.png" alt="" />
+저장된 쿼리에 저장이 되고</p>
+<p><img src="/images/img_f979a72718adcbd6.png" alt="" />
+그 결과를 추가 비용 없이 언제든 조회할 수 있다.<br />
+의외로 이거 저장에 대한 비용은 따로 없는 것 같더라</p>
+<br>
+<br>
+<br>
+<h2 id="teibeul-mandeuleobogi">테이블 만들어보기</h2>
+<p>이번에는 직접 테이블을 만들어보자.<br />
+옵션이 그렇게 많은 것도 아니라서, 그다지 어려울 것은 없다.</p>
+<p><img src="/images/img_1a9f0ebc8449048d.png" alt="" />
+일반적인 사용사례에서는 그냥 기본 파티셔닝에</p>
+<br>
+<p><img src="/images/img_cd87c328d5e6b883.png" alt="" />
+데이터 보존 시점만 조절해도 충분할 것이다.</p>
+<br>
+<p><img src="/images/img_b28de335c82e6793.png" alt="" />
+이렇게 만들어지면 잘 된 것이다.</p>
+<p>그럼 이것도 마찬가지로 쿼리 에디터로 쿼리를 날려볼 수 있는데</p>
+<p><img src="/images/img_d641e3ae207783c7.png" alt="" />
+당연히 데이터가 없으니 아무것도 안나올 것이다.<br />
+이제 데이터를 하나 밀어넣어보자</p>
+<br>
+<br>
+<br>
+<h2 id="deiteo-inserthagi-node-js">데이터 Insert하기 (Node.js)</h2>
+<p>데이터를 밀어넣으려면 콘솔로는 안되고, aws-sdk를 써야만 한다.<br />
+여기서는 nodejs 코드를 예시로 들어보겠다.</p>
+<p>먼저 종속성을 설치하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>npm i</span><span style="color: #FAB387;"> @</span><span>aws</span><span style="color: #94E2D5;">-</span><span>sdk</span><span style="color: #94E2D5;">/</span><span>client</span><span style="color: #94E2D5;">-</span><span>timestream</span><span style="color: #94E2D5;">-</span><span>write</span></span></code></pre>
+<p><img src="/images/img_c6ec0bdc90845669.png" alt="" /></p>
+<p>이런 식으로 짜면 된다.</p>
+<p><img src="/images/img_53dfa95912f79695.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  TimestreamWriteClient</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  WriteRecordsCommand</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;@aws-sdk/client-timestream-write&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> main</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> client</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> TimestreamWriteClient</span><span>(</span><span style="color: #9399B2;">{</span><span> region</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ap-northeast-1&quot;</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> currentTime</span><span style="color: #94E2D5;"> =</span><span> Date</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">now</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">toString</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> command</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> WriteRecordsCommand</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    DatabaseName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;sampleDB&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    TableName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;foobar&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    Records</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span>        Dimensions</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">          {</span><span> Name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;region&quot;</span><span style="color: #9399B2;">,</span><span> Value</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;us-east-1&quot;</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">          {</span><span> Name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;az&quot;</span><span style="color: #9399B2;">,</span><span> Value</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;az1&quot;</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span>        ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        MeasureName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;temperature&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        MeasureValue</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;70&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        MeasureValueType</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;DOUBLE&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        Time</span><span style="color: #94E2D5;">:</span><span> currentTime</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        TimeUnit</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;MILLISECONDS&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span>    ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">send</span><span>(command)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(response)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> catch</span><span> (err)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(err)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">main</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>좀 파라미터 구성이 특이한 편이다.</p>
+<p>DatabaseName과 TableName은 바로 알 것이라 믿는다.</p>
+<p>Time과 TimeUnit은 기본키가 되는 시간 기준값에 대한 필드다. 저건 밀리초 단위로 정수를 받아서 그걸 키로 쓴다는 말이다.</p>
+<p>MeasureName, MeasureValue, MeasureValueType은 해당 row 측정값에 대한 고정 필드다.</p>
+<p>그리고 Dimensions에 들어있는 각 요소들이 좀 자유롭게 입력할 수 있는 일종의 메타데이터에 속한다.</p>
+<p>저대로 넣으면</p>
+<p><img src="/images/img_25a0805704d7bd6d.png" alt="" />
+들어가고</p>
+<br>
+<p><img src="/images/img_544361c48fd3b26b.png" alt="" />
+조회에도 반영이 될 것이다.</p>
+<p>시스템 수준에서 쿼리 결과를 조회해서 사용할 일이 있다면, 비슷하게 aws-sdk를 써서 query를 날리고 응답을 받아서 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/timestream/latest/developerguide/tcu.html">https://docs.aws.amazon.com/timestream/latest/developerguide/tcu.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/timestream/latest/developerguide/ts-limits.html">https://docs.aws.amazon.com/ko_kr/timestream/latest/developerguide/ts-limits.html</a><br />
+<a rel="external" href="https://www.reddit.com/r/aws/comments/q19yc5/configuring_aws_timestream/">https://www.reddit.com/r/aws/comments/q19yc5/configuring_aws_timestream/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223697117528/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] SQS - 비용 최적화: 롱 폴링<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223694641638/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] ECS - Container Insights with Enhanced Observability<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

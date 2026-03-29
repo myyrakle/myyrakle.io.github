@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>체크섬 (checksum) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224127227522/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="체크섬 (checksum)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224127227522/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-12-30T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224127227522/">체크섬 (checksum)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-30T00:00:00+00:00"><time datetime="2025-12-30T00:00:00+00:00">2025.12.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="727 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224127227522" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>체크섬은 데이터 무결성을 검증하기 위한 가장 기본적인 가드레일이다.<br />
+네트워크 전송이나 디스크 전송 등에서 발생할 수 있는 손실을 감지하고 대응하기 위한 수단이라고 보면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="sonsil-munje">손실 문제</h2>
+<p>데이터 손실과 관련된 문제는 대개 하드웨어의 본질적인 한계에서 비롯된다.<br />
+모든 I/O은 전송 과정에서 손실이나 왜곡이 발생할 수 있다. 물리적인 한계로 인한 몇가지 문제가 있기 때문이다.</p>
+<p>그래서 당장 네트워크에 바이트를 전송하더라도, 사실 이게 제대로 전송된다는 보장은 없다.<br />
+당장 비트 4개를 보내더라도</p>
+<p><img src="/images/img_e4e0dac9f5303817.png" alt="" />
+의도치 않게 이렇게 값이 왜곡될 수 있는 것이다.</p>
+<p>이렇게 문제가 발생하는 요인은 다양하다.<br />
+네트워크의 경우에는 다른 케이블끼리 전기적 간섭을 해서 꼬일 수도 있고, 장거리 전송시에 신호가 약해져서 해석을 잘못 할 수도 있다. 라우터 문제로 패킷이 뒤섞일 수도 있다.<br />
+디스크의 경우에는 디스크의 물리적 손상이나 자기력 감소(HDD), 높은 온도, 전원 차단 등에서 값의 왜곡이 발생하곤 한다. 이 또한 드물지 않다.</p>
+<p>이건 본질적으로 하드웨어 수준에서는 완전히 해결할 수 없는 문제다. 저런걸 어떻게 막겠는가..?<br />
+어찌되었든 모든 컴퓨터 장비들은 물리적인 현실 속에 존재한다.</p>
+<p>이런 손실은 대개 발생 확률이 엄청 높진 않지만, 없지도 않다.<br />
+네트워크 전송의 손실률이 대개 0.0001% ~ 0.0000001% 정도로 가장 발생률이 높으며, 그 다음으로 HDD, SSD, RAM 순으로 안정적이다.<br />
+그래서 사실 1GB 단위의 네트워크 전송만 하더라도, 확률적으로 비트 이상이 몇개쯤은 반드시 생긴다. 네트워크 환경이 썩 좋지 않다면 손실 확률은 기하급수적으로 상승한다.</p>
+<br>
+<br>
+<br>
+<h2 id="cekeuseomyi-weonri">체크섬의 원리</h2>
+<p>체크섬은 이러한 데이터의 손실을 감지하기 위한 수단이다.<br />
+혼동해서는 안되는데, 이건 문제를 감지하기 위한 것이지, 해결하기 위한 수단이 아니다. 체크섬에서 문제가 감지되면 별도의 수단을 사용해서 오류처리를 해야 한다.</p>
+<p>대략적인 방식은 다음과 같다.</p>
+<ol>
+<li>
+<p>전체 데이터를 기반으로 연산을 해서 "체크섬"이라는 값을 만든다.</p>
+</li>
+<li>
+<p>데이터와 체크섬을 동시에 전송한다.</p>
+</li>
+<li>
+<p>전체 데이터를 기반으로 다시 연산을 해서 "체크섬(new)"을 다시 만들고, 기존의 "체크섬(old)"과 비교한다.</p>
+</li>
+<li>
+<p>체크섬이 일치하지 않는다면 뭔가 데이터가 손실된 것이다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p><img src="/images/img_7348e04619f8f5ad.png" alt="" /></p>
+<p>근데 사용에 앞서서 숙지해야할 것은, 체크섬 자체가 100% 정확하지 않다는 것이다.<br />
+데이터가 기가 막히게 꼬이면, 매우 낮은 확률로 체크섬 검증에 실패할 수 있다. 그러니까 데이터가 손실되었는데도 손실 여부를 감지하지 못할 수 있다는 것이다.<br />
+이 현상을 충돌(collision)이라고 부른다. 이런 불안정한 부분은 Hash와 비슷하다.</p>
+<p>그래서 체크섬만을 완전하게 맹신해서는 안 되지만, 실용적인 구현들에서는 실패율이 매우 낮기 때문에 그냥 무시하는 경우도 많다.<br />
+실제로 TCP, Ethernet 등의 네트워크 레이어는 체크섬 체크를 하지만, 체크섬 충돌은 무시한다. 그래서 매우 낮은 확률로 손실된 데이터가 통과될 수 있지만, 느끼기는 어렵다.</p>
+<br>
+<br>
+<br>
+<h2 id="cekeuseomyi-guhyeon-bangsigdeul">체크섬의 구현 방식들</h2>
+<p>그리고 체크섬의 구현 방식은 한가지가 아니다.<br />
+여러가지 구현 방식이 있고, 상황을 고려해서 적절한 방법을 선택해야 한다.<br />
+체크섬의 데이터 크기를 얼마나 크게 잡을지, 체크섬의 생성 알고리즘을 어떻게 할지부터 전부 정해진 것이 없다.</p>
+<p>여기서는 가장 대표적인 구현 방식 몇가지만 간단히 다뤄본다.</p>
+<br>
+<br>
+<br>
+<h2 id="dansun-habsan-gyeyeol">단순 합산 계열</h2>
+<p>가장 단순한 구현 방식은, 그냥 모든 데이터의 바이트를 더하는 것이다.</p>
+<p><img src="/images/img_e2247ac5a19ea74f.png" alt="" />
+여기서는 바이트를 바이트로 더해서 그 아랫단위가 잘리도록 했다.<br />
+매우 가볍고 빠르지만, 충돌 저항성이 매우 낮다는 단점이 있다. 이처럼 1바이트인 경우에는 낮지 않은 확률로 충돌이 발생할 수 있다. 체크섬의 바이트 크기를 키울수록 충돌 저항성이 늘긴 하겠지만, 완전하진 않다.<br />
+실무에서는 거의 쓰이지 않는다.</p>
+<br>
+<p><img src="/images/img_8acea36e081404fb.png" alt="" />
+꼭 덧셈이 아니어도 된다. XOR 기반으로 구현할 수도 있다.<br />
+단순 덧셈과 비교해서 크게 달라진 것은 없지만, 충돌 저항성이 아주 약간 더 낫긴 하다.<br />
+그래도 실무에서는 거의 쓰이지 않는다.</p>
+<br>
+<p><img src="/images/img_2c44e26f98cef56d.png" alt="" />
+혹은, 덧셈 기반에 나머지셈을 사용해서 체크섬을 만들기도 한다.<br />
+이 방법은 실제로 UDP, IP 헤더 계층에서 사용하는 체크섬 기법이다. 충돌 저항성이 높진 않지만, 가볍고 성능이 좋기 때문에 쓴다.</p>
+<br>
+<br>
+<br>
+<h2 id="crc-cyclic-redundancy-check">CRC (Cyclic Redundancy Check)</h2>
+<p>CRC는 딱 체크섬 용도로 고안된, 가볍고 빠른 체크섬 해시 알고리즘이다.<br />
+체크섬의 최종 비트 크기별로 CRC-8, CRC-16, CRC-32, CRC-64 등의 구현체가 존재한다.</p>
+<p><img src="/images/img_0036203bbd4f6f06.png" alt="" />
+당연하지만 크기가 커질수록 충돌 저항성이 커진다.<br />
+대체로는 성능과 안정성의 균형이 괜찮은 32비트를 권장한다.</p>
+<p>매우 많은 I/O 관련 구현체에서 CRC 기반의 체크섬을 활용한다. 꼽자면 끝도 없지만 대보자면</p>
+<ul>
+<li>
+<p>gzip은 압축할때 파일 기반으로 CRC-32 체크섬을 만들어서 함께 저장한다.</p>
+</li>
+<li>
+<p>와이파이도 패킷 전송에 CRC-32 체크섬을 쓴다.</p>
+</li>
+<li>
+<p>이더넷도 패킷 전송에 CRC-32 체크섬을 쓴다.</p>
+</li>
+<li>
+<p>블루투스는 패킷 전송에 CRC-16 체크섬을 쓴다.</p>
+</li>
+<li>
+<p>리눅스 파일시스템(ext4)은 메타데이터 관리에 CRC-32C를 쓴다.</p>
+</li>
+<li>
+<p>PNG 이미지 포맷은 청크마다 CRC-32 체크섬을 박아놓는다.</p>
+</li>
+<li>
+<p>PostgreSQL은 WAL 수준에서 CRC-32C 체크섬을 박아서 데이터 무결성을 체크한다.</p>
+</li>
+</ul>
+<br>
+<br>
+<br>
+<br>
+<br>
+<h2 id="beomyong-haesi-hamsu-sayong">범용 해시 함수 사용</h2>
+<p>정말 강력한 충돌 저항성이 필요하다면, 매우 큰 크기의 해시값이 나오는 범용 해시를 쓰는 것도 방법이다.<br />
+MD5, SHA256 같은 해시 알고리즘을 사용하면 매우 긴 길이의 체크섬을 간단하게 얻을 수 있다.</p>
+<p><img src="/images/img_dbd59398efa3e410.png" alt="" /></p>
+<p>매우 크고 생성도 느리지만, 크기가 큰만큼 충돌 확률이 매우 낮다는 장점이 있다.<br />
+실제로도, 성능보다 무결성이 중요한 애플리케이션 레벨에서는 SHA-256 해시로 최종 검증을 하곤 한다.</p>
+<p>이거 말고도 몇가지 변종/변형 알고리즘들이 있지만, 동작 방식이나 개념이 크게 다르진 않다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224132351325/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>컴파일러는 인간의 친구.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224127895597/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Clickhouse] Storage Policy: 멀티 디스크 구성하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

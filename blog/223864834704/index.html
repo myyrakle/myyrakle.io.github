@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Packer로 AMI 말아올리기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223864834704/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Packer로 AMI 말아올리기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223864834704/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-05-14T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223864834704/">[AWS] Packer로 AMI 말아올리기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-05-14T00:00:00+00:00"><time datetime="2025-05-14T00:00:00+00:00">2025.05.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="558 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223864834704" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Packer는 하시코프에서 제공하는 패킹 도구다.<br />
+대표적인 사용례 중 하나는 EC2 AMI를 빌드하는 것이다.</p>
+<p>이 AMI란 것이 EC2 리소스 자체에 대한 스냅샷이라고 볼 수 있고, Docker Image와도 비슷한 용도로 쓰는데, 정작 빌드 시스템을 직접 제공하지 않아서 CI/CD에서 이걸 다루기가 별로 쉽지는 않다.<br />
+로컬 빌드가 되는 Docker와 다르게 실제 AWS에 결과물을 올린 다음에 스냅샷을 떠야하는거라서 또 이래저래 빌드를 구성하기도 비효율적인 편이다.</p>
+<p>그나마 그런 작업을 좀 자동화할 수 있게 해주는게 Packer라는 도구다.<br />
+유의할 점은, 이런 도구 쓴다고 해서 저런 근본적인 한계가 사라지진 않는다.</p>
+<p>packer의 동작 방식은 간단한 매크로 수준이다. AMI 기반으로 EC2를 띄워서, 접속한 다음에 이것저것 하고 AMI를 추출하는 것이다. 우리가 할 수 없는걸 하게 해주는건 아니다.</p>
+<br>
+<br>
+<br>
+<h2 id="ami-beiseu-imiji-junbi">AMI 베이스 이미지 준비</h2>
+<p>일단 빌드에 사용할 베이스 이미지가 하나는 있어야 한다.</p>
+<p><img src="/images/img_030c7d62660d54e5.png" alt="" />
+packer에서는 기본 이미지 사용 기능을 제공하지 않으니까, 대충 우분투 실행한 다음에 이미지 바로 떠서 쓰기만 하면 된다.</p>
+<p>여기서는 Github Action 기반으로 Packer 워크플로를 구성하는 방법을 간단히만 다뤄본다.</p>
+<br>
+<br>
+<br>
+<h2 id="packer-seolci">Packer 설치</h2>
+<p>우분투 환경의 경우에는 다음과 같이 설치할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Setup</span><span style="color: #A6E3A1;"> `packer`</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          curl</span><span style="color: #94E2D5;"> -</span><span>fsSL https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//apt.releases.hashicorp.com/gpg | sudo apt-key add -</span></span>
+<span class="giallo-l"><span>          sudo apt</span><span style="color: #94E2D5;">-</span><span>add</span><span style="color: #94E2D5;">-</span><span>repository</span><span style="color: #A6E3A1;"> &quot;deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main&quot;</span></span>
+<span class="giallo-l"><span>          sudo apt</span><span style="color: #94E2D5;">-</span><span>get update</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> sudo apt</span><span style="color: #94E2D5;">-</span><span>get install packer</span></span></code></pre>
+<p>이게 모든 유닉스에 공통되는 설치 스크립트 그런건 없더라. 리눅스 배포판마다 또 다르다.</p>
+<br>
+<br>
+<br>
+<h2 id="packer-pail-jagseong">packer 파일 작성</h2>
+<p>이게 Dockerfile과 비슷한 패킹 파일이라고 보면 된다. 이걸 정의해서 packer에 밀어넣으면, 거기에 맞춰서 이미지를 빌드해준다.</p>
+<p>내 경우에는 Dockerfile을 최대한 비슷하게 베껴보려고 이것저것 넣은게 있어서 좀 복잡하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>variable</span><span style="color: #A6E3A1;"> &quot;ami_name&quot;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  type</span><span style="color: #94E2D5;"> =</span><span> string</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>packer</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  required_plugins</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    amazon</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>      version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;&gt;= 1.2.8&quot;</span></span>
+<span class="giallo-l"><span>      source</span><span style="color: #94E2D5;">  =</span><span style="color: #A6E3A1;"> &quot;github.com/hashicorp/amazon&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>source</span><span style="color: #A6E3A1;"> &quot;amazon-ebs&quot; &quot;ubuntu&quot;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  ami_name</span><span style="color: #94E2D5;">      =</span><span> var</span><span style="color: #94E2D5;">.</span><span>ami_name</span></span>
+<span class="giallo-l"><span>  instance_type</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;t2.micro&quot;</span></span>
+<span class="giallo-l"><span>  region</span><span style="color: #94E2D5;">        =</span><span style="color: #A6E3A1;"> &quot;us-east-1&quot;</span></span>
+<span class="giallo-l"><span>  source_ami_filter</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    filters</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>      name</span><span style="color: #94E2D5;">                =</span><span style="color: #A6E3A1;"> &quot;ubuntu-base&quot;</span></span>
+<span class="giallo-l"><span>      root-device-type</span><span style="color: #94E2D5;">    =</span><span style="color: #A6E3A1;"> &quot;ebs&quot;</span></span>
+<span class="giallo-l"><span>      virtualization-type</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;hvm&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>    most_recent</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>    owners</span><span style="color: #94E2D5;">      =</span><span> [</span><span style="color: #A6E3A1;">&quot;...&quot;</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span>  ssh_username</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;ubuntu&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>build</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #94E2D5;">    =</span><span style="color: #A6E3A1;"> &quot;packer&quot;</span></span>
+<span class="giallo-l"><span>  sources</span><span style="color: #94E2D5;"> =</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;source.amazon-ebs.ubuntu&quot;</span></span>
+<span class="giallo-l"><span>  ]</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  provisioner</span><span style="color: #A6E3A1;"> &quot;shell&quot;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    inline</span><span style="color: #94E2D5;"> =</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;mkdir /home/ubuntu/server&quot;</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  provisioner</span><span style="color: #A6E3A1;"> &quot;file&quot;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    source</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;./&quot;</span></span>
+<span class="giallo-l"><span>    destination</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;/home/ubuntu/server&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  provisioner</span><span style="color: #A6E3A1;"> &quot;file&quot;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    source</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;server.service&quot;</span></span>
+<span class="giallo-l"><span>    destination</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;/etc/systemd/system/server.service&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  provisioner</span><span style="color: #A6E3A1;"> &quot;shell&quot;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    inline</span><span style="color: #94E2D5;"> =</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;cd /home/ubuntu/server&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;sudo docker build -t server:latest .&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;sudo iptables -A OUTPUT -p tcp --dport 80 -j ACCEPT&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;sudo systemctl enable server&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;sudo systemctl start server&quot;</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이건 변수다.</p>
+<p><img src="/images/img_03d19ec05eed3536.png" alt="" />
+출력할 ami 이미지 이름은 외부에서 제어할 수 있게 해뒀다.</p>
+<p>소스는 빌드할때 사용할 기본 이미지다.<br />
+FROM 절이라고 보면 된다.</p>
+<p><img src="/images/img_a5ec7d73c80e9491.jpg" alt="" />
+필터는 귀찮더라도 보안상 넣게 해둬서 넣어야 한다.</p>
+<p>packer는 이 영역을 바탕으로 ami 이미지를 받아서 빌드용 EC2를 실행하고, ssh로 들어가는 것까지를 처리한다.</p>
+<p>그 다음이 이제 빌드 프로세스다.</p>
+<p><img src="/images/img_6ab6c86bf35be756.png" alt="" />
+여기에서는 provisioner 단위를 통해서 빌드 프로세스 중간에 할 일들을 구겨넣을 수 있다.<br />
+shell은 셸 명령을 집어넣는 부분이고, file이 파일을 복사-붙여넣기 하는 부분이다.</p>
+<p>shell은 실행된 시점의 유저의 권한을 따른다. sudo 권한이 있는 유저면 sudo 명령 집어넣어서 다 시킬 수 있으니 대체로 문제는 없다.</p>
+<p>file 복사는 현재 디렉터리 기준으로 파일/디렉터리 복사가 다 된다.</p>
+<p><img src="/images/img_da7e8640c38e5bfa.png" alt="" />
+위에는 현재 디렉터리에 있는 파일들을 전부 /home/ubuntu/server로 복붙하는거고, 아래는 특정 파일만 옮기는 거다.<br />
+여기서 유의할 점은 이것도 실행한 시점의 user 권한을 따르는데, shell과는 다르게 자유 입력 명령이 아니라서 sudo 처리가 불가능하다는 것이다.<br />
+만약 저 특정 파일 경로에 대해서만 열어줘야 한다거나 하면 미리 권한을 붙여줘야 한다.</p>
+<p>그리고 이건 Docker와 다르게 CMD나 ENTRYPOINT 같은 단위가 없다.<br />
+그래서 만약 시작시에 동작하는 뭔가가 필요하다면</p>
+<p><img src="/images/img_56627510035f0da7.png" alt="" />
+그냥 systemctl 같은 데몬을 쓰는 편이 간단하다.</p>
+<br>
+<br>
+<br>
+<h2 id="bildeu-mic-eobrodeu">빌드 및 업로드</h2>
+<p>init과 validate는 유효성 정도만 검증하는 단순한 기능들이다.<br />
+아까 정의한 packer 파일을 전달하고, 빈 구멍이 있으면 그거만 채워서 실행하면 된다.</p>
+<p><img src="/images/img_7e779e3152941794.png" alt="" />
+이 경우에는 ami_name이 variable로 뚫려있었으니 그걸 메웠다.</p>
+<p>실제 build-&gt;업로드까지 진행하려면 build 명령을 쓰면 된다.<br />
+업로드 명령이 따로 있다거나 하진 않고 불가피하게 일체형이다.</p>
+<p><img src="/images/img_b1b2bceee218cd69.png" alt="" />
+AWS 접속정보를 환경변수로 넘겨야 한다는 것만 빼면 init, validate와 큰 차이는 없다. 변수만 채워서 실행했다.</p>
+<p>내 경우에는 이렇게 해서 실행했을때</p>
+<p><img src="/images/img_885f491643e0e4b5.png" alt="" /></p>
+<p><img src="/images/img_956147a6e7477b54.png" alt="" />
+빌드 자체에만 4분 넘는 시간이 걸렸다.<br />
+사실 이건 AMI 빌드 자체도 그렇지만, AMI 업로드 후에 사용가능 상태가 되기까지 기다리는 것도 조금 걸린다.</p>
+<ol>
+<li>
+<p>EC2 프로비저닝</p>
+</li>
+<li>
+<p>접속해서 이것저것 처리</p>
+</li>
+<li>
+<p>EC2 기반으로 AMI 업로드</p>
+</li>
+<li>
+<p>업로드된 AMI가 준비되기까지 대기...</p>
+</li>
+</ol>
+<br>
+<br>
+<p>속터지는 프로세스다.<br />
+서버리스 컨테이너를 쓸 수 없는 상황에서 다들 그냥 쿠버로 가는데는 이유가 있는 것 같다.</p>
+<br>
+<br>
+<p>여기까지의 Github Action 워크플로 예시다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>name</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;.Service Server&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>on</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  workflow_dispatch</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    inputs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      environment</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        required</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>        type</span><span style="color: #9399B2;">:</span><span> choice</span></span>
+<span class="giallo-l"><span>        description</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;배포 환경 ⚠️ prod 배포 시 tag 사용&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        default</span><span>: </span><span style="color: #A6E3A1;">&quot;dev&quot;</span></span>
+<span class="giallo-l"><span>        options</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">          -</span><span style="color: #A6E3A1;"> &quot;prod&quot;</span></span>
+<span class="giallo-l"><span>      ami_version_name</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        required</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>        type</span><span style="color: #9399B2;">:</span><span> string</span></span>
+<span class="giallo-l"><span>        description</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;AMI 버전명&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        default</span><span>: </span><span style="color: #A6E3A1;">&quot;1234&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>env</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  ENVIRONMENT</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> inputs</span><span style="color: #94E2D5;">.</span><span>environment</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>  AWS_REGION</span><span style="color: #9399B2;">:</span><span> us</span><span style="color: #94E2D5;">-</span><span>east</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>  IMAGE_TAG</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> github</span><span style="color: #94E2D5;">.</span><span>sha</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>  AMI_NAME</span><span style="color: #9399B2;">:</span><span> foo</span><span style="color: #94E2D5;">-</span><span>$</span><span style="color: #9399B2;">{{</span><span> inputs</span><span style="color: #94E2D5;">.</span><span>ami_version_name</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>run</span><span style="color: #94E2D5;">-</span><span>name</span><span style="color: #9399B2;">:</span><span> Service $</span><span style="color: #9399B2;">{{</span><span> inputs</span><span style="color: #94E2D5;">.</span><span>environment</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>jobs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    runs</span><span style="color: #94E2D5;">-</span><span>on</span><span style="color: #9399B2;">:</span><span> ubuntu</span><span style="color: #94E2D5;">-</span><span>latest</span></span>
+<span class="giallo-l"><span>    steps</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> checkout</span></span>
+<span class="giallo-l"><span>        uses</span><span style="color: #9399B2;">:</span><span> actions</span><span style="color: #94E2D5;">/</span><span>checkout@v2</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Setup</span><span style="color: #A6E3A1;"> `packer`</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          curl</span><span style="color: #94E2D5;"> -</span><span>fsSL https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//apt.releases.hashicorp.com/gpg | sudo apt-key add -</span></span>
+<span class="giallo-l"><span>          sudo apt</span><span style="color: #94E2D5;">-</span><span>add</span><span style="color: #94E2D5;">-</span><span>repository</span><span style="color: #A6E3A1;"> &quot;deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main&quot;</span></span>
+<span class="giallo-l"><span>          sudo apt</span><span style="color: #94E2D5;">-</span><span>get update</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> sudo apt</span><span style="color: #94E2D5;">-</span><span>get install packer</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Configure AWS credentials</span></span>
+<span class="giallo-l"><span>        uses</span><span style="color: #9399B2;">:</span><span> aws</span><span style="color: #94E2D5;">-</span><span>actions</span><span style="color: #94E2D5;">/</span><span>configure</span><span style="color: #94E2D5;">-</span><span>aws</span><span style="color: #94E2D5;">-</span><span>credentials@v1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        with</span><span>:</span></span>
+<span class="giallo-l"><span>          aws</span><span style="color: #94E2D5;">-</span><span>access</span><span style="color: #94E2D5;">-</span><span>key</span><span style="color: #94E2D5;">-</span><span>id</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_ACCESS_KEY</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>          aws</span><span style="color: #94E2D5;">-</span><span>secret</span><span style="color: #94E2D5;">-</span><span>access</span><span style="color: #94E2D5;">-</span><span>key</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_SECRET_KEY</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>          aws</span><span style="color: #94E2D5;">-</span><span>region</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_REGION</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> packer init and validate</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          packer init</span><span style="color: #94E2D5;"> -</span><span style="color: #CBA6F7;">var</span><span> &quot;ami_name</span><span style="color: #94E2D5;">=</span><span>$</span><span style="color: #9399B2;">{{</span><span> env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AMI_NAME</span><span style="color: #9399B2;"> }}</span><span style="color: #A6E3A1;">&quot; packer.pkr.hcl</span></span>
+<span class="giallo-l"><span>          packer validate</span><span style="color: #94E2D5;"> -</span><span style="color: #CBA6F7;">var</span><span> &quot;ami_name</span><span style="color: #94E2D5;">=</span><span>$</span><span style="color: #9399B2;">{{</span><span> env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AMI_NAME</span><span style="color: #9399B2;"> }}</span><span style="color: #A6E3A1;">&quot; packer.pkr.hcl</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Build AMI Image</span></span>
+<span class="giallo-l"><span>        id</span><span style="color: #9399B2;">:</span><span> ami</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">          export</span><span> AWS_ACCESS_KEY_ID</span><span style="color: #94E2D5;">=</span><span>$</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_ACCESS_KEY</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">          export</span><span> AWS_SECRET_ACCESS_KEY</span><span style="color: #94E2D5;">=</span><span>$</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_SECRET_KEY</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>          packer build</span><span style="color: #94E2D5;"> -</span><span style="color: #CBA6F7;">var</span><span> &quot;ami_name</span><span style="color: #94E2D5;">=</span><span>$</span><span style="color: #9399B2;">{{</span><span> env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AMI_NAME</span><span style="color: #9399B2;"> }}</span><span style="color: #A6E3A1;">&quot; packer.pkr.hcl</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://developer.hashicorp.com/packer/tutorials/cloud-production/github-actions">https://developer.hashicorp.com/packer/tutorials/cloud-production/github-actions</a><br />
+<a rel="external" href="https://techblog.woowahan.com/2624/">https://techblog.woowahan.com/2624/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223865990191/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] zram<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223865080452/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Rust 학습자료 정리.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

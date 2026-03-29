@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] fuzzing | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222931286330/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] fuzzing">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222931286330/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2022-11-17T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222931286330/">[Go] fuzzing</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-11-17T00:00:00+00:00"><time datetime="2022-11-17T00:00:00+00:00">2022.11.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="208 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222931286330" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222692757243">https://blog.naver.com/sssang97/222692757243</a><br />
+fuzzing은 난수 기반의 무작위 테스트 기법이다.<br />
+그냥 랜덤값을 자동으로 쑤셔넣어서 잘못된 엣지 케이스가 있나 검증해보는 것이다.</p>
+<p>Go 1.18부터 기본기능으로 사용 가능하다.</p>
+<p>가령, 이런 단순한 덧셈 함수가 있다고 해보겠다.</p>
+<p><img src="/images/img_1abb321cb4b393cf.png" alt="" />
+의도적으로 lhs가 10일때만 잘못된 값을 계산하는 로직이 존재한다.<br />
+실제로 이런 말도안되는 코드를 짤 리는 없지만, 어떤 형태로든지 나타날 수 있는 상황이다.</p>
+<p>그래서 사람들은 이런걸 최소화하기 위해서 단위테스트를 작성하곤 한다.</p>
+<p><img src="/images/img_b7eaa2cc7f817625.png" alt="" />
+효과는 있지만, 단점 또한 극명하다.<br />
+결국 노가다로 케이스 하나하나를 다 치거나, 예상되는 엣지케이스를 찝어서 다 만들어줘야 하는데, 사람이 그걸 다 체크하는건 불가능에 가깝거나 힘들기 때문이다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="fuzzing-teseuteuhagi">Fuzzing 테스트하기</h2>
+<p>이제 다시 해보자. 기존 테스트용 소스파일에 다음과 같은 형태로 코드를 추가한다.<br />
+함수의 이름은 Fuzz로 시작해야 하고, 파라미터 타입도 F여야 한다.<br />
+그리고 Fuzz 함수를 호출해서, 거기 안에서 진짜 테스트케이스를 작성하면 된다. 2번째 매개변수부터는 대충 추가하면 그 타입에 맞는 값을 알아서 넣어준다.</p>
+<p><img src="/images/img_633d875dbc0b2ce9.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> FuzzTest2</span><span>(f</span><span style="color: #94E2D5;"> *</span><span>testing</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">F</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	f</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fuzz</span><span>(</span><span style="color: #89B4FA;font-style: italic;">func</span><span>(t</span><span style="color: #94E2D5;"> *</span><span>testing</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">T</span><span style="color: #9399B2;">,</span><span> lhs int</span><span style="color: #9399B2;">,</span><span> rhs int)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		a </span><span style="color: #94E2D5;">:=</span><span style="color: #89B4FA;font-style: italic;"> Add</span><span>(lhs</span><span style="color: #9399B2;">,</span><span> rhs)</span></span>
+<span class="giallo-l"><span>		b :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> Add</span><span>(rhs</span><span style="color: #9399B2;">,</span><span> lhs)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		if a</span><span style="color: #94E2D5;"> !=</span><span> b</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			t.Errorf(</span><span style="color: #A6E3A1;">&quot;lhs: %d, rhs: %d&quot;</span><span style="color: #9399B2;">,</span><span> lhs</span><span style="color: #9399B2;">,</span><span> rhs)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>덧셈에 사용할 양변 값을 다 정수로 받아와서 돌리게 했다.<br />
+그리고 교환법칙이 성립하는지를 검증하게 했다. 이건 입력값을 예측할 수 없기 때문에, 이런식으로 좀 우회적 검증을 해야 한다.</p>
+<p>그리고 테스트케이스를 돌릴때 fuzz 옵션을 주기만 하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>go test</span><span style="color: #94E2D5;"> -</span><span>fuzz</span><span style="color: #94E2D5;">=</span><span>Fuzz</span></span></code></pre>
+<p><img src="/images/img_f168d798844be45e.png" alt="" /></p>
+<p><img src="/images/img_abf1b54691931fab.png" alt="" />
+그럼 알아서 난수 돌려보다가 오류 케이스를 찾아줄 것이다.<br />
+딱 맞춰서 던져줬다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://go.dev/doc/tutorial/fuzz">https://go.dev/doc/tutorial/fuzz</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222930784666/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] QLDB<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222929860122/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] App Runner<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

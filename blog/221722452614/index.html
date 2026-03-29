@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] Procedural 매크로 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221722452614/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] Procedural 매크로">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221722452614/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2019-11-29T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221722452614/">[Rust] Procedural 매크로</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-11-29T00:00:00+00:00"><time datetime="2019-11-29T00:00:00+00:00">2019.11.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="374 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221722452614" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>러스트는 println! 같은 단순한 매크로 함수 외에도, 코드에 간섭하고 직접 확장할 수 있는 자유로운 매크로 형식을 지원한다.</p>
+<p>먼저 라이브러리 형식으로 프로젝트를 생성한다.</p>
+<p><img src="/images/img_6f555ade96feb731.png" alt="" />
+proc..매크로는 무조건 라이브러리 형식으로만 빌드될 수 있기 때문이다.<br />
+터미널에서 cargo new 명령어로 생성할 경우, --bin 플래그 대신 --lib를 준다.</p>
+<br>
+<p><img src="/images/img_d5ae9c18a65ab0aa.png" alt="" />
+그럼 뭐 이렇게 되어있을 것이다.</p>
+<p>매크로의 사용을 위해 설정파일에서 proc-macro 값을 true로 설정해준다.</p>
+<p><img src="/images/img_e4206bc37b286592.png" alt="" /></p>
+<p>proc_crate를 extern crate하면 이제 procedural 매크로의 사용이 가능해진다.<br />
+한번 함수를 만드는 매크로를 만들어보겠다.</p>
+<br>
+<h2 id="hamsuhyeong-function-like-maekeuro">함수형(Function like) 매크로</h2>
+<p>proc 매크로도 함수의 형식으로 구현될 수 있는데, 함수 위에다 #[proc_macro] 매크로를 붙여주고 인자타입과 반환타입을 전부 TokenStream이라는 타입으로 맞춰준다.<br />
+코드를 받고 코드를 방출한다는 의미다. TokenStream은 소스코드를 나타내는 타입이다.<br />
+그럼</p>
+<p><img src="/images/img_361f73f168073e0d.png" alt="" />
+이런식으로 짜볼 수 있다.<br />
+저 매크로가 실행되면 그 실행된 위치에서 바로 저 반환한 텍스트가 자리를 차지하게 되는 것이다.</p>
+<p>그러면 이제 빌드하고, 테스트를 해보겠다.</p>
+<p><img src="/images/img_0792de28224b250b.png" alt="" />
+빌드가 이렇게 잘 됐다면, 이 프로젝트 폴더의 경로를 복사해두고, 따로 테스트용 프로젝트를 만들거나 연다.</p>
+<br>
+<p><img src="/images/img_b3c846710e75ade1.png" alt="" />
+아까 그 폴더를 의존성으로 추가해주고</p>
+<br>
+<p><img src="/images/img_7c17454a4cf3f8b7.png" alt="" />
+이렇게 짜서 돌리면, 잘 돈다.</p>
+<p>인자를 전달하는 것도 가능하다! 아까 매크로 정의의 item 인자가 그걸 받아오는 녀석이다.</p>
+<p><img src="/images/img_bf04c9e83f294519.png" alt="" />
+터미널에 내용을 출력하도록 바꿔주고</p>
+<p>돌리면</p>
+<p><img src="/images/img_3413b24ce9679047.png" alt="" />
+잘 돈다.</p>
+<p>이외에도 몇가지 형식이 더 있다.</p>
+<br>
+<br>
+<h2 id="sogseong-attribute-maekeuro">속성(attribute) 매크로</h2>
+<p>이건 함수 등의 정의 위에 붙여서 해당 정의를 수정할 수 있는 매크로다.<br />
+또, 속성에 인자를 전달할 수도 있다.<br />
+이런식으로 정의하고</p>
+<p><img src="/images/img_10dbe3204ee9881d.png" alt="" /></p>
+<p>이렇게 사용한다면,</p>
+<p><img src="/images/img_67eb269418f3852f.png" alt="" /></p>
+<p>저 attribute라는 인자로는 "으아악"이라는 텍스트가,<br />
+item에는 저 함수 정의 전체가 들어간다.</p>
+<p><img src="/images/img_cab2e84f09ec4bf6.png" alt="" />
+이렇게 말이다.</p>
+<p>여기선 그냥 내용물을 보기만 했지만, TokenStream 객체를 만들어서 반환한다면 그게 기존의 함수 정의를 대체한다.</p>
+<br>
+<br>
+<br>
+<h2 id="pasaeng-derive-maekeuro">파생(derive) 매크로</h2>
+<p>이건 구조체 위에 붙여서 트레잇 등을 자동으로 구현하게끔 해줄 때 자주 사용된다.</p>
+<p>proc_macro_derive라는 매크로를 사용해 구현되는데, 형태는 아래와 같다.</p>
+<p><img src="/images/img_acc894f83f04dad3.png" alt="" />
+이 인자로 들어오는 텍스트가 우리가 정의할 매크로의 이름이 된다. 여기선 Boom이 이 매크로의 이름인 것이다.<br />
+그리고 이 매크로에서 반환할 TokenStream 코드는 전역 공간에 들어간다.<br />
+따라서 저 코드는 그냥 전역 함수 boom 하나만 방출하는 것이다...<br />
+일단 간결함을 위해서 대충 써서 그런데, 진짜 파생을 구현하고 싶다면 item으로 들어온 구조체 이름을 얻어서, impl 구문을 작성해주면 된다.</p>
+<p>여튼 저걸 돌리면</p>
+<p><img src="/images/img_a1683705cee0d4c0.png" alt="" />
+이렇게 잘 돌아간다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/proc_macro/">https://doc.rust-lang.org/proc_macro/</a><br />
+<a rel="external" href="https://doc.rust-lang.org/reference/procedural-macros.html">https://doc.rust-lang.org/reference/procedural-macros.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221722399992/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 크레이트<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221720593704/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Java] 상속과 오버라이딩<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

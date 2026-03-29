@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 강제로 누수시키기 (Leaking) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223408774263/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 강제로 누수시키기 (Leaking)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223408774263/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-04-08T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223408774263/">[Rust] 강제로 누수시키기 (Leaking)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-04-08T00:00:00+00:00"><time datetime="2024-04-08T00:00:00+00:00">2024.04.08</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="394 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223408774263" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust는 기본적으로 안전한 메모리 관리/해제를 지향하는 언어이긴 하지만, 사용하기에 따라서 이러한 제한을 파괴하며 사용하는 것도 항상 가능하다.<br />
+일단 이런 사용사례 자체가 절대 일반적인 것이 아님에 유의한다. 일반적인 서버 등 상용 프로그램에는 이런 로직을 사용할 경우가 별로 없을 것이다.</p>
+<p>내가 생각하기에 의도적인 누수 동작을 사용할만한 부분은 보통 극한의 성능 최적화일 것이다.<br />
+힙의 할당/해제는 생각보다 무거운 연산이다. OS 수준에서 핸들링해주니 가벼워보이지만, 실제로 힙에 메모리를 할당하는 부분은 어셈블리로 수백-수천줄은 된다.</p>
+<p>메모리 할당/해제로 인한 비용을 줄이는 방법에는 여러가지가 있을 것이다. 그러나 모두 성능을 올릴 수는 있지만 메모리 사용량을 희생해야한다는 trade off가 있다.</p>
+<ol>
+<li>그냥 임의의 거대한 arena 객체를 상위에 할당해놓고 파라미터를 통해 상속받아서 쓰게 하면 그것만으로도 성능 최적화가 될 것이다. 가장 건전하고 side effect가 적은 방법이다.</li>
+<li>allocator를 직접 제어하는 것도 하나의 방법이다. 이건 현재로서 코드 전체에 영향을 준다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223142654009">https://blog.naver.com/sssang97/223142654009</a></li>
+<li>이 중에서 가장 음습한 방법이 mem::forget 같은 함수를 통해 누수를 강제로 발생시키는 것이다. 뒤를 보지 않아도 되는 상황에서만 사용할 수 있다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="mem-forget-hamsu">mem::forget 함수</h2>
+<p>이건 말 그대로 메모리에 대한 것을 잊는(forget) 동작을 한다.</p>
+<p><img src="/images/img_6351c42747657593.png" alt="" />
+이러면 루프 내 변수 text는 루프 범위를 지난다고 해서 바로 정리가 되지 않는다. 누수가 발생하는 것이다.</p>
+<p>사실 그리 거창한건 아니고, 내부적으로 코드를 보면 이렇다.</p>
+<p><img src="/images/img_182e2dc3f5675391.png" alt="" />
+그냥 ManuallyDrop으로 한번 감싸는 것이다.<br />
+ManuallyDrop라는 이 특수한 객체는 컴파일러에게 drop 소멸자를 호출하지 않도록 명령한다. 소멸자를 호출하지 않으니 힙 할당이나 파일 정리 등 cleanup 작업을 일괄 하지 않는 것이다.</p>
+<p>정리가 거의 되지는 않을테지만, 영원히 존재한다는 보장까지는 없다.</p>
+<p>그리고 특이하게도 음침한 동작인데도 unsafe가 아니다. 이런 식으로 누수를 발생시키는건 Rc에서 상호참조로 누수가 발생하는 것과 같은 결의 의도된 동작이라고 보기 때문이다.</p>
+<p>아무튼 일상적으로 사용할만한 기능은 아니다. FFI를 하면 drop 방지가 필요할 수도 있긴 한데, 그렇더라도 ManuallyDrop 객체를 직접 생성해서 직접 drop을 제어하는 것이 바람직한 사용 형태다.<br />
+이건 진짜 잊어버리는 용도라서 drop을 제어할 수도 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="manuallydrop">ManuallyDrop</h2>
+<p>이건 drop을 스코프 단위에서 제한하지 않고 직접 제어하고 싶을때 사용하는 기능이다.<br />
+특정 값을 이걸로 감싸서 생성하면, 컴파일러는 drop 호출 대상에서 제외한다.</p>
+<p><img src="/images/img_c306cc22223ca905.png" alt="" />
+그 이후에는 drop 메서드 등을 호출해서 임의로 drop을 시킬 수 있다.<br />
+이건 unsafe다. 두번 이상 drop을 시도하면 문제가 발생할 수 있다.</p>
+<p>좀더 권장하는 방법은 into_inner로 값을 꺼내는 것이다.</p>
+<p><img src="/images/img_2cad1f09176e0900.png" alt="" />
+그럼 내부 값을 꺼내옴과 동시에 ManuallyDrop 타입이 사라져서 다시 자동 drop 대상이 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/nomicon/leaking.html">https://doc.rust-lang.org/nomicon/leaking.html</a><br />
+<a rel="external" href="https://doc.rust-lang.org/std/mem/fn.forget.html">https://doc.rust-lang.org/std/mem/fn.forget.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223410682026/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] go bench로 성능 벤치마킹하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223406143824/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] S3가 내구성을 유지하는 방법.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

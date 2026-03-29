@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] deployment: 재배포 전략 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223028645109/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] deployment: 재배포 전략">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223028645109/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-02-27T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223028645109/">[k8s] deployment: 재배포 전략</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-02-27T00:00:00+00:00"><time datetime="2023-02-27T00:00:00+00:00">2023.02.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="319 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223028645109" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>재배포에 대한 구성은 지속적인 배포와 운영에 있어서 매우 중요한 부분이다.<br />
+deployment를 사용하면서 그 대략적인 종류와 사용법을 정리해보도록 하겠다.</p>
+<p>여기서는 deployment에 먹이면서 해보긴 하겠지만, 다른 컨트롤러 단위에도 통용되는 부분이다.</p>
+<p>배포 전략에는 Rolling Update, Recreate의 2가지 방법 정도가 지원된다.<br />
+Blue/Green이나 Canary 같은것들은 직접 구성을 해서 제어해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="jaesaengseong-recreate">재생성 (Recreate)</h2>
+<p>가장 무식한 재배포 방법이다.<br />
+기존의 파드를 죽이고, 새 파드를 띄운다. 그뿐이다.</p>
+<p>그래서 이걸로 서버를 구성한다면 파드를 죽이고 새로 띄우는 그 사이에는 downtime이 발생한다.<br />
+그래도 상관없는 경우에만 쓰면 된다.</p>
+<p>Recreate 전략을 설정하려면, 다음과 같이 spec.strategy를 추가하고 타입을 Recreate로 하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> apps</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  strategy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    type</span><span style="color: #9399B2;">:</span><span> Recreate</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    metadata</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      labels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>        app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    spec</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      containers</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>          image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span></span></code></pre>
+<p>그리고 apply로 추가하거나 적용해준다.</p>
+<p><img src="/images/img_a5f6dfadb0b747e0.png" alt="" /></p>
+<p><img src="/images/img_ee3e74f87afa70ba.png" alt="" /></p>
+<p>그리고 rollout 명령을 사용하면 재배포를 트리거할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl rollout restart deployments</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span></code></pre>
+<p><img src="/images/img_68e1baad8cf9db4e.png" alt="" /></p>
+<p>상태확인은 이걸로 가능하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl rollout status deployments</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span></code></pre>
+<p><img src="/images/img_ce8b9e8c4cfefa2e.png" alt="" /></p>
+<p>이렇게 죽인 다음에</p>
+<p><img src="/images/img_148e5d89fb03bb1e.png" alt="" /></p>
+<p>새로 띄운다.</p>
+<p><img src="/images/img_52a816d342d53b08.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="rolling-update">Rolling Update</h2>
+<p>롤링은 일반적으로 가장 자주 사용되는 방식이다.</p>
+<p>버전을 0.1에서 0.2로 올려서 배포한다 치면, 0.2의 인스턴스를 동시에 띄운 다음에, 0.2가 성공적으로 올라가면 기존의 0.1을 천천히 삭제하는 방법을 취한다.</p>
+<p>옛 버전과 새 버전이 공존할 수 있다는 단점이 있다.<br />
+이 단점을 극복하려면 Blue/Green 형태로 직접 구성을 좀 해줘야 한다.</p>
+<p>아무튼 yaml을 다시 말아보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> apps</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  strategy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    type</span><span style="color: #9399B2;">:</span><span> RollingUpdate</span></span>
+<span class="giallo-l"><span>    rollingUpdate</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      maxSurge</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>      maxUnavailable</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    metadata</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      labels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>        app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    spec</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      containers</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>          image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span></span></code></pre>
+<p>여기서 좀 중요한 옵션은 maxSurge와 maxUnavailable다.</p>
+<p>maxSurge는 기존 레플리카 개수에 더해서, 배포를 위해 몇개나 더 띄울 수 있는지를 정의한다.<br />
+그리고 maxUnavailable는 기존 레플리카 개수에서, 배포를 위해 몇개까지 삭제가 될 수 있는지를 정의한다.</p>
+<p>위와 같이 정의했다면 하나씩 새로 띄우면서 기존의 구버전 레플리카 3개를 하나씩 제거하는 구성이 되는 것이다.</p>
+<p>반대로 maxSurge를 0, maxUnavailable를 1로 한다면 그 반대가 된다. 추가로 더 띄울 수는 없으니 기존에 있던걸 하나씩 내린 뒤에 하나를 새로 띄우는 형태가 된다.</p>
+<p>그리고 0, 1처럼 개수를 명시적으로 쓸 수도 있고, 백분율로 파드 개수를 지정할 수도 있다. maxSurge를 100%로 한다면 하나씩 찔끔찔끔 올리는게 아니라 레플리카 개수인 3개를 한번에 올리고 한번에 지울 것이다.</p>
+<p>한번 돌려보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl rollout restart deployments</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span>
+<span class="giallo-l"><span>kubectl rollout status deployments</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span></code></pre>
+<p><img src="/images/img_9bc1be0fd0a900c7.png" alt="" />
+그럼 기대한 대로 처리를 해줄 것이다.</p>
+<br>
+<hr />
+<p><strong>참조</strong><br />
+<a rel="external" href="https://velog.io/@squarebird/Kubernetes-Replica-Set%EA%B3%BC-Deployment">https://velog.io/@squarebird/Kubernetes-Replica-Set%EA%B3%BC-Deployment</a><br />
+<a rel="external" href="https://ooeunz.tistory.com/124">https://ooeunz.tistory.com/124</a></p>
+<hr />
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223028585194/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] daemonset<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223028688449/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] cronjob<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

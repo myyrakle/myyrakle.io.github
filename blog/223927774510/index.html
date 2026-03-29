@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] Materialized View | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223927774510/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] Materialized View">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223927774510/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-07-09T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223927774510/">[Clickhouse] Materialized View</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-07-09T00:00:00+00:00"><time datetime="2025-07-09T00:00:00+00:00">2025.07.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="371 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223927774510" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Materialized View는 효과적인 쿼리 최적화를 위한 보조도구 중 하나다.<br />
+미리 원하는 형태대로 조회용 테이블을 생성하는 것이다.</p>
+<p>Incremental Materialized View와 Refreshable Materialized View 2가지가 지원된다.</p>
+<br>
+<br>
+<br>
+<h2 id="dongjag-gujo">동작 구조</h2>
+<p>이게 뭐냐면, 뷰 구조를 정의해두면 clickhouse가 자동으로 그에 맞게 데이터를 부어주는 것이다.</p>
+<p><img src="/images/img_25950899f95bc336.png" alt="" />
+<a rel="external" href="https://clickhouse.com/docs/materialized-view/incremental-materialized-view">https://clickhouse.com/docs/materialized-view/incremental-materialized-view</a><br />
+그때그때 들어온 값에 대해서만 집계 연산을 해서 대상 테이블에 부어준다.<br />
+View INSERT에 따른 부하가 증가하지만, 그대신 해당 View 접근 패턴에 대해서는 매우 극적인 최적화 효과를 얻을 수 있다.</p>
+<p>Incremental과 Refreshable의 차이는 INSERT 될때마다 실시간으로 View를 생성하는 것인지, 아니면 일정 기반으로 느긋하게 View를 만드는 것인지다.<br />
+Refreshable의 구조도는 다음과 같다.</p>
+<p><img src="/images/img_10b1542eeb343110.png" alt="" />
+<a rel="external" href="https://clickhouse.com/docs/materialized-view/refreshable-materialized-view">https://clickhouse.com/docs/materialized-view/refreshable-materialized-view</a><br />
+이건 일정마다 전체쿼리를 날려서 넣는거라서, Incremental에 비해 부하가 좀 크다.</p>
+<br>
+<br>
+<br>
+<h2 id="summingmergetree-enjin">SummingMergeTree 엔진</h2>
+<p>View 기능은 엄밀하게는 그 자체로 완성된 테이블을 만들어주는 기능은 아니다.<br />
+별도의 View 테이블을 만들고 나서 거기에 부어주는 역할을 하는게 Materialized View의 동작이다.</p>
+<p>View 저장 대상 테이블을 위해 존재하는 것이 SummingMergeTree라는 엔진이다.</p>
+<p><img src="/images/img_50a34b91ca4fbd47.png" alt="" /></p>
+<p><img src="/images/img_d1afc7cacd51c28c.png" alt="" />
+이런 집계 쿼리가 있다면</p>
+<br>
+<p><img src="/images/img_ee0ac753926128d9.png" alt="" />
+그 구조에 맞춰서 테이블을 짜주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="view-jeogyong-incremental">View 적용 (Incremental)</h2>
+<p>뷰 생성은 다음과 같이 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE MATERIALIZED VIEW 뷰이름 TO 대상테이블 AS</span></span>
+<span class="giallo-l"><span>SELECT 쿼리</span><span style="color: #94E2D5;">...</span></span></code></pre>
+<p><img src="/images/img_ffb921d6a9c6edc0.png" alt="" /></p>
+<p>그럼 뷰가 생성되는데, 유의할 점은 뷰도 테이블처럼 취급된다는 것이다. 조회도, 삭제 방법도 같다.</p>
+<p><img src="/images/img_69100c0865511550.png" alt="" /></p>
+<p>여기서의 문제는, 기존 데이터를 자동으로 옮겨주거나 하진 않는다는 것이다. INSERT에 반응해서 옮겨준다.<br />
+그래서 처음에는 수동으로 쿼리 날려서 한번 초기화해주는 과정이 필요하다.</p>
+<p>이후부터 들어오는 INSERT에 대해서는 자동으로 집계 결과가 삽입된다.</p>
+<p><img src="/images/img_048616eece6afa21.png" alt="" />
+지속적으로 관리할 거라면 이 Incremental 방식이 훨씬 리소스 효율적이고 권장되는 편이다.</p>
+<br>
+<br>
+<br>
+<h2 id="refreshable-materialized-view">Refreshable Materialized View</h2>
+<p>REFRESH View는 사용법이 크게 다르진 않고, Refresh 절만 추가하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE MATERIALIZED VIEW 뷰이름</span></span>
+<span class="giallo-l"><span>REFRESH 일정</span></span>
+<span class="giallo-l"><span>TO 대상테이블 AS</span></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> ...</span></span></code></pre>
+<p>예를 들어, 위의 경우에도 10분마다 동기화를 하고 싶다면 이렇게 할 수 있다.</p>
+<p><img src="/images/img_b491fb7d41c9743f.png" alt="" /></p>
+<p>그리고 이건 주기마다 전체 데이터를 지우고 새로 넣는거라서, Incremental과는 다르게 이전에 있던 데이터도 한번에 동기화가 된다.</p>
+<p><img src="/images/img_ff4758706b7d01d4.png" alt="" />
+다만 대체로는 Incremental에 비해 비효율적인 편이다.</p>
+<p>정합성 같은게 매우 중요하거나, 이런 일정 주기 기반의 집계가 효율적인 경우에 차선책으로 선택해야 한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/materialized-view/incremental-materialized-view">https://clickhouse.com/docs/materialized-view/incremental-materialized-view</a><br />
+<a rel="external" href="https://clickhouse.com/docs/materialized-view/refreshable-materialized-view">https://clickhouse.com/docs/materialized-view/refreshable-materialized-view</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223927742671/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] Primary Index<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223926031319/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Clickhouse] 쿼리 성능 분석<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

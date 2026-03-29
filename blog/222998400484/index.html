@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>대규모 분산시스템의 Unique ID | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222998400484/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="대규모 분산시스템의 Unique ID">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222998400484/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-01-29T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222998400484/">대규모 분산시스템의 Unique ID</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-01-29T00:00:00+00:00"><time datetime="2023-01-29T00:00:00+00:00">2023.01.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="435 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222998400484" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>데이터의 Unique ID는 굉장히 기초적이고 간단한 것 같으면서도, 파고들면 꽤나 어려운 문제이기도 하다.</p>
+<br>
+<br>
+<h2 id="jungsogyumo-siseutem-rdb">중소규모 시스템 (RDB)</h2>
+<p>일반적인 규모의 시스템에서는 사실 관계형 데이터베이스에서 제공하는 기본 옵션을 사용해도 무방하다.<br />
+MySQL의 auto increment나, Oracle/PostgreSQL의 sequence와 같은 것들이 그것이다.</p>
+<p>하지만 입력이 초당 수천건, 수만건을 넘어가고 DB를 다중화하는 대규모 시스템으로 나아가면 이런 것들로는 버티기 어려워진다.</p>
+<br>
+<br>
+<br>
+<h2 id="pyojun-uuid">표준 UUID</h2>
+<p>uuid v4는 고유한 ID를 만들기 위한 문자열 포맷이다.<br />
+시간과 난수값을 기반으로 랜덤한 문자열을 만든다.</p>
+<p>32개의 16진수로 표기되며, 16바이트의 크기를 가진다. 이런 형태다.<br />
+<strong>550e8400-e29b-41d4-a716-446655440000</strong></p>
+<p>충돌 가능성이 없지는 않지만, 매우 희박해서 분산된 시스템 간에도 ID를 마구 뽑아내서 사용하기 좋다.</p>
+<p>단점은 크기가 16바이트로 꽤나 크고, 시간순 정렬이 안된다는 것이다.</p>
+<p>그런걸 제외하면 꽤 좋은 방법이고, RDB 등에서도 종종 사용하는 기법이기도 하다.</p>
+<br>
+<br>
+<br>
+<h2 id="byeonhyeong-uuid-mongodb-deung">변형 UUID (MongoDB 등)</h2>
+<p>NoSQL의 대표주자 중 하나인 몽고DB는 대규모 분산시스템을 타겟으로 만들어진 데이터베이스 시스템이다.<br />
+그래서 Unique ID 생성법도 그에 맞추어져있는데, 랜덤으로 생성된 UUID를 키로 삼는다. 다만, uuidv4가 아니라 자체 구현한 12바이트의 id 구조를 사용한다는 것이다.<br />
+이건 표준 uuid와는 다르게 시간순 정렬이 되고, 크기도 비교적 작다!</p>
+<p>그리고 mysql의 경우에는 uuidv4에 시간순 정렬이 가능한 보조기능을 제공한다. uuid_to_bin의 2번째 파라미터에 1을 전달해서 "시간"에 대한 값을 최상위로 옮기는 것이다.</p>
+<p><img src="/images/img_dc6cef3b445330e6.jpg" alt="" />
+다른 데이터베이스를 사용하더라도 비슷한 방법론을 사용해서 대체가 가능하다.</p>
+<p>시간순 정렬도 가능하다는 점에서 uuidv4보다 낫다.</p>
+<br>
+<br>
+<br>
+<h2 id="tikes-seobeo-ticket-server">티켓 서버(Ticket Server)</h2>
+<p>티켓 서버는 꽤나 단순하면서도 강력한 해결방식이라고 할 수 있다.<br />
+그냥 auto_increment 역할만 하는 서버를 하나 만들어서 UNIQUE ID를 발급하는 기능을 만들어주고,<br />
+다른 서버들이 그걸로 다 받아와서 쓰게 하는 것이다!</p>
+<p>야후의 하위서비스인 Flickr가 이런 방식을 사용하고 있다고 한다.</p>
+<p>단점은.. Ticket Server가 단일 실패지점(SPOF)이 된다는 것이다.<br />
+티켓서버가 죽지 않게 잘 관리해줘야 하고, 부하를 감당할 수 있게 스펙을 잘 맞춰줘야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="seunopeulreikeu-snowflake-paeteon">스노플레이크(Snowflake) 패턴</h2>
+<p>이건 정말 초-대규모 분산시스템에서 사용할 수 있는 방식이다.</p>
+<p>트위터에서 제안했고, 실제로 사용하고 있는 방법이다. 디스코드에서도 쓴다고 한다.<br />
+이런 곳은 대체로 데이터센터도 여러개고, 서버도 여러대다.</p>
+<ol>
+<li>자체 타임스탬프와</li>
+<li>데이터센터의 식별번호,</li>
+<li>데이터센터 안의 서버의 식별번호,</li>
+<li>그리고 각 서버에서 서버 단위로 관리하는 숫자를 조합해서 다음과 같이 64비트 데이터를 만들어 사용한다.</li>
+</ol>
+<p><img src="/images/img_863c499416807b2c.png" alt="" />
+맨 앞에는 부호비트를 뒀는데, 큰 쓰임새가 있지는 않다. 혹시나 싶어서 넣어뒀다고 한다.</p>
+<p>여튼 이런식으로 만들면 만드는 것 자체도 빠르게 만들 수 있고, 상위 비트가 타임스탬프로 되어있기 때문에 시간순 정렬도 쉽게 할 수 있다.</p>
+<p>일반적인 규모의 시스템은 데이터센터가 따로 나뉘어있지는 않으니, 데이터센터ID와 서버ID를 통합해서 서버 ID만 둬도 충분할 것이다.</p>
+<p>단점은 타임스탬프의 크기다. 저기서는 41비트만큼의 영역만 차지하는데, 저걸로는 최대 69년까지의 시간만 표현할 수 있다. 더 길게하려면 타임스탬프 영역을 더 크게 잡아야 한다.</p>
+<br>
+<br>
+<p>참조<br />
+"가상 면접 사례로 배우는 대규모 시스템 설계 기초", 알렉스 쉬, 인사이트(2021)<br />
+<a rel="external" href="https://discord.com/blog/how-discord-stores-billions-of-messages">https://discord.com/blog/how-discord-stores-billions-of-messages</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222998247667/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Kinesis<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222995831471/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.67.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

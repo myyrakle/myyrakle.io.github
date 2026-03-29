@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Service Weaver: GKE 배포 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223069554771/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Service Weaver: GKE 배포">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223069554771/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-04-09T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223069554771/">[Go] Service Weaver: GKE 배포</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-04-09T00:00:00+00:00"><time datetime="2023-04-09T00:00:00+00:00">2023.04.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="503 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223069554771" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>아마 이게 위버를 만든 주 목적 중 하나이지 않나 싶다. GCP 유저 늘리기...</p>
+<p>GCP의 쿠버네티스 서비스에 분산 애플리케이션을 띄우는 기능을 기본으로 제공한다.</p>
+<p>다른 클라우드 기능이나 온프레미스 기능도 추후에 제공될지는 잘 모르겠다. 현재로서는 고려하고 있지 않은듯.</p>
+<br>
+<br>
+<br>
+<h2 id="weaver-gke-cli-seolci">weaver gke CLI 설치</h2>
+<p>weaver cli를 사용해서 자동화된 배포를 시도하려면, 또 전용 도구를 하나 깔아줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>go install github</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>ServiceWeaver</span><span style="color: #94E2D5;">/</span><span>weaver</span><span style="color: #94E2D5;">-</span><span>gke</span><span style="color: #94E2D5;">/</span><span>cmd</span><span style="color: #94E2D5;">/</span><span>weaver</span><span style="color: #94E2D5;">-</span><span>gke@latest</span></span></code></pre>
+<p><img src="/images/img_306672ad4498e16d.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gcp-cli-seolci">GCP CLI 설치</h2>
+<p>gcp cli가 없다면. 아래 링크에 들어가서 적절히 깔아준다.<br />
+<a rel="external" href="https://cloud.google.com/sdk/docs/install?hl=ko">gcloud CLI 설치  |  Google Cloud</a></p>
+<br>
+<p><img src="/images/img_9951ddf8fc6bf2e9.png" alt="" /></p>
+<p>플러그인도 하나 깔아주고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>gcloud components install gke</span><span style="color: #94E2D5;">-</span><span>gcloud</span><span style="color: #94E2D5;">-</span><span>auth</span><span style="color: #94E2D5;">-</span><span>plugin</span></span></code></pre>
+<p><img src="/images/img_248ed5e0870ec741.png" alt="" /></p>
+<p><img src="/images/img_0ae7f242cee07522.png" alt="" /></p>
+<p><img src="/images/img_b07035a75bf3a921.png" alt="" /></p>
+<p>계정 정보도 적절히 넣어주면 된다.</p>
+<p><img src="/images/img_71ed301b2db18e71.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="mitjunbi">밑준비</h2>
+<p>루트 URL로 헬스체크용 API를 하나 파줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // Health Check</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(writer http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> request</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		fmt.Fprintf(writer</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;OK&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	})</span></span></code></pre>
+<p><img src="/images/img_2e4e775f2faf65ea.png" alt="" />
+이게 없으면 컨테이너의 건강함을 알 수가 없어서 재배포가 끝나도 구버전을 내리질 못한다.</p>
+<br>
+<br>
+<br>
+<h2 id="baepohagi">배포하기</h2>
+<p>먼저 toml 파일을 적절히 수정해줘야 한다.</p>
+<p>그리고 windows/macOS 환경에서는 배포를 시도하기에 한계가 있다.<br />
+어차피 쿠버로 배포하려면 실행파일을 리눅스용으로 말아야 하기 때문이다...</p>
+<p>그리고 gke 옵션을 추가한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[serviceweaver]</span></span>
+<span class="giallo-l"><span>name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;weaver-start&quot;</span></span>
+<span class="giallo-l"><span>binary</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;./weaver-start&quot;</span></span>
+<span class="giallo-l"><span># binary</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;./weaver-start.exe&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[gke]</span></span>
+<span class="giallo-l"><span>regions</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;asia-northeast3&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>public_listener</span><span style="color: #94E2D5;"> =</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span><span>name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;weaver-start&quot;</span><span style="color: #9399B2;">,</span><span> hostname</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;weaver.myyrakle.com&quot;</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span>]</span></span></code></pre>
+<p>실제로 배포할 리전과, 퍼블릭 리스너를 정의한다.<br />
+퍼블릭 리스너를 정의하지 않으면 private 리스너만 열려서 내부 통신만 가능해진다.</p>
+<p>그리고 gke deploy 명령으로 실행해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>weaver gke deploy weaver</span><span style="color: #94E2D5;">.</span><span>toml</span></span></code></pre>
+<p><img src="/images/img_e9649c6ca5e6afc1.png" alt="" />
+그럼 한세월동안 클러스터 구성을 시작한다.</p>
+<br>
+<p><img src="/images/img_bfdefdf3f7aa3a8c.png" alt="" /></p>
+<p><img src="/images/img_4efddecb72777893.png" alt="" />
+유의할 점은, 중앙제어용 config 클러스터를 추가로 띄운다는 것이다.<br />
+현재는 us-central1 리전을 고정으로 띄운다.</p>
+<p>그리고 설정과 배포가 끝나면, 노드도 알아서 잘 띄워줄 것이다.</p>
+<p><img src="/images/img_d8e16b2723577564.png" alt="" /></p>
+<p><img src="/images/img_932f5c2d80cfdd0b.png" alt="" /></p>
+<p>서비스 상태는 gke status 명령으로 확인할 수 있다.</p>
+<p><img src="/images/img_94135c449ce96a6c.png" alt="" />
+따로 퍼블릭 리스너를 설정하지 않으면 위와 같이 private 로드밸런서로 구성된 private 엔드포인트만 만들어지고</p>
+<p>퍼블릭 리스너를 설정하면 이런 식으로 된다.</p>
+<p><img src="/images/img_1c392f50b42e128b.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="public-endeupointeu-hocul">public 엔드포인트 호출</h2>
+<p>그냥 간단하게 잘 도나 테스트만 해보고싶다면, 요청 헤더에 도메인 정보만 넣고 public IP에 쏴보면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> --</span><span>header</span><span style="color: #A6E3A1;"> &quot;Host: 도메인&quot;</span><span> http</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">...</span></span></code></pre>
+<p><img src="/images/img_57cdbe884b9188c4.png" alt="" /></p>
+<p>제대로 쓰려면 도메인 붙여서 쓰면 더 좋고</p>
+<p><img src="/images/img_8e2e9ef3457b7a4a.png" alt="" /></p>
+<p><img src="/images/img_b99ff6cfc8107472.png" alt="" />
+근데 뭔가 SSL 설정은 자동으로 해주긴 해주는데... SSL 인증서 프로비저닝이 한세월 걸린다.</p>
+<br>
+<p><img src="/images/img_3aa6a7b26e88850f.png" alt="" />
+24시간까지 기다려보란다.<br />
+내 경우에는 2시간쯤 걸린 것 같다.<br />
+AWS는 몇분이면 되던데... 좀 아쉬운 속도다.</p>
+<br>
+<br>
+<br>
+<h2 id="private-endeupointeu">private 엔드포인트</h2>
+<p>VPC 내에서만 사용할 private 엔드포인트는 "서비스명.리전명.serviceweaver.internal"의 구조를 가진다.</p>
+<p><img src="/images/img_c0ed8d68dc62cb79.png" alt="" />
+그래서 이렇게 쓰면 된다고 안내하긴 하는데..</p>
+<p><img src="/images/img_c88f1930dc59ea11.png" alt="" />
+모르겠다. 잘 안된다.<br />
+내부 로드밸런서에 쓰는 envoy에서 발생하는 오류일텐데, 아직 만들다 말아서 그런건지 뭔지는 잘 모르겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="daesibodeu">대시보드</h2>
+<p>기존과 동일하게 대시보드를 펼쳐볼 수 있다.</p>
+<p><img src="/images/img_6a2e23caa637da90.png" alt="" /></p>
+<p><img src="/images/img_c0536640544be4cf.png" alt="" /></p>
+<p><img src="/images/img_ff38c6f174d0c0b9.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="jaebaepo">재배포</h2>
+<p>당연히 앱은 시간에 따라 변화해야하고, 새 버전의 앱을 배포하는 것은 말하지 않아도 알 것이다.<br />
+새 버전의 앱을 배포하려면, 코드를 수정하고</p>
+<p><img src="/images/img_6e56c8101b1c3853.png" alt="" /></p>
+<p>빌드해서 똑같이 deploy를 시도하면 된다.</p>
+<p><img src="/images/img_9c89a1fcaf055506.png" alt="" /></p>
+<p>그럼 새 버전의 "deployment"가 뜰 것이고,</p>
+<p><img src="/images/img_5075fdd93fff66d7.png" alt="" /></p>
+<p>알아서 잘 교체해줄 것이다.</p>
+<p><img src="/images/img_597bcd26cf1cb5fa.png" alt="" /></p>
+<p><img src="/images/img_aa900aa0c7939e26.png" alt="" />
+근데 아무래도 초창기 프로젝트라 결함이 있는건지, 지금은 교체중에 다운타임이 좀 발생한다.<br />
+더 안정화되길 기다려야 할 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="baepo-jegeohagi">배포 제거하기</h2>
+<p>그냥 배포단위를 싹 날려버리고 싶다면, kill 명령을 쓰면 된다.</p>
+<p><img src="/images/img_acea70e4e4ed829f.png" alt="" /></p>
+<p><img src="/images/img_159da027cf9a15e5.png" alt="" /></p>
+<p>그렇다.</p>
+<p>아직 프로젝트 초기다보니, 전체적으로 미숙한 부분이 많이 보인다.</p>
+<p>안정화가 되고 온프레미스나 타사 클라우드도 지원이 된다면.. 참 좋을 것 같다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://serviceweaver.dev/docs.html#gke">Service Weaver Docs</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223072977222/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] FFI: pyo3 - Python에 Rust 코드 연동하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223067214633/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] Service Weaver<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

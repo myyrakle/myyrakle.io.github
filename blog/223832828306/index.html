@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Timing Attack | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223832828306/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Timing Attack">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223832828306/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-04-14T00:00:00+00:00">
+    <meta property="article:tag" content="보안">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223832828306/">Timing Attack</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-14T00:00:00+00:00"><time datetime="2025-04-14T00:00:00+00:00">2025.04.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="322 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/boan/">보안</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223832828306" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Timing Attack은 특정 동작에 걸리는 "실행시간"을 기반으로 암호 값 등을 추적하는 공격 기법이다.</p>
+<p>이렇게 뭔가 부수적인 요소를 기반으로 간접적으로 추정하는 공격법들을 side-channel attack이라고 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje">예제</h2>
+<p>예를 들어, 다음과 같이 하드코딩된 패스워드로 인증을 처리하는 코드가 있다고 해보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>def</span><span style="color: #89B4FA;font-style: italic;"> is_authorized</span><span>(token):</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> token</span><span style="color: #94E2D5;"> ==</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span>:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        return</span><span> True</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    else</span><span>:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        return</span><span> False</span></span></code></pre>
+<p>그냥 봤을 때는 별 문제가 없다고 여길 수도 있다.</p>
+<p>하지만 보안적인 관점에서, 편집증적인 관점으로 봤을 때는 이 또한 취약점으로 여겨질 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">is_authorized</span><span>(</span><span style="color: #A6E3A1;">&#39;q1aaaa&#39;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">is_authorized</span><span>(</span><span style="color: #A6E3A1;">&#39;asdf&#39;</span><span>)</span></span></code></pre>
+<p>왜냐면, 들어가는 값에 따라서 처리시간이 달라지는 것이기 때문이다.</p>
+<p>잘 생각해보면, 문자열 비교라는 것도 결국 문자 하나하나씩 순서대로 비교하는 루프다.</p>
+<p>q1aaaa을 넣었을 때는 q, 1까지 비교하고 나서 a를 만나고 루프를 탈출할 것이고, asdf는 루프에 진입하자마자 루프를 탈출할 것이다.<br />
+그러니까 값에 따라서 루프를 도는 횟수가 달라지고, 그에 따라서 실행되는 명령어의 개수도 달라지고, 처리시간도 달라진다.</p>
+<p>타이밍 어택은 이를 통해서 일치하는 값 패턴을 추정하는 방법론이다.</p>
+<p>브루트포스 돌리듯이 계속 돌리다가, 처리시간이 더 오래걸리는 조합을 첫번째 문자부터 천천히 쌓아나가다보면 언젠가는 q1w2e3r4라는 결론에 도달할 수 있는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="haegyeolcaeg">해결책</h2>
+<p>이를 해결하는 가장 좋은 방법은, 어떤 값이 들어와도 일정한 시간이 걸리게끔 하는 것이다.<br />
+이를 상수 시간 비교(const time compare)라고 한다.</p>
+<p>상수시간 비교의 구현체들은 보통 암호화 라이브러리들에 포함되어있다.<br />
+대표적으로 Python의 내장 모듈에도 hmac.compare_digest라는 구현이 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="hajiman">하지만...</h2>
+<p>사실 이런 형태의 단순한 사용사례는 사실 많지 않다.</p>
+<p>보통 잘 설계한 패스워드 시스템은 패스워드 해싱과 솔트를 통해서 원본 패스워드를 숨긴다.<br />
+때문에 아무리 타이밍 공격을 찔러대도 입력값과 해시값이 균일하게 대응되지 않기 때문에 한글자씩 단계적으로 추정하는 것이 매우 어렵고, 불가능에 가깝다. salt까지 첨가되면 더욱 어려워진다.</p>
+<p>게다가 대부분의 패스워드용 해시 알고리즘들은 의도적으로 느리게 동작하게끔 만들어져있다. 해싱 타임의 모수가 대체로 문자열의 비교보다 압도적으로 크기 때문에 측정을 거의 불가능하게 만들기도 한다.</p>
+<p>그래서 실제 시스템들에서 타이밍 공격은 공격자에게 매우 비효율적인 공격 방법이 될 확률이 매우 높다. 단순 브루트포스보다 나을 것이 없기 때문이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/Timing_attack">https://en.m.wikipedia.org/wiki/Timing_attack</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/27028284/is-comparing-strings-in-mysql-vulnerable-to-timing-attacks">https://stackoverflow.com/questions/27028284/is-comparing-strings-in-mysql-vulnerable-to-timing-attacks</a><br />
+<a rel="external" href="https://sqreen.github.io/DevelopersSecurityBestPractices/timing-attack/python">https://sqreen.github.io/DevelopersSecurityBestPractices/timing-attack/python</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223833304494/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>binary encoding 구현해보기 (with Rust)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223830165434/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Safe Rust를 위한 가이드.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

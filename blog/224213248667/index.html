@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Extension 만들어보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224213248667/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Extension 만들어보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224213248667/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-03-12T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224213248667/">[PostgreSQL] Extension 만들어보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-12T00:00:00+00:00"><time datetime="2026-03-12T00:00:00+00:00">2026.03.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="384 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224213248667" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PostgreSQL이 오픈소스의 스타로 군림하게 된 데는 여러가지 이유가 있지만, 그 중 대표적인 것이 확장성이다.<br />
+Postgres는 확장 도구들을 꽤 자유롭게 만들고 설치해서 쓸 수 있기 때문에 다용도로 사용하기 좋다.<br />
+대표적인 확장 도구로는 pgvector, postGIS 등이 있다.</p>
+<p>여기서는 확장을 직접 만들고 설치해보는 방법을 간단히 정리해본다.</p>
+<p>먼저 PostgreSQL의 공유 디렉터리를 찾아야 한다. 다음 명령으로 찾을 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pg_config</span><span style="color: #94E2D5;"> --</span><span>sharedir</span></span></code></pre>
+<p><img src="/images/img_ba8a0f0839f3b2bb.png" alt="" /></p>
+<p>그러면 그 안에 extension이라는 디렉터리가 있을 텐데, 이게 가장 중요한 부분이다.</p>
+<p><img src="/images/img_584a4b48c4a0ed8f.png" alt="" />
+실제로 기본 탑재된 확장들이다. 우리도 여기에다가 확장을 만들어서 넣어두면 다른 확장들처럼 쓸 수 있다.</p>
+<p>하나씩 만들어보자.<br />
+내 경우에는 그냥 간단한 함수를 만들어주는 확장을 구현해보려 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>postgresql</span><span style="color: #94E2D5;">/</span><span>extension</span><span style="color: #94E2D5;">/</span><span>simpleext</span><span style="color: #94E2D5;">--</span><span style="color: #FAB387;">1.0</span><span style="color: #94E2D5;">.</span><span>sql</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">------</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE SCHEMA IF NOT EXISTS simpleext</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE OR REPLACE FUNCTION simpleext</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">hello_world</span><span>()</span></span>
+<span class="giallo-l"><span>RETURNS text</span></span>
+<span class="giallo-l"><span>LANGUAGE sql</span></span>
+<span class="giallo-l"><span>AS $$</span></span>
+<span class="giallo-l"><span>  SELECT</span><span style="color: #A6E3A1;"> &#39;hello from simpleext&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>$$</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE OR REPLACE FUNCTION simpleext</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add_ints</span><span>(a int</span><span style="color: #9399B2;">,</span><span> b int)</span></span>
+<span class="giallo-l"><span>RETURNS int</span></span>
+<span class="giallo-l"><span>LANGUAGE sql</span></span>
+<span class="giallo-l"><span>AS $$</span></span>
+<span class="giallo-l"><span>  SELECT a</span><span style="color: #94E2D5;"> +</span><span> b</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>$$</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>헬로월드 함수 하나와 덧셈 함수 하나를 적절히 정의했다.<br />
+그리고 이걸 방금의 확장 경로에 둔다.</p>
+<p>그 다음에는 제어파일이다. 이게 있어야 방금 정의한 sql 파일을 찾아서 설치할 수 있게 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>postgresql</span><span style="color: #94E2D5;">/</span><span>extension</span><span style="color: #94E2D5;">/</span><span>simpleext</span><span style="color: #94E2D5;">.</span><span>control</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">---</span><span> </span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>comment</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;Simple PostgreSQL extension example for this project&#39;</span></span>
+<span class="giallo-l"><span>default_version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;1.0&#39;</span></span>
+<span class="giallo-l"><span>relocatable</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span></code></pre>
+<p>마찬가지로 확장 경로에 둔다.</p>
+<p>그러면 이제 정의한 저 확장 구성을 즉시 사용할 수 있게 될 것이다.<br />
+create extension 쿼리를 날려보면</p>
+<p><img src="/images/img_5664070896ffdeab.png" alt="" />
+extension이 만들어질 것이고</p>
+<p>우리가 주문한대로 함수들도 만들어져서 사용 가능한 상태로 주어질 것이다.</p>
+<p><img src="/images/img_30f327eef8c68855.png" alt="" /></p>
+<p><img src="/images/img_c62e6589792375fe.png" alt="" /></p>
+<p>삭제도 잘 된다.</p>
+<p><img src="/images/img_0f3fdafcb04f7d0a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="ffi">FFI</h2>
+<p>하지만, 저런 SQL 수준의 단순 호출을 위해서 확장을 만들 일은 잘 없을 것이다.<br />
+PostgreSQL 확장의 가장 큰 강점은 자유도다.</p>
+<p>C/C++을 사용하면 기존 DB 구조에 구애받지 않고 뭐든 만들어서 엮을 수 있다. PostGIS와 pgvector 같은 명물들도 그런 식으로 만들어지 ㄴ것이다.</p>
+<p>postgres 헤더를 찾아서 적절히 C++ 코드를 작성한다.<br />
+매크로 떡칠이라 깔끔하진 않다.</p>
+<p><img src="/images/img_4597725306046f2a.png" alt="" />
+이건 컴파일해서 /usr/share/postgresql 같은 공유 라이브러리용 경로에 둔다.</p>
+<p>그리고 저걸 공유 라이브러리(.so)로 컴파일한 다음에, SQL에서 FFI로 호출하게 하면 된다.</p>
+<p><img src="/images/img_aaebd51130281fbb.png" alt="" /></p>
+<p>control 파일에도 공유 라이브러리 로딩을 위한 경로 지정이 추가된다.</p>
+<p><img src="/images/img_7dabaeb071c8a97f.png" alt="" /></p>
+<p>그러면 마찬가지로 extension을 설치해서 사용할 수 있게 될 것이다.</p>
+<p><img src="/images/img_3ec416ca08afbd94.png" alt="" /></p>
+<p>코드 구성 참조<br />
+<a rel="external" href="https://github.com/myyrakle/oddments/tree/master/SQL_Boilerplates/PostgreSQL/extensions/hello-with-ffi">https://github.com/myyrakle/oddments/tree/master/SQL_Boilerplates/PostgreSQL/extensions/hello-with-ffi</a></p>
+<br>
+<br>
+<br>
+<h2 id="rust">Rust</h2>
+<p>Rust에는 PostgreSQL 확장 개발만을 위한 라이브러리까 따로 또 있다.<br />
+매크로 범벅 C의 번잡스런 구성을 좀 더 간편하게 구현하고 배포할 수 있게끔, 예쁘게 말아준 것이다.<br />
+<a rel="external" href="https://github.com/pgcentralfoundation/pgrx">https://github.com/pgcentralfoundation/pgrx</a><br />
+꽤 괜찮은 것 같더라.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/IshaanAdarsh/Postgres-extension-tutorial/blob/main/SGML/intro_and_toc.md">https://github.com/IshaanAdarsh/Postgres-extension-tutorial/blob/main/SGML/intro_and_toc.md</a><br />
+<a rel="external" href="https://oneuptime.com/blog/post/2026-01-30-postgresql-extension-development/view">https://oneuptime.com/blog/post/2026-01-30-postgresql-extension-development/view</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224217663424/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] nvidia: time slicing을 통한 GPU 공유<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224211979849/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>동시성 구현 패턴<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

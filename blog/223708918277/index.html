@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[HTTP] 브라우저와 캐시 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223708918277/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[HTTP] 브라우저와 캐시">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223708918277/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-12-30T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223708918277/">[HTTP] 브라우저와 캐시</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-12-30T00:00:00+00:00"><time datetime="2024-12-30T00:00:00+00:00">2024.12.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="467 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223708918277" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>브라우저에서 데이터를 캐싱하는 매커니즘에 대해서 간략히 정리해보겠다.<br />
+캐시는 생각보다 성능과 비용 전반에 큰 영향을 미치는 요인 중 하나다. 특히 브라우저가 캐시를 들고서 재사용을 해야 우리 서버에 쌓이는 부담을 최소화할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="cache-control-hedeo">Cache Control 헤더</h2>
+<p>cache-control은 캐싱에 있어서 가장 중요한 특수 응답 헤더다.</p>
+<p><img src="/images/img_af9a5fff79fdf1e6.png" alt="" />
+값은 이런 식으로 들어갈 수 있다.<br />
+보통 max-age에 초 단위 값을 넣어서 만료시간을 직접 지정하는 형태로 자주 쓴다.</p>
+<p>그럼 브라우저는 딸려온 만료 정보를 토대로 캐시 전략을 세운다.</p>
+<p>Cloudflare의 R2 조회를 예시로 들어보겠다.<br />
+이런 식으로 cache-control이 날라오면,</p>
+<p><img src="/images/img_dae4e916fdd70b85.png" alt="" />
+14400초=4시간동안은 변하지 않을테니 그대로 캐시해놓고 써도 된다는 의미다.<br />
+브라우저는 저 만료시간이 지나면 캐시를 버리고 다시 서버에 API를 날려서 값을 가져온다.</p>
+<p>AWS-Cloudfront 옵션도 비슷하다.<br />
+아래의 경우에는 1년짜리 만료가 붙어있는 캐시 전략이다.</p>
+<p><img src="/images/img_707d5ef41d98a2bf.png" alt="" />
+public과 immutable이란 키워드도 더 붙어있는데, 전자는 누구나 캐시해도 상관없는 데이터임을 알려주는 것이다. 브라우저든, 중간 CDN이든 들고있어도 문제없다는 말이다.<br />
+immutable은 비표준 확장 옵션이다. 사실 크롬을 포함한 상당수의 메이저 브라우저가 미지원하는 거라서 큰 의미는 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="gandanhan-silseub">간단한 실습</h2>
+<p>이미지 파일 하나 읽어서 서빙하는 간단한 서버 올려보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;io/ioutil&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/image&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(w http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> r</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 이미지 파일 읽기</span></span>
+<span class="giallo-l"><span>		img</span><span style="color: #9399B2;">,</span><span> err </span><span style="color: #94E2D5;">:=</span><span> ioutil</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ReadFile</span><span>(</span><span style="color: #A6E3A1;">&quot;bonobono.jpg&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		if err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			http.Error(w</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Image not found&quot;</span><span style="color: #9399B2;">,</span><span> http.StatusNotFound)</span></span>
+<span class="giallo-l"><span>			return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// Content-Type 설정</span></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Header</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Set</span><span>(</span><span style="color: #A6E3A1;">&quot;Content-Type&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;image/jpeg&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 이미지 파일 반환</span></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>(img)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 서버 시작</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ListenAndServe</span><span>(</span><span style="color: #A6E3A1;">&quot;:8080&quot;</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_a53c19bec3210db3.png" alt="" />
+그러면 조회 자체는 잘 될 것이다.</p>
+<p>이런 형태의 미디어 데이터가 웹페이지의 html img 태그 등으로 간접참조되어있다면, 그때부터 캐시 재사용을 적극적으로 시도한다.<br />
+그냥 이미지를 브라우저 뷰어로 직접 조회한다면 캐시가 적용되지 않을 수 있다. 일단 크롬은 그랬다.</p>
+<p>그래서 테스트용 웹페이지를 또 파서 방금 서빙한 이미지를 참조하도록 했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">&lt;!</span><span>DOCTYPE html</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">html</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">head</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #89B4FA;">title</span><span style="color: #94E2D5;">&gt;</span><span>Local</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">title</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">head</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">body</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #89B4FA;">h1</span><span style="color: #94E2D5;">&gt;</span><span>Local</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">h1</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #89B4FA;">p</span><span style="color: #94E2D5;">&gt;</span><span>Local page</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">p</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #89B4FA;">img</span><span style="color: #F9E2AF;"> src</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;http://localhost:8080/image&quot;</span><span style="color: #F9E2AF;"> alt</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;Local&quot;</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">body</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">html</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p><img src="/images/img_d530962233d52a1e.png" alt="" />
+이렇게 뜨면 되긴 된 것인데,</p>
+<p><img src="/images/img_2a3216e9d6b64c41.png" alt="" />
+당연히 아무것도 한게 없으니 캐시가 되지는 않는다.</p>
+<p>이번에는 Cache Control 옵션을 줘서 명시적으로 max-age를 줘서 캐싱을 유도해보겠다.</p>
+<p><img src="/images/img_f89a7375db5902fe.png" alt="" />
+이러면 1시간 동안은 캐시를 들고있으라는 것이다.</p>
+<br>
+<p><img src="/images/img_7a871ebfa2368d0f.png" alt="" />
+다시 실행하고, 재시도해보면, 그때부터는 "memory cache"를 타는 것을 확인할 수 있다.<br />
+저게 API를 쏘지 않고 그냥 캐시를 사용했다는 의미다.</p>
+<br>
+<br>
+<br>
+<h2 id="cache-control-manryowa-304-eungdab">Cache-Control 만료와 304 응답</h2>
+<p>Status Code 304 (Not Modified)는 Cache Control과 더불어서 캐싱에 주요한 요소 중 하나다.</p>
+<p>캐시 데이터가 만료되었을 경우, 브라우저는 무작정 데이터를 갱신받지는 않는다.<br />
+우선 If-Modified-Since, If-None-Match 헤더를 보내서 캐시를 갱신할 필요가 있는지 서버에게 물어본다.</p>
+<p><img src="/images/img_d51de04ddbb59794.png" alt="" />
+그리고 만약 304 상태코드가 응답으로 떨어진다면, 브라우저는 기존 캐시를 그냥 쓴다. (강제는 아님)</p>
+<p>아니라면 새 데이터를 받아와서 쓸 것이다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="regeosi-hedeo-pragma">레거시 헤더: Pragma</h2>
+<p>HTTP 1.1에서 Cache Control이 나오기 전, HTTP 1.0까지만 쓰였던 어정쩡한 헤더다.<br />
+하위호환을 위해서 일부 시스템에서 기본으로 내려줄 뿐, 실질적으로 사용되는 일은 거의 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="jal-ansseum-expires">잘 안씀: Expires</h2>
+<p>Cache Control은 현재로부터 "N 시간 동안" 캐시가 유지되어야 함을 표현한다.<br />
+그래서 그때그때 상대 기준으로 캐시 만료일을 적용하기 간편한데, 이건 특정 날짜를 지정해서 만료일을 적용한다.</p>
+<p>쓰기 불편해서 사장된 옵션이다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://developer.mozilla.org/ko/docs/Web/HTTP/Headers/Cache-Control">https://developer.mozilla.org/ko/docs/Web/HTTP/Headers/Cache-Control</a><br />
+<a rel="external" href="https://toss.tech/article/smart-web-service-cache">https://toss.tech/article/smart-web-service-cache</a><br />
+<a rel="external" href="https://www.cloudflare.com/ko-kr/learning/cdn/glossary/what-is-cache-control/">https://www.cloudflare.com/ko-kr/learning/cdn/glossary/what-is-cache-control/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223711220968/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] clippy 커스텀하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223709917069/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Python] Anaconda<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

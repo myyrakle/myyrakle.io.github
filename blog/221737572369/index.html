@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Java] JNI로 외부 dll 참조하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221737572369/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Java] JNI로 외부 dll 참조하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221737572369/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2019-12-15T00:00:00+00:00">
+    <meta property="article:tag" content="Java">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221737572369/">[Java] JNI로 외부 dll 참조하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-12-15T00:00:00+00:00"><time datetime="2019-12-15T00:00:00+00:00">2019.12.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="290 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/java/">Java</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221737572369" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>JNI(Java Native Interface)를 사용하면 C/C++로 짜인 동적 라이브러리를 사용해서 성능을 최적화할 수 있다.</p>
+<p>테스트 환경은 윈도우다.<br />
+자바는 Java 12, 비주얼스튜디오 2019</p>
+<p>먼저 사용할 dll을 만들어보겠다.<br />
+좀 불편한 편이다...</p>
+<p>자바에 맞는 헤더파일을 만들어야 하는데, 그에 앞서 먼저 자바에서 프로토타입을 선언해줘야 한다.<br />
+native 키워드를 붙이고 구현을 하지 않는다.</p>
+<p><img src="/images/img_442fad820ca5ee01.png" alt="" /></p>
+<p>이제 헤더파일을 만들려면, 자바의 javah라는걸 사용해야 한다.<br />
+javah의 명령행 인자로는 dll을 사용할, 패키지와 클래스명을 넣어줘야 한다.</p>
+<p><img src="/images/img_18bbc9926f2cd45c.png" alt="" />
+난 여기서 사용할 거라서</p>
+<p><img src="/images/img_6c56e364671b7533.png" alt="" />
+이렇게 썼다.<br />
+유의할 점이 몇가지 있는데, 소스가 있는 루트 디렉터리에서 사용해야 한다는 것이 하나요.<br />
+javah가 jdk12부터는 없으므로 java11 이하의 javah를 써야한다는 것이 둘이요.</p>
+<p>저렇게 돌린다면 이렇게 헤더파일이 생성될 것이오</p>
+<p><img src="/images/img_57986f64fc3e6653.png" alt="" />
+안을 보면 프로토타입도 끔찍할정도로 조잡하게 잘 선언되어있을 것이고</p>
+<p><img src="/images/img_bf6526445e3a01b7.png" alt="" />
+저걸 그대로 잘 간직해놓자.</p>
+<p>일단 비주얼 스튜디오로 C/C++ 프로젝트를 생성하겠다.</p>
+<p><img src="/images/img_db63d9fde96d4e97.png" alt="" /></p>
+<p>이름은 boom</p>
+<p><img src="/images/img_da1acc1401af9a9d.png" alt="" /></p>
+<p>가장 먼저 사용하는 자바와 버전을 맞춰준다.<br />
+사용하는 자바가 Program Files에 있다면 64비트로,<br />
+Program Files (x86)에 있다면 32비트(86)으로</p>
+<p><img src="/images/img_3695ccb21532667b.png" alt="" /></p>
+<p>그다음엔 프로젝트 속성에 들어가서 .exe로 되어있을 것을 .dll로 바꾼다.</p>
+<p><img src="/images/img_89e7fa90a3bdbf73.png" alt="" />
+라이브러리로 빌드하기 위함이다.</p>
+<p>그리고 포함 디렉터리 추가 창을 열어서</p>
+<p><img src="/images/img_3ee2139e9d2ed9be.png" alt="" /></p>
+<p>현재 사용중인 자바 버전의 include, include/win32 폴더를 포함한다.</p>
+<p><img src="/images/img_64a00eb54c1e7c95.png" alt="" /></p>
+<p>그러고 나면... 함수를 구현할 소스파일을 만들고,<br />
+아까 javah로 만든 헤더파일을 가져온다.</p>
+<p><img src="/images/img_6a581e4e09bc15c1.png" alt="" /></p>
+<p>그리고 저 헤더에 있는 프로토타입들을 복붙해서 구현한다.</p>
+<p><img src="/images/img_d1827defdab2c5a6.png" alt="" /></p>
+<p>빌드한다.</p>
+<p><img src="/images/img_41a7f26412798c23.png" alt="" /></p>
+<p>빌드된 dll 파일을 찾는다.</p>
+<p><img src="/images/img_f72dcf67a4b2fe17.png" alt="" /></p>
+<p>그걸 Java 프로그램이 실행될 루트 디렉토리에 놓고</p>
+<p><img src="/images/img_7c16817b95470272.png" alt="" /></p>
+<p>loadLibrary로 저 dll 이름을 잘 지정해주고,</p>
+<p><img src="/images/img_d111fe2e468d4cef.png" alt="" />
+사용하면</p>
+<br>
+<p><img src="/images/img_14c40616220d9b1b.png" alt="" />
+잘 돌아간다.</p>
+<p>JNI를 쓰는 게 이렇게 장황하고 불편하다.<br />
+성능이 정말 크리티컬한 부분이 아니면 쓰지 말자.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://mommoo.tistory.com/71">https://mommoo.tistory.com/71</a><br />
+<a rel="external" href="https://github.com/s-u/rJava/issues/176">https://github.com/s-u/rJava/issues/176</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221745344581/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] MySQL 사용하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221737607357/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] FFI: 자바에 꼽기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

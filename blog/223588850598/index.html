@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>메모리 단편화와 GC, non-GC | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223588850598/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="메모리 단편화와 GC, non-GC">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223588850598/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-09-19T00:00:00+00:00">
+    <meta property="article:tag" content="최적화">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223588850598/">메모리 단편화와 GC, non-GC</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-09-19T00:00:00+00:00"><time datetime="2024-09-19T00:00:00+00:00">2024.09.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="909 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/coejeoghwa/">최적화</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223588850598" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>동적할당에 대해 어느 정도 안다고 가정한다.</p>
+<p>동적할당은 생각보다 고려할게 많다. 반복적으로 할당/해제되는 것에 대해서 메모리 단편화를 막기 위해 실제 메모리 배치를 compact하게 유지할 필요가 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="memori-danpyeonhwa-memory-fragmentation">메모리 단편화 (Memory Fragmentation)</h2>
+<p>메모리 파편화라고도 부른다.<br />
+메모리 단편화에는 크게 2가지가 존재한다. 보통 문제가 되는건 외부 메모리 단편화다.</p>
+<br>
+<p><strong>A. 내부 메모리 단편화(External Memory Fragmentation)</strong></p>
+<p>내부 메모리 단편화는 비교적 단순한 문제다. 그냥 정해진 블록 크기보다 작은 데이터가 할당되어서 공간이 낭비되는 현상을 가리킨다.</p>
+<p><img src="/images/img_79b39971cd790e6b.png" alt="" />
+<a rel="external" href="https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation">https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation</a></p>
+<br>
+<p><strong>B. 외부 메모리 단편화(External Memory Fragmentation)</strong></p>
+<p>외부 메모리 단편화는 그것과 다르게, 잦은 할당/해제로 인해서 중간중간 성긴 구멍이 생기고, 그것으로 인해서 실제 여유공간을 전체적으로 활용할 수 없는 문제를 말한다.</p>
+<p><img src="/images/img_ea748010afae47e4.jpg" alt="" />.png?type=w800)
+<a rel="external" href="https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation">https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation</a><br />
+보통은 이게 문제가 될 일이 더 잦다.</p>
+<br>
+<br>
+<br>
+<h2 id="osyi-memori-gwanri-gibeob">OS의 메모리 관리 기법</h2>
+<p>OS는 메모리를 효율적으로 관리하고 단편화를 줄이기 위해 몇가지 방법을 사용한다.<br />
+페이징과 세그먼트다.</p>
+<br>
+<p>**A. 페이징 (Paging) **</p>
+<p>실제 메모리와 별개로 페이지(Page)라고 하는 가상 메모리 블럭들을 정의해서, 그걸 통해서 실제 메모리에 접근하는 방법이다. 대부분의 OS가 이 방법론을 사용해서 메모리를 관리한다.</p>
+<p><img src="/images/img_bf3dcacea3cfab6a.jpg" alt="" />.png?type=w800)
+<a rel="external" href="https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation">https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation</a><br />
+이 방법을 사용하면 실제 메모리가 연속적이지 않아도 되기 때문에 외부 단편화는 해결된다.<br />
+대신 정해진 페이지 크기를 통째로 할당해서 쓰기 때문에 내부 단편화가 발생한다.</p>
+<p>일반적인 OS들의 페이지 기본 크기는 4K에서부터 시작한다.</p>
+<br>
+<p><strong>B. 세그먼트 (Segment)</strong></p>
+<p>페이지가 고정된 크기의 블럭을 할당해서 사용하는 방법이라면, 세그먼트는 가변적인 크기의 블럭을 할당해서 연결하는 방법이다.</p>
+<p><img src="/images/img_8fbf80cccf924e19.jpg" alt="" />.png?type=w800)
+<a rel="external" href="https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation">https://velog.io/@hanhs4544/%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation</a><br />
+세그먼트는 연속적으로 할당된다.<br />
+이건 미리 할당해놓고 연결하는 그런게 아니라서 외부 단편화가 발생한다.<br />
+하지만 필요한 크기만큼만 할당하기 때문에 내부 단편화는 없다.</p>
+<p>이 기법은 16비트에서 시작해서 32비트까지만 주로 사용되었고, 64비트 플랫폼부터는 버려지고 있는 추세다.</p>
+<p>32비트 플랫폼에서는 페이징과 세그먼트를 결합해서 사용했는데, 여기서 세그먼트는 메모리 할당을 위해서가 아니라, 메모리 보호를 위해서 사용되었다.<br />
+64비트 플랫폼에서도 부분적으로 보호를 위한 매커니즘에서 사용되고 있다.</p>
+<br>
+<p><strong>C. 근황</strong></p>
+<p>정리하자면 32비트 플랫폼에서는 페이징과 세그먼트를 결합해서 사용했지만, 64비트 플랫폼에서는 거의 페이징 기법만을 사용해서 메모리 할당을 관리하고 있다는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gcwa-non-gc-eoneo">GC와 non-GC 언어</h2>
+<p>Java, V8, C# 같은 대부분의 GC 언어들은 메모리 단편화에 대한 문제를 해결하기 위해 메모리 압축(Compaction)이란 것을 실행한다.<br />
+꽤 심각한 병목이 생길 수 있음에도 단편화 하나만을 막기 위해 꽤 부담스러운 작업을 주기적으로 행하는 것이다.</p>
+<p>근데 C/C++/Rust 같은 non-GC 언어들은 그런 것에 대한 고민이 별로 없는 것처럼 보인다. 왜일까?</p>
+<br>
+<br>
+<br>
+<h2 id="non-gc-eoneo-c-c-rust">non-GC 언어 (C/C++, RUST)</h2>
+<p>사실 C/C++ 같은 non-GC 언어들도 잠재적으로 메모리 단편화에 대한 문제가 존재할 수 있다.<br />
+하지만 그 대응 방법이 GC 언어와 다르고, 사용자가 직접 그 할당을 제어할 수 있다는 것이 다를 뿐이다.</p>
+<p>GC 언어만이 자동화된 Memory Compaction을 수행하는 이유는, GC 언어에서만 메모리 단편화가 발생해서가 아니다. 그냥 자동으로 메모리 할당을 전부 책임진다는 결정 아래에서 이어진 것일 뿐이다.</p>
+<p><strong>A. Memory Compaction?</strong><br />
+GC 언어들은 객체가 할당될때마다 그 소유권이 항상 GC 매니저에 맡겨진다. 언제든 객체가 어디있는지 알 수 있다는 것이다.<br />
+반면 C/C++ 같은 unmanaged 언어들은 그런 책임이나 추적이 보장되지 않는다. 애초에 불가능한 것이다.</p>
+<p><strong>B. 32비트와 64비트</strong><br />
+32비트 플랫폼에서는 실제로 장기 실행형 C/C++ 앱에 외부 단편화로 인한 문제가 꽤 발생할 수 있었다.<br />
+예를 들어, 32비트 플랫폼에서 2GB 짜리 메모리만 다뤄도 문제가 바로 불거질 수 있다.<br />
+4GB 정도가 상한이기 때문이다.</p>
+<p>하지만 64비트 플랫폼에서는 주소 공간이 너무 넓어서, 메모리 매핑을 거의 끝없이 만들 수 있기 때문에 외부 단편화로 인한 문제 발생률이 매우 드물어졌다.</p>
+<p>**C. Memory Pool **<br />
+non-GC 언어에서도 할당 최적화를 위해서 Memory Pool을 미리 고정으로 할당해놓고 돌려쓰기도 한다.<br />
+Memory Arena라고도 부른다.</p>
+<p><strong>D. Custom Allocator</strong><br />
+C/C++, Rust 같은 언어들은 OS에서 제공하는 시스템 allocator를 사용한다.<br />
+하지만 jemalloc 같은 좀더 발전된 형태의 커스텀 allocator를 사용해서 usecase에 맞게 할당 효율성을 올릴 수 있다. 이건 추후 별도 포스트로 정리해보겠다.</p>
+<br>
+<br>
+<p><a rel="external" href="https://stackoverflow.com/questions/76866904/if-memory-fragmentation-is-no-longer-an-issue-with-64-bit-virtual-address-space">https://stackoverflow.com/questions/76866904/if-memory-fragmentation-is-no-longer-an-issue-with-64-bit-virtual-address-space</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/64349058/memory-defragmentation-heap-compaction-commonplace-in-managed-languages-but-n">https://stackoverflow.com/questions/64349058/memory-defragmentation-heap-compaction-commonplace-in-managed-languages-but-n</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/44351461/difference-between-paging-and-segmentation">https://stackoverflow.com/questions/44351461/difference-between-paging-and-segmentation</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/23584055/what-is-segmentation-and-paging-in-computer-science">https://stackoverflow.com/questions/23584055/what-is-segmentation-and-paging-in-computer-science</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Memory_segmentation">https://en.wikipedia.org/wiki/Memory_segmentation</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/57222727/is-segmentation-completely-not-used-in-x64">https://stackoverflow.com/questions/57222727/is-segmentation-completely-not-used-in-x64</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/40658045/does-rusts-memory-management-result-in-fragmented-memory">https://stackoverflow.com/questions/40658045/does-rusts-memory-management-result-in-fragmented-memory</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223588464643/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Concurrency] volatile 키워드 (Java, C#)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223578430194/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 꼬리 호출 최적화 (Tail Call Optimization)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

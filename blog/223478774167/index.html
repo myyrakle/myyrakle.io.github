@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] 멀티프로세싱과 IPC | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223478774167/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] 멀티프로세싱과 IPC">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223478774167/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-06-14T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223478774167/">[Concurrency] 멀티프로세싱과 IPC</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-06-14T00:00:00+00:00"><time datetime="2024-06-14T00:00:00+00:00">2024.06.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="600 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223478774167" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>멀티프로세싱은 OS 프로세스를 단위로 동시성을 구현하는 방법이고, IPC(Inter Process Communication: 프로세스간 통신)은 멀티프로세싱에서 프로세스간 동기화를 달성하는 방법을 말한다.</p>
+<br>
+<br>
+<h2 id="wae-meoltipeuroseseuinga">왜 멀티프로세스인가?</h2>
+<p>사실 요즘에 들어서는 굳이 멀티스레드를 제쳐두고 멀티프로세스를 고집할 이유가 그리 많지는 않다.<br />
+대부분의 경우에는 멀티스레드가 리소스 효율성이 더 낫고, 성능 자체의 고점도 높기 때문이다.</p>
+<p>그럼에도 불구하고 멀티프로세싱을 활용하는 경우는 꽤 많다.</p>
+<p><strong>1. 그냥 멀티스레드가 지원되지 않는 환경</strong><br />
+Python 같은 녀석들은 언어 차원에서 멀티스레드를 지원하지 않는다. 그냥 본인들이 하기 싫어서 미루다가 요즘에 들어서야 넣는다고 하고 있는데, 아무튼 아직은 없다.<br />
+그래서 Python에서는 멀티프로세싱을 통해서만 진짜 병렬성을 구현할 수 있다.</p>
+<p><strong>2. 안전하고 단순한 모델을 유지하기 위해서</strong><br />
+멀티스레딩은 고점 자체는 높지만, 기본적으로 동기화에 드는 노력이나 부작용이 대단히 많다.<br />
+그래서 그냥 쉽고 편하게 구조를 만들기 위해서 멀티프로세싱을 선택하는 경우가 꽤 있다.<br />
+대표적인 사례가 Erlang이다.<br />
+PHP도 비슷하다고 할 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="os-peuroseseuwa-memori-gongyu">OS 프로세스와 메모리 공유</h2>
+<p>원래 OS에서 프로세스는 서로 독립된 객체고, 일반적으로는 메모리를 공유하지 못한다.<br />
+프로세스에 대한 리소스 제어는 OS가 담당하는 것이다.</p>
+<p>그래서 처음에는 좀 변칙적인 패턴들을 통해서 메모리 공유를 달성하곤 했는데, 방법이 꽤 많다.<br />
+개중에서도 가장 많이 사용되는 것은 Shared Memory 기법이다.<br />
+하나씩 살펴보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="mail-slot-windows">Mail Slot (Windows)</h2>
+<p>이건 Windows에서만 지원되는 IPC 기법이다.</p>
+<p>IPC라고 부르기도 뭐하긴 한데, 그냥 424바이트의 가상공간을 OS에 열어달라 요청하고, 거기다가 프로세스들이 데이터를 읽고 쓰면서 공유하는 것이다.</p>
+<p>크기도 제한적이고 연결 자체가 느슨한 방식이라 일반적인 응용프로그램에서는 잘 안 쓴다.</p>
+<br>
+<br>
+<br>
+<h2 id="named-pipe-unix">Named Pipe (Unix)</h2>
+<p>named pipe는 unix 계열 OS에서 지원하는 IPC 기법이다. Windows에도 비슷한게 있긴 한데, 동작이 좀 달라서 호환되지는 않는다.</p>
+<p><img src="/images/img_e059309210d13893.jpg" alt="" />
+<a rel="external" href="https://www.scaler.com/topics/linux-named-pipe/">https://www.scaler.com/topics/linux-named-pipe/</a><br />
+OS에게 pipe라고 하는 파일 단위를 만들어달라고 요청하고, 그걸 통해서 단방향 통신을 구성하는 방법이다.</p>
+<p>mkfifo 명령을 사용하면 파이프를 만들 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>mkfifo pipe1</span></span></code></pre>
+<p><img src="/images/img_bfe537cb8a068492.png" alt="" />
+사실은 그냥 파일이다.</p>
+<br>
+<p><img src="/images/img_e9ca6c32add89829.png" alt="" />
+이건 읽으려고 시도하면 아무것도 나오지 않는 채로 블락된다. 좀 특수한 파일이라서 읽으려는 행위를 하면 뭔가 들어올 때까지 대기하게끔 되어있다.</p>
+<p>이 상태에서 저기에 데이터를 밀어넣으면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;Hello, World!&quot;</span><span style="color: #94E2D5;"> &gt;</span><span> pipe1</span></span></code></pre>
+<p><img src="/images/img_afef40c8430a99c3.png" alt="" /></p>
+<p><img src="/images/img_f57a676f2bb6fa1f.png" alt="" />
+그때서야 데이터가 들어오고 읽기 작업이 종료된다.</p>
+<p>이런 원리를 이용해서 프로세스 간에 데이터를 전달하는 것이다.<br />
+아래는 pipe1에 데이터를 보내는 간단한 코드다.</p>
+<p><img src="/images/img_fea94e9c3b6540af.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>io</span><span style="color: #94E2D5;">:</span><span>:AsyncWriteExt</span><span style="color: #9399B2;">,</span><span> net</span><span style="color: #94E2D5;">:</span><span>:unix::pipe</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut sender</span><span style="color: #94E2D5;"> =</span><span> pipe::OpenOptions::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">open_sender</span><span>(</span><span style="color: #A6E3A1;">&quot;./pipe1&quot;</span><span>)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    sender</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">write_all</span><span>(</span><span style="color: #A6E3A1;">&quot;hello&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_bytes</span><span>())</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p><img src="/images/img_78cff7e09ca2b352.png" alt="" />
+그러면 받아질 것이다.</p>
+<p>받는 것도 어렵지 않다. 파이프에 대해서 read를 시도하면</p>
+<p><img src="/images/img_3720078a01016521.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>io</span><span style="color: #94E2D5;">:</span><span>:AsyncReadExt</span><span style="color: #9399B2;">,</span><span> net</span><span style="color: #94E2D5;">:</span><span>:unix::pipe</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut receiver</span><span style="color: #94E2D5;"> =</span><span> pipe::OpenOptions::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">open_receiver</span><span>(</span><span style="color: #A6E3A1;">&quot;./pipe1&quot;</span><span>)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut buf</span><span style="color: #94E2D5;"> =</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[</span><span style="color: #FAB387;">0</span><span>; </span><span style="color: #FAB387;">1024</span><span>];</span></span>
+<span class="giallo-l"><span>    let _</span><span style="color: #94E2D5;"> =</span><span> receiver</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read_buf</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>mut buf)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let text</span><span style="color: #94E2D5;"> =</span><span> String</span><span style="color: #94E2D5;">::</span><span style="color: #89B4FA;font-style: italic;">from_utf8_lossy</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>buf);</span></span>
+<span class="giallo-l"><span>    println!(</span><span style="color: #A6E3A1;">&quot;Received: {}&quot;</span><span style="color: #9399B2;">,</span><span> text);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span style="color: #9399B2;">(</span><span>(</span><span style="color: #9399B2;">)</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_39941208b75b4002.png" alt="" />
+데이터가 들어올 때까지 블럭되다가</p>
+<br>
+<p><img src="/images/img_dc8c0b7e4bfa6dbf.png" alt="" /></p>
+<p><img src="/images/img_6f9521b9c6f2a9ec.png" alt="" />
+들어오면 그때서야 읽고 종료된다.</p>
+<br>
+<br>
+<br>
+<h2 id="sokes-tongsineul-tonghan-gongyu-all-os">소켓 통신을 통한 공유 (All OS)</h2>
+<p>또 하나의 방법은 TCP나 UDP 같은 소켓을 열어서 로컬 내부통신을 통해 동기화를 수행하는 것이다.</p>
+<p>어차피 내부통신이면 네트워크를 타지 않고 파일시스템만 거치니까, 위의 pipe 같은 방식과 성능차이도 크게 나지는 않을 것이다.</p>
+<p>게다가 OS 호환성도 좋다. 대부분의 OS에서 다 잘 작동할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gongyu-memori-shared-memory">공유 메모리 (Shared Memory)</h2>
+<p>대부분의 OS에서 다 제공되기도 하고, 성능적으로도 가장 빨라서 IPC에서는 지배적으로 사용되는 동기화 매커니즘이다.<br />
+이게 뭐냐면, OS에 요청해서 실제로 여러 프로세스들이 공유할 수 있는 메모리를 할당해놓고 그걸 사용하는 것이다.</p>
+<p><img src="/images/img_5005218e5b5fe3b0.png" alt="" />
+<a rel="external" href="https://www.linkedin.com/pulse/interprocess-communicationipc-using-shared-memory-pratik-parvati">https://www.linkedin.com/pulse/interprocess-communicationipc-using-shared-memory-pratik-parvati</a><br />
+disk를 사용하지 않고 메모리에 바로 액세스하기 때문에 성능적으로 빠르다.</p>
+<p>대신 같은 공간에 쓰거나 하는 충돌에 대해서는 직접 제어를 해야 한다.</p>
+<p>대표적으로 Python에서 사용하는 멀티프로세싱에서는 shared memory를 통해서 동기화를 수행한다.<br />
+이런 느낌이다.</p>
+<p><img src="/images/img_b1623003c89287a3.png" alt="" />
+<a rel="external" href="https://blog.naver.com/sssang97/223418963078">https://blog.naver.com/sssang97/223418963078</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/6388031/multithreading-vs-multiprocessing">https://stackoverflow.com/questions/6388031/multithreading-vs-multiprocessing</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/7186876/whats-the-difference-between-named-pipe-and-mailslot-mailbox">https://stackoverflow.com/questions/7186876/whats-the-difference-between-named-pipe-and-mailslot-mailbox</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Named_pipe">https://en.wikipedia.org/wiki/Named_pipe</a><br />
+<a rel="external" href="https://www.linkedin.com/pulse/interprocess-communicationipc-using-shared-memory-pratik-parvati">https://www.linkedin.com/pulse/interprocess-communicationipc-using-shared-memory-pratik-parvati</a><br />
+<a rel="external" href="https://3tilley.github.io/posts/simple-ipc-ping-pong/">https://3tilley.github.io/posts/simple-ipc-ping-pong/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223480407378/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.79.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223477666494/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] 대시보드: kubernetes-dashboard<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

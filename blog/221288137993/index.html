@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 참조와 소유권 개념 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221288137993/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 참조와 소유권 개념">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221288137993/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2018-05-31T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221288137993/">[Rust] 참조와 소유권 개념</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2018-05-31T00:00:00+00:00"><time datetime="2018-05-31T00:00:00+00:00">2018.05.31</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="268 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221288137993" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>러스트도 C처럼 포인터가 존재한다.<br />
+그냥 레퍼런스라고 불리기도 하는데,</p>
+<p>let value = 10;<br />
+let ptr = &amp;value;</p>
+<p>이런식으로 참조가 가능하다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+하지만 저 경우에는 그냥 상수 참조라서 value를 통해서든, ptr를 통해서든 변경이 불가능하다.</p>
+<br>
+<p>변경 가능한 포인터를 사용하고자 한다면<br />
+&amp;mut로 참조를 해야한다.<br />
+이렇게
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+rust는 C와 달리 여러모로 엄격해서 상수를 변경가능한 포인터로 참조해서 값을 바꾸는 등의 행위가 문법적으로 금지되어 있다.<br />
+그러므로 다음과 같은 참조관계만 존재할 수 있다.<br />
+변수 &lt;- 상수참조 ㅇ<br />
+변수 &lt;- 변수참조 ㅇ<br />
+상수 &lt;- 상수참조 ㅇ<br />
+상수 &lt;- 변수참조 (불가능)</p>
+<br>
+<p>다시 이어서 보자.<br />
+위의 코드에서, ptr이 &amp;mut 참조를 받고 나서 value를 사용하려 들면
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+이렇게 에러가 발생한다.</p>
+<p>ptr이 value에게서 소유권을 빌려갔기(borrow) 때문이다.</p>
+<p>이런 경우에는 이렇게 스코프로 제약을 걸어주면 된다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+우리가 바라던 출력이 이루어진다.</p>
+<p>Rust에서 한 값에 대한 '변경 가능한 참조'(&amp;mut)는 동시에 하나만 존재할 수가 있다.</p>
+<p>변경 불가능한 참조는 상관없고.</p>
+<br>
+<p>이 소유권 시스템은 얼핏보면 불편하기만 한 구조 같지만 오히려 더 큰 편의성을 제공한다.<br />
+자원이 하나의 소유자에 의해서만 관리가 되는 대신, 그 소유자가 사라질 때(스코트를 벗어날 때) 자동으로 해제가 된다.</p>
+<p>기본으로 가비지컬렉터의 효과를 누릴 수가 있다는 말이다. 게다가 성능의 손해도 거의 없다.</p>
+<p>C++에서 unique_ptr과 move semantic을 이용해서 자원을 관리하는 것과 꽤 흡사하다 할 수도 있다.</p>
+<br>
+<p>그리고 기본적으로 Rust는 값들을 스택에 지역적으로 할당한다.<br />
+힙에 동적으로 할당하고자 한다면 Box를 쓰면 된다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+저기서 mut가 없으면 변경이 불가한 상수가 되고,<br />
+Box로 생성된 값은 포인터와 같다.</p>
+<p>위 코드에서는 동적 할당을 했지만 소유자인 ptr가 해당 스코프를 벗어나면 자동으로 소멸되므로, 명시적인 해제가 필요하지 않다.</p>
+<br>
+<p>이상</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221288125265/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 콘솔 입력법<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221286410982/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 변수와 상수. 타입.<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

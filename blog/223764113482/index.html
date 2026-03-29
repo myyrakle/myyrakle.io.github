@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana] Opentelemetry: metric 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223764113482/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana] Opentelemetry: metric 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223764113482/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-02-17T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223764113482/">[Grafana] Opentelemetry: metric 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-17T00:00:00+00:00"><time datetime="2025-02-17T00:00:00+00:00">2025.02.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="286 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223764113482" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>otel collector와 prometheus를 사용해서 기본 metric을 구성하는 방법을 간단히 정리해보겠다. 기반 환경은 docker compose다.</p>
+<p>Grafana dashboard에 대해서 약간 안다고 가정한다.</p>
+<br>
+<br>
+<br>
+<h2 id="otel-collector">otel collector</h2>
+<p>Trace에 사용하는 Grafana Tempo 같은 경우에는 자체적으로 opentelemetry API 규격을 충족하기 때문에 추가적인 인터페이스가 필요하지는 않다.</p>
+<p>반면 metric에는 보통 prometheus 같은 시계열 데이터베이스를 사용하는데, prometheus는 opentelemetry와 아무런 연관점도 없다.<br />
+그래서 요즘은 prometheus로 metric을 구성한다고 하면 otel-collector 같은 중간 인터페이스 구현을 둬서 규격화된 형태로 저장하도록 하는 경우가 많다.</p>
+<p>자, 그럼 시작해보자.<br />
+otel-collector를 띄우기 위한 config를 먼저 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>receivers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  otlp</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    protocols</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      http</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        endpoint</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.0</span><span>:</span><span style="color: #FAB387;">4318</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>exporters</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  prometheus</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    endpoint</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;0.0.0.0:8889&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>service</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  pipelines</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    metrics</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      receivers</span><span style="color: #9399B2;">:</span><span> [otlp]</span></span>
+<span class="giallo-l"><span>      exporters</span><span style="color: #9399B2;">:</span><span> [prometheus]</span></span>
+<span class="giallo-l"><span>    traces</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      receivers</span><span style="color: #9399B2;">:</span><span> [otlp]</span></span>
+<span class="giallo-l"><span>      exporters</span><span style="color: #9399B2;">:</span><span> [otlp]</span></span>
+<span class="giallo-l"><span>  telemetry</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    metrics</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      address</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.0</span><span>:</span><span style="color: #FAB387;">8888</span></span>
+<span class="giallo-l"><span>      level</span><span style="color: #9399B2;">:</span><span> detailed</span></span></code></pre>
+<p>receivers는 이 otel-collector가 어떤 리스너를 열지를 정의하는 부분이다.<br />
+otel-collector는 http와 grpc를 모두 지원하는데, http는 4318, grpc는 4317 포트를 쓰는게 기본이다.</p>
+<p>exporters는 데이터를 어디로 전송하게 해줄지를 정의하는 부분이다.<br />
+유의할 점은, 이게 바로 데이터를 직접 전송시키는게 아니란 것이다. 8889 포트로 export API를 열어놓고, 그걸 다른 metric 저장소가 스크랩하게 하는 구조를 갖고 있다.<br />
+나머지는 prometheus 절에서 이어서 다루겠다.</p>
+<p>아무튼 저 설정을 받아서 이미지를 말게끔 Dockerfile을 구성하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>FROM otel</span><span style="color: #94E2D5;">/</span><span>opentelemetry</span><span style="color: #94E2D5;">-</span><span>collector</span><span style="color: #94E2D5;">-</span><span>contrib</span><span style="color: #9399B2;">:</span><span>latest</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>COPY</span><span style="color: #94E2D5;"> ./</span><span>otel</span><span style="color: #94E2D5;">-</span><span>collector</span><span style="color: #94E2D5;">-</span><span>config</span><span style="color: #94E2D5;">.</span><span>yaml</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>otel</span><span style="color: #94E2D5;">-</span><span>collector</span><span style="color: #94E2D5;">-</span><span>config</span><span style="color: #94E2D5;">.</span><span>yaml</span></span></code></pre>
+<p>docker compose에는 이렇게 정의했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>services</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  otel</span><span style="color: #94E2D5;">-</span><span>collector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      context</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> .</span></span>
+<span class="giallo-l"><span>      dockerfile</span><span style="color: #9399B2;">:</span><span> Dockerfile</span><span style="color: #94E2D5;">.</span><span>otel</span></span>
+<span class="giallo-l"><span>    command</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;--config&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;/etc/otel-collector-config.yaml&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;4317:4317&quot;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;4318:4318&quot;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;8888:8888&quot;</span></span>
+<span class="giallo-l"><span>    depends_on</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> prometheus</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="prometheus-guseong">Prometheus 구성</h2>
+<p>이번엔 prometheus를 구성해보자.<br />
+prometheus가 주체적으로 데이터를 가져가야 하기 때문에, 여기서는 otel-collector를 읽는 부분이 정의된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>global</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  scrape_interval</span><span style="color: #9399B2;">:</span><span> 15s</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>scrape_configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> job_name</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;otel-collector&#39;</span></span>
+<span class="giallo-l"><span>    scrape_interval</span><span style="color: #9399B2;">:</span><span> 10s</span></span>
+<span class="giallo-l"><span>    static_configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> targets</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #A6E3A1;">&#39;otel-collector:8889&#39;</span><span>]</span></span></code></pre>
+<p>15초마다 한번씩 돌면서 아까 exporter로 연 엔드포인트를 찔러 데이터를 모으는 것이다.</p>
+<p>마찬가지로 Dockerfile 말고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>FROM prom</span><span style="color: #94E2D5;">/</span><span>prometheus</span><span style="color: #9399B2;">:</span><span>latest</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>COPY</span><span style="color: #94E2D5;"> ./</span><span>prometheus</span><span style="color: #94E2D5;">.</span><span>yaml</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>prometheus</span><span style="color: #94E2D5;">.</span><span>yaml</span></span></code></pre>
+<p>docker compose로 띄우도록 했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>services</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  prometheus</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      context</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> .</span></span>
+<span class="giallo-l"><span>      dockerfile</span><span style="color: #9399B2;">:</span><span> Dockerfile</span><span style="color: #94E2D5;">.</span><span>prometheus</span></span>
+<span class="giallo-l"><span>    command</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - --</span><span>config</span><span style="color: #94E2D5;">.</span><span>file</span><span style="color: #94E2D5;">=/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>prometheus</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - --</span><span>web</span><span style="color: #94E2D5;">.</span><span>enable</span><span style="color: #94E2D5;">-</span><span>remote</span><span style="color: #94E2D5;">-</span><span>write</span><span style="color: #94E2D5;">-</span><span>receiver</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - --</span><span>enable</span><span style="color: #94E2D5;">-</span><span>feature</span><span style="color: #94E2D5;">=</span><span>exemplar</span><span style="color: #94E2D5;">-</span><span>storage</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - --</span><span>enable</span><span style="color: #94E2D5;">-</span><span>feature</span><span style="color: #94E2D5;">=</span><span>native</span><span style="color: #94E2D5;">-</span><span>histograms</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> prometheus_data</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span>prometheus</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;9090:9090&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  prometheus_data</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span></code></pre>
+<p>그리고 그라파나도 포함해서 함께 띄워보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>  grafana</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    environment</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> GF_PATHS_PROVISIONING</span><span style="color: #94E2D5;">=/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #94E2D5;">/</span><span>provisioning</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> GF_AUTH_ANONYMOUS_ENABLED</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> GF_AUTH_ANONYMOUS_ORG_ROLE</span><span style="color: #94E2D5;">=</span><span>Admin</span></span>
+<span class="giallo-l"><span>    entrypoint</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> sh</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - -</span><span>euc</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - |</span></span>
+<span class="giallo-l"><span>        mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #94E2D5;">/</span><span>provisioning</span><span style="color: #94E2D5;">/</span><span>datasources</span></span>
+<span class="giallo-l"><span>        cat</span><span style="color: #94E2D5;"> &lt;&lt;</span><span>EOF</span><span style="color: #94E2D5;"> &gt; /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #94E2D5;">/</span><span>provisioning</span><span style="color: #94E2D5;">/</span><span>datasources</span><span style="color: #94E2D5;">/</span><span>ds</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"><span>        apiVersion</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>        datasources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> Prometheus</span></span>
+<span class="giallo-l"><span>          type</span><span style="color: #9399B2;">:</span><span> prometheus</span></span>
+<span class="giallo-l"><span>          uid</span><span style="color: #9399B2;">:</span><span> prometheus</span></span>
+<span class="giallo-l"><span>          access</span><span style="color: #9399B2;">:</span><span> proxy</span></span>
+<span class="giallo-l"><span>          orgId</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>          url</span><span style="color: #9399B2;">:</span><span> http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//prometheus:9090</span></span>
+<span class="giallo-l"><span>          basicAuth</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>          isDefault</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>          version</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>          editable</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>          jsonData</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>            httpMethod</span><span style="color: #9399B2;">:</span><span> GET</span></span>
+<span class="giallo-l"><span>        EOF</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        /</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> grafana</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #9399B2;">:</span><span>latest</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;13000:3000&quot;</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> grafana_data</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">var</span><span>/lib/grafana</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> grafana_etc</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  grafana_data</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span>
+<span class="giallo-l"><span>  grafana_etc</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="aepeulrikeisyeoneseo-agent-guseong-go">애플리케이션에서 agent 구성 (go)</h2>
+<p>근데 저것만 덜렁 있으면 뭐하겠나? 간단한 서버 하나 띄워서 메트릭을 쌓게 해보자.</p>
+<p>기본 metric은 서버와 연관이 없기 때문에 프레임워크에 종속적이지 않다.<br />
+다음과 같이 초기화 코드만 심어서 진입점에서 실행하게 두면 끝이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> initMetric</span><span>()</span><span style="color: #94E2D5;"> *</span><span>metric</span><span style="color: #94E2D5;">.</span><span>MeterProvider</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	ctx</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Background</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	metricExporter</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> otlpmetrichttp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">New</span><span>(ctx</span><span style="color: #9399B2;">,</span><span> otlpmetrichttp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithEndpointURL</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;http://localhost:4318&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	)</span><span style="color: #9399B2;">,</span><span> otlpmetrichttp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithInsecure</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		panic</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	meterProvider</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> metric</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewMeterProvider</span><span>(</span></span>
+<span class="giallo-l"><span>		metric</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithReader</span><span>(metric</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewPeriodicReader</span><span>(metricExporter</span><span style="color: #9399B2;">,</span><span> metric</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithInterval</span><span>(</span><span style="color: #FAB387;">3</span><span style="color: #94E2D5;">*</span><span>time</span><span style="color: #94E2D5;">.</span><span>Second)))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		metric</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithResource</span><span>(resource</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewWithAttributes</span><span>(</span></span>
+<span class="giallo-l"><span>			semconv</span><span style="color: #94E2D5;">.</span><span>SchemaURL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			semconv</span><span style="color: #94E2D5;">.</span><span>ServiceNameKey</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(</span><span style="color: #A6E3A1;">&quot;go-server&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			semconv</span><span style="color: #94E2D5;">.</span><span>ServiceNamespaceKey</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(</span><span style="color: #A6E3A1;">&quot;dev&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		panic</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span>	otel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">SetMeterProvider</span><span>(meterProvider)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	err</span><span style="color: #94E2D5;"> =</span><span> runtime</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Start</span><span>(runtime</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithMinimumReadMemStatsInterval</span><span>(time</span><span style="color: #94E2D5;">.</span><span>Second))</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		panic</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> meterProvider</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>코드를 실행하고 기다려보면 뭐가 쌓일 것이다.</p>
+<p>시계열 판날 가져다가 조회해보면</p>
+<p><img src="/images/img_72b07d5a73b35cd2.png" alt="" /></p>
+<p>go 런타임 관련된 자질구레한 옵션들이나, up 같은 생존신호들이 쌓여있는 것을 볼 수 있다.</p>
+<p><img src="/images/img_70152746d861c738.png" alt="" /></p>
+<p>추가적인 구성이 없다면 기본 메트릭은 이런 단순한 정보들만 내려준다.</p>
+<p>trace, API에 기반한 수치 통계들이 필요하다면 spanmetric 같은 추가 구성이 필요하다.<br />
+그건 다음 포스트에서 바로 다루겠다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223763665079/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>현대 컴파일러들은 변수를 어떻게 레지스터로 선택하나요?.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223761188760/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Grafana Tempo] Tempo를 통한 Trace 관리<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

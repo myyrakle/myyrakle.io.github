@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C++] Sanitizer (with GCC) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224139860264/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C++] Sanitizer (with GCC)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224139860264/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-01-09T00:00:00+00:00">
+    <meta property="article:tag" content="C++">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224139860264/">[C++] Sanitizer (with GCC)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-01-09T00:00:00+00:00"><time datetime="2026-01-09T00:00:00+00:00">2026.01.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="492 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C++</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224139860264" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>C++은 사방이 지뢰밭으로 가득차있는 시한폭탄 같은 언어고, 그 자체로는 안정성이 필요한 프로덕션 운영에 있어 여러모로 불리한 점이 많다.</p>
+<p>근데 문제만 있다면 그걸 계속 썼겠는가? 그래도 이런 문제들을 좀 보완해줄 보조 수단들이 제법 있으니까 쓰는 것이다. 그 오류 감지 도구들을 Sanitizer라고 부른다.</p>
+<p>Sanitizer의 종류는 여러가지가 있고, 컴파일러 지원부터 서드파티 지원까지 이것저것 많은 편이다.<br />
+그 중에서도 GCC/Clang에 포함된 구현체들이 가장 널리 사용되는 Sanitizer다.</p>
+<p>여기서는 GCC에서 지원되는 Sanitizer의 종류와, 그 간략한 사용방법 정도를 정리해보겠다.<br />
+GCC의 Sanitizer는 런타임에 문제 추적을 위한 코드를 심고, 코드 실행 중에 문제를 감지하는 방식을 사용한다.</p>
+<p>메모리 및 실행성능을 포함한 성능 저하가 꽤 있어서 최종 프로덕션 빌드에는 사용이 권장되지 않는다.</p>
+<p>자주 사용되는 주요 Sanitizer의 목록은 다음과 같다.</p>
+<ul>
+<li>
+<p>AddressSanitizer</p>
+</li>
+<li>
+<p>UndefinedBehaviorSanitizer</p>
+</li>
+<li>
+<p>ThreadSanitizer</p>
+</li>
+</ul>
+<br>
+<br>
+<p>하나씩 간단히 다뤄보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="1-address-sanitizer">1. Address Sanitizer</h2>
+<p>Address Sanitizer는 메모리 할당, 주소 관리에 대한 문제를 추적하는 Sanitizer다. 가장 중요도가 높고 사용 빈도도 높은 축에 속한다.</p>
+<p>이건 다음과 같은 기능들을 제공한다.</p>
+<ol>
+<li>
+<p>메모리 누수 감지</p>
+</li>
+<li>
+<p>할당해제된 메모리 사용 감지 (use after free)</p>
+</li>
+<li>
+<p>중복 할당해제</p>
+</li>
+<li>
+<p>해제된 스택 변수에 대한 포인터 return 감지 (use after return)</p>
+</li>
+<li>
+<p>위험한 배열 overflow 접근들</p>
+</li>
+</ol>
+<br>
+<br>
+<p>예를 들어, 다음과 같이 메모리 누수 문제가 있는 코드가 있다고 해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">void</span><span style="color: #89B4FA;font-style: italic;"> memory_leak</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int</span><span style="color: #94E2D5;"> *</span><span>ptr</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> int[</span><span style="color: #FAB387;">100</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 버그: delete를 하지 않음</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    for</span><span> (int i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        memory_leak</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이건 당연히 누수가 나든 말든 실행이 잘 된다. 하지만 실제 시스템에서는 용납할 수 없는 치명적인 버그에 속한다.<br />
+C++은 당연히 언어 수준에서 이런 문제에 대한 방어책을 제공하지 않으므로, 우리가 알아서 잘 잡아야 한다.</p>
+<p>저기에 sanitizer를 넣어서 실행해보겠다. 다음과 같이 -fsanitize 플래그를 집어넣고, 실행까지 해보면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>g</span><span style="color: #94E2D5;">++ -</span><span>fsanitize</span><span style="color: #94E2D5;">=</span><span>address</span><span style="color: #94E2D5;"> -</span><span>g main</span><span style="color: #94E2D5;">.</span><span>cpp</span><span style="color: #94E2D5;"> -</span><span>o main</span><span style="color: #94E2D5;">.</span><span>exe</span><span style="color: #94E2D5;"> &amp;&amp; ./</span><span>main</span><span style="color: #94E2D5;">.</span><span>exe</span></span></code></pre>
+<p><img src="/images/img_a0e0750eac3f2c4a.png" alt="" />
+그러면 누수가 감지되었을때 즉시 문제 보고를 해줄 것이다. 누수를 잡았다.</p>
+<p>해제된 메모리에 대한 접근(use after free)에 대한 문제도 잡고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int</span><span style="color: #94E2D5;"> *</span><span>ptr</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> int</span><span>(</span><span style="color: #FAB387;">100</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    delete</span><span> ptr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 버그: 이미 해제된 메모리에 접근</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    *</span><span>ptr</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;">                     // ❌</span></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:cout</span><span style="color: #94E2D5;"> &lt;&lt; *</span><span>ptr</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:endl</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // ❌</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_b183d3a585aa7393.png" alt="" /></p>
+<p>free를 2번 때리는 것도 잡는다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int</span><span style="color: #94E2D5;"> *</span><span>ptr</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> int</span><span>(</span><span style="color: #FAB387;">42</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    delete</span><span> ptr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 버그: 같은 포인터를 두 번 해제</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    delete</span><span> ptr</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // ❌</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_5aeb8fdd36380968.png" alt="" /></p>
+<p>할당해제되는 스택 변수를 포인터로 반환하는 것도 잡는다. lifetime 문제다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #94E2D5;"> *</span><span style="color: #89B4FA;font-style: italic;">dangerous_function</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int local_var</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 42</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 버그: 지역 변수의 주소 반환</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #94E2D5;"> &amp;</span><span>local_var</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 함수 종료 후 무효화됨</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int</span><span style="color: #94E2D5;"> *</span><span>ptr</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> dangerous_function</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:cout</span><span style="color: #94E2D5;"> &lt;&lt; *</span><span>ptr</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:endl</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // ❌</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_fc3c67bdad8230e2.png" alt="" />
+잘 잡아줬다.</p>
+<p>다음은 배열에 대한 overflow 접근 예제다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int</span><span style="color: #94E2D5;"> *</span><span>arr</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> int[</span><span style="color: #FAB387;">10</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 버그: 배열 범위를 벗어난 접근</span></span>
+<span class="giallo-l"><span>    arr[</span><span style="color: #FAB387;">10</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 42</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // ❌ index 0-9만 유효</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:cout</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> arr[</span><span style="color: #FAB387;">10</span><span>]</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:endl</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    delete</span><span>[] arr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_0844ae94817ac4e1.png" alt="" />
+마찬가지로 접근 지점을 오류로 잘 잡아준다.</p>
+<br>
+<br>
+<br>
+<h2 id="2-undefinedbehaviorsanitizer">2. UndefinedBehaviorSanitizer</h2>
+<p>말 그대로 UB를 잡아주는 Sanitizer다.<br />
+C/C++은 언어 명세에서 정의되지 않은, 소리 없는 버그들을 유발하는 부분들이 많다. 컴파일러나 플랫폼마다 동작이 다른 그런 문제들 말이다.</p>
+<p>여기서 잡아주는 UB에는 다음과 같은 것들이 있다. 굉장히 많아서 일부만 적었다.</p>
+<ol>
+<li>
+<p>정수 오버플로</p>
+</li>
+<li>
+<p>0으로 나누기</p>
+</li>
+<li>
+<p>널포인터 참조</p>
+</li>
+<li>
+<p>음수 Shift 연산</p>
+</li>
+<li>
+<p>잘못된 타입 캐스팅 등등...</p>
+</li>
+</ol>
+<br>
+<br>
+<p>사용법은 간단하다. 컴파일할 때 -fsanitize=undefined 옵션을 넣고 실행하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>g</span><span style="color: #94E2D5;">++ -</span><span>fsanitize</span><span style="color: #94E2D5;">=</span><span style="color: #CBA6F7;">undefined</span><span style="color: #94E2D5;"> -</span><span>g main</span><span style="color: #94E2D5;">.</span><span>cpp</span><span style="color: #94E2D5;"> -</span><span>o main</span><span style="color: #94E2D5;">.</span><span>exe</span><span style="color: #94E2D5;"> &amp;&amp; ./</span><span>main</span><span style="color: #94E2D5;">.</span><span>exe</span></span></code></pre>
+<p>그러면 다음과 같이 위험한 코드가 있다면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>struct Data</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int value</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    void</span><span style="color: #89B4FA;font-style: italic;"> print</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        std</span><span style="color: #9399B2;">:</span><span>:cout</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> value</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:endl</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    Data</span><span style="color: #94E2D5;"> *</span><span>ptr</span><span style="color: #94E2D5;"> =</span><span> nullptr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 버그: null 포인터 역참조</span></span>
+<span class="giallo-l"><span>    ptr</span><span style="color: #94E2D5;">-&gt;</span><span style="color: #89B4FA;font-style: italic;">print</span><span>()</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // ❌</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_047be92ea8a30972.png" alt="" /></p>
+<p>마찬가지로 0으로 나누는 것도 UB에 속한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> divide</span><span>(int a</span><span style="color: #9399B2;">,</span><span> int b)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 버그: 0으로 나누기</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> a</span><span style="color: #94E2D5;"> /</span><span> b</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int result</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> divide</span><span>(</span><span style="color: #FAB387;">10</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:cout</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> result</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:endl</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_5b6aebdbe531c962.png" alt="" /></p>
+<p><img src="/images/img_49293d7ff99588e8.png" alt="" />
+이렇게 바로 잡아준다.</p>
+<br>
+<br>
+<br>
+<h2 id="3-threadsanitizer">3. ThreadSanitizer</h2>
+<p>ThreadSanitizer는 멀티스레드 환경에서 발생할 수 있는 동시성 버그들을 감지하는 도구다.<br />
+Data race, Deadlock 등의 주요 동시성 버그들이 감지되면 오류를 던진다.</p>
+<p>예를 들어 다음 코드는 data race가 발생해서 의도한 결과가 나오지는 않지만, 오류가 뜨지는 않는 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>iostream</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span>#include</span><span style="color: #94E2D5;"> &lt;</span><span>thread</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int shared_counter</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 공유 변수</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">void</span><span style="color: #89B4FA;font-style: italic;"> increment</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    for</span><span> (int i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 100000</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 버그: 동기화 없이 공유 변수 접근</span></span>
+<span class="giallo-l"><span>        shared_counter</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // ❌ data race</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>int</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:thread</span><span style="color: #89B4FA;font-style: italic;"> t1</span><span>(increment)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:thread</span><span style="color: #89B4FA;font-style: italic;"> t2</span><span>(increment)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    t1</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    t2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:cout</span><span style="color: #94E2D5;"> &lt;&lt;</span><span style="color: #A6E3A1;"> &quot;Counter: &quot;</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> shared_counter</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:endl</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    std</span><span style="color: #9399B2;">:</span><span>:cout</span><span style="color: #94E2D5;"> &lt;&lt;</span><span style="color: #A6E3A1;"> &quot;Expected: 200000&quot;</span><span style="color: #94E2D5;"> &lt;&lt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:endl</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>thread 플래그를 넣어서 실행하면 thread sanitizer가 들어가서 이런 동시성 버그 패턴을 잡아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>g</span><span style="color: #94E2D5;">++ -</span><span>fsanitize</span><span style="color: #94E2D5;">=</span><span>thread</span><span style="color: #94E2D5;"> -</span><span>g main</span><span style="color: #94E2D5;">.</span><span>cpp</span><span style="color: #94E2D5;"> -</span><span>o main</span><span style="color: #94E2D5;">.</span><span>exe</span><span style="color: #94E2D5;"> &amp;&amp; ./</span><span>main</span><span style="color: #94E2D5;">.</span><span>exe</span></span></code></pre>
+<p><img src="/images/img_a1aa95efb6466839.png" alt="" /></p>
+<p>데드락도 간단한 경우에는 잡아주기도 하는데, 완전하진 않다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/google/sanitizers/wiki">https://github.com/google/sanitizers/wiki</a><br />
+<a rel="external" href="https://github.com/google/sanitizers/wiki/AddressSanitizer">https://github.com/google/sanitizers/wiki/AddressSanitizer</a><br />
+<a rel="external" href="https://github.com/google/sanitizers/wiki/ThreadSanitizerFlags">https://github.com/google/sanitizers/wiki/ThreadSanitizerFlags</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224142181346/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>벡터 검색과 SIMD<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224140508874/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] Error 설계에 대한 글.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

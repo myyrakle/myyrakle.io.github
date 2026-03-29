@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 인덱스 최적화: 복잡한 필터 조건 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223981963685/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 인덱스 최적화: 복잡한 필터 조건">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223981963685/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-08-25T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223981963685/">[PostgreSQL] 인덱스 최적화: 복잡한 필터 조건</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-25T00:00:00+00:00"><time datetime="2025-08-25T00:00:00+00:00">2025.08.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="425 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223981963685" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PostgreSQL을 포함한 RDB들은 전반적으로 유능하지만, 태생적인 한계로 잘 하지 못하는 부분도 있다.</p>
+<p>그 중 대표적인 종류 중 하나가 매우 복잡한 형태의 필터를 최적화하기가 좀 어렵다는 것이다.</p>
+<p>필터 표현식이 복잡하지만, 복합 필터 조건이 어느 정도 정해져있다면 문제가 되진 않는다.<br />
+그런 경우에는 커버링 인덱스를 통해 잘 최적화할 수 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223828946151">https://blog.naver.com/sssang97/223828946151</a></p>
+<p>문제는 이런 경우다.</p>
+<p><img src="/images/img_bea0b8f69190b876.png" alt="" /></p>
+<p><img src="/images/img_f52b0f797449aae8.jpg" alt="" />
+필터 조건 조합의 경우의 수가 매우 많은 경우. 그리고 각 필터의 카디널리티가 낮은 경우.<br />
+그러면서 데이터 규모가 N백만개나 N천만개를 넘어서는 경우. 이런 경우에는 이상적인 최적화가 매우 어렵다.</p>
+<p>커버링 인덱스를 모든 조합마다 거는 것이 사실상 불가능하기 때문이다.<br />
+커버링 인덱스는 컬럼의 순서와 실제 데이터 분포도가 매우 중요한데, 저런 다이나믹한 필터 조합을 대응하려면 모든 분포를 고려해서 모든 가능한 스캔 조합을 다 인덱스로 구성해야 한다.<br />
+다 파악해서 만드는 것 자체도 거의 불가능에 가깝고, 만든다고 치더라도 인덱스는 공짜가 아니다. 그만큼 사용량을 갉아먹는 것이다.</p>
+<p>그래도 데이터 분포에 따라서, 단일 컬럼 인덱스를 개별적으로 걸어도 인덱스를 좀 활용하긴 한다.<br />
+DB가 인덱스 활용을 어떻게 하는지 실험을 기반으로 훓어보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteo-seting">데이터 세팅</h2>
+<p>먼저 테이블 하나 만들고, 1000만개 정도만 데이터를 깔았다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span> (</span></span>
+<span class="giallo-l"><span>    id BIGSERIAL PRIMARY KEY</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    a BIGINT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    b BIGINT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    c BIGINT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    d BIGINT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    e BIGINT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    f BIGINT NOT NULL</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>INSERT INTO</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span> (a</span><span style="color: #9399B2;">,</span><span> b</span><span style="color: #9399B2;">,</span><span> c</span><span style="color: #9399B2;">,</span><span> d</span><span style="color: #9399B2;">,</span><span> e</span><span style="color: #9399B2;">,</span><span> f)</span></span>
+<span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>    (</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1000000</span><span>)::INTEGER</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> a</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>    (</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1000000</span><span>)::INTEGER</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> b</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    (</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 10000</span><span>)::INTEGER</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> c</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    (</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 10000</span><span>)::INTEGER</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> d</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    (</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 100</span><span>)::INTEGER</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> e</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    (</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 100</span><span>)::INTEGER</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> f</span></span>
+<span class="giallo-l"><span>FROM </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    generate_series</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 10000000</span><span>) AS t</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_866185406e209183.png" alt="" />
+일부러 값의 분포로를 3가지로 분리했다.</p>
+<p>정수만 넣어놨다보니 테이블 크기가 기본적으로 작아서, 성능이나 인덱스를 타는 정도는 실제 환경과 많이 다를 수 있다. 보통은 문자열도 잔뜩 들어가고 비대해지기 때문에 이것보다는 훨씬 무거울 것이다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create index idx_a on</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span>(a)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>create index idx_b on</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span>(b)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>create index idx_c on</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span>(c)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>create index idx_d on</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span>(d)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>create index idx_e on</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span>(e)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>create index idx_f on</span><span style="color: #89B4FA;font-style: italic;"> benchmark</span><span>(f)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_8983dfc60662e2ec.png" alt="" />
+그리고 각 개별 컬럼마다 인덱스를 만들어줬다.</p>
+<br>
+<br>
+<br>
+<h2 id="silheom">실험</h2>
+<p>자, 그럼 어떻게 동작하는지 보자.</p>
+<p><img src="/images/img_1c0f61e00044740f.png" alt="" /></p>
+<p><img src="/images/img_f651353893f0d3a0.png" alt="" />
+당연히 개별 컬럼에 대한 단순 조건식은 인덱스를 바로 잘 탄다.</p>
+<p>그럼 2개 컬럼 조건을 동시에 걸면 어떻게 할까?</p>
+<p><img src="/images/img_fe0096f9a2150218.png" alt="" />
+그래도 인덱스를 타긴 탄다.<br />
+각 조건마다 인덱스를 태워서 가져온 뒤에, 그걸 잘 병합해서 처리를 하는 것이다.</p>
+<p>코스트가 약간 늘어나긴 하지만, 그래도 여전히 인덱스를 잘 활용한다.<br />
+아직은 이상적인 인덱스 사용 형태라고 할 수 있다.</p>
+<p>그럼 이번에는 값의 중복성이 높은 필드에 대해 넓은 범위의 복합 필터를 걸어보겠다.</p>
+<p><img src="/images/img_cc11950bc9d78542.png" alt="" />
+안타깝게도, 인덱스를 아주 잘 타진 않았다.<br />
+f &gt; 59 조건으로 가져오게 되는 데이터의 크기가 너무 크다고 판단해서, e &lt; 30 인덱스로 전부 가져온 다음에 후처리로 필터링을 하는 식으로 동작했다.</p>
+<p>일반적인 조회에서 700ms면 매우 느린 것이다.<br />
+내 하드웨어 스펙이 괜찮고 사용량도 당장 없어서 저렇게 나온거지, 실제 사용사례였다면 Disk I/O나 CPU 병목으로 처리량에 문제가 생길 확률이 높다.</p>
+<p>게다가 실제 사용사례에서는 필터가 이것보다도 더 복잡하게 걸리게 될 확률이 높다.<br />
+여기에다 정렬이나 페이지네이션, Join 등까지 들어가면 아사리판이 나는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="geuraeseo">그래서</h2>
+<p>사실 이 문제에 대한 명쾌한 해결책은 없다.<br />
+파티션을 잡고 기능을 제약해서 파티션 단위 풀스캔을 때리게 하든지, 그냥 조건을 단순화한다든지...</p>
+<p>요즘 사용하는 일반적인 해결 방안은, Elasticsearch 같은 Column Base DB를 사용하는 것이다.<br />
+이런 DB들은 다른 것들을 희생한 대신 복잡한 필터 조건 등에 최적화된 성능을 보여준다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223983368142/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Qdrant] group query<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223981993212/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 인덱스와 최적화 전략<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

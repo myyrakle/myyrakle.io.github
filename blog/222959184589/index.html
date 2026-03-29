@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Nodejs에서 Go 코드 연동해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222959184589/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Nodejs에서 Go 코드 연동해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222959184589/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2022-12-18T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222959184589/">[Go] Nodejs에서 Go 코드 연동해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-12-18T00:00:00+00:00"><time datetime="2022-12-18T00:00:00+00:00">2022.12.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="372 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222959184589" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>프로그램은 되도록 한가지의 언어로 작성하는게 좋고 편하긴 하지만, 경우에 따라서는 각 언어의 기능과 에코시스템을 최대한 활용하는 편이 효율이 훨씬 좋을 수가 있다.</p>
+<p>근데 그렇다고 또 무작정 MSA 형태로 서비스를 올려서 쓰는건 좋은 선택이라고 말하긴 어렵다.<br />
+막 그렇게 복잡한 케이스가 아니라면 FFI를 이용해서 연동하는 것도 하나의 방법일 수 있다.</p>
+<p>일단, Go는 C FFI를 지원하기 때문에 C언어 형태로 코드를 내보내는 것이 가능하다.<br />
+그리고 Nodejs는 C++ 코드를 애드온하는 기능을 제공한다.</p>
+<p>이 두 기능을 사용해서 붙이면 사용이 가능할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="go-peurojegteu-guseong">Go 프로젝트 구성</h2>
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222959089158">https://blog.naver.com/sssang97/222959089158</a></p>
+<p>우선 디렉터리 파고, mod를 초기화해준다.</p>
+<p><img src="/images/img_2662ac688f0a431d.png" alt="" /></p>
+<p>그다음에 메인 패키지에 소스코드를 때려박는다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;C&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;strconv&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//export Add</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> Add</span><span>(a int</span><span style="color: #9399B2;">,</span><span> b int) int</span><span style="color: #9399B2;"> {</span><span style="color: #CBA6F7;"> return</span><span> a</span><span style="color: #94E2D5;"> +</span><span> b</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//export Sub</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> Sub</span><span>(a int</span><span style="color: #9399B2;">,</span><span> b int) int</span><span style="color: #9399B2;"> {</span><span style="color: #CBA6F7;"> return</span><span> a</span><span style="color: #94E2D5;"> -</span><span> b</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//export Mul</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> Mul</span><span>(a int</span><span style="color: #9399B2;">,</span><span> b int) int</span><span style="color: #9399B2;"> {</span><span style="color: #CBA6F7;"> return</span><span> a</span><span style="color: #94E2D5;"> *</span><span> b</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//export Div</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> Div</span><span>(a int</span><span style="color: #9399B2;">,</span><span> b int) int</span><span style="color: #9399B2;"> {</span><span style="color: #CBA6F7;"> return</span><span> a</span><span style="color: #94E2D5;"> /</span><span> b</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//export PrintToConsole</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> PrintToConsole</span><span>(msg string)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(msg)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	result</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> Sub</span><span>(</span><span style="color: #89B4FA;font-style: italic;">Add</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span>)</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 10</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	PrintToConsole</span><span>(strconv</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Itoa</span><span>(result))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>소스코드가 통짜인 것은 이유가 있다.<br />
+원래는 나도 저 함수 구현들을 서브패키지로 빼려고 했는데, 그러면 그걸 export할 수가 없다.<br />
+cgo는 main 패키지에서만 export를 할 줄 알고, go에는 import를 다시 export를 하는 기능이 없기 때문이다.<br />
+환장할 노릇이다.</p>
+<p>아무튼 하나씩 짚어보자.<br />
+일단 main 패키지여야 하고, C 모듈을 포함시켜야 한다.</p>
+<p><img src="/images/img_5707f9bd50f44a38.png" alt="" />
+그래야먄 헤더파일을 생성해준다.</p>
+<p>그리고 내보낼 함수들을 정의해준다.</p>
+<p><img src="/images/img_e0d0855938acea00.png" alt="" />
+당연히 대문자로 시작해야 하고, 주석으로 export될 함수임을 명시해줘야 한다.</p>
+<p>그래서 일단</p>
+<p><img src="/images/img_6fe9a88526a1d1aa.png" alt="" />
+실행은 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="cro-naebonaegi">C로 내보내기</h2>
+<p>도는건 확인했으니 C 포맷으로 export를 해보자.<br />
+다음 처럼 옵션을 줘서 컴파일을 하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>go build</span><span style="color: #94E2D5;"> -</span><span>o libgoffi</span><span style="color: #94E2D5;">.</span><span>so</span><span style="color: #94E2D5;"> -</span><span>buildmode</span><span style="color: #94E2D5;">=</span><span>c</span><span style="color: #94E2D5;">-</span><span>shared go</span><span style="color: #94E2D5;">/</span><span>main</span><span style="color: #94E2D5;">.</span><span>go</span><span style="color: #9399B2;font-style: italic;"> // Linux</span></span></code></pre>
+<p><img src="/images/img_f7fd91200e989ecf.png" alt="" /></p>
+<p>그럼 외부에서 갖다쓸 수 있는 공유 라이브러리(.so)와 헤더파일을 던져줄 것이다.<br />
+이걸 주워가서 쓰면 된다.</p>
+<p>다만 문제는... dll로 내보내는 기능이 없다는 것이다.<br />
+그래서 windows에서는 활용하기 어렵다.</p>
+<br>
+<br>
+<br>
+<h2 id="nodejseseo-gajdasseugi">NodeJS에서 갖다쓰기</h2>
+<p>원래 Node.JS에서 공식적으로 제공하는 FFI는 애드온이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/221994411876">https://blog.naver.com/sssang97/221994411876</a><br />
+근데 이걸 쓰려면 또 so를 가져와서 애드온 형태로 감싸주는 정신나간 짓들을 해야 하기 때문에, 여기서는 좀더 편리한 방법을 택하겠다.</p>
+<p>다행스럽게도 ffi를 스크립트만으로 간단하게 로드하는 모듈이 있다.<br />
+깔아주자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span> npm i ffi</span><span style="color: #94E2D5;">-</span><span>napi ref</span><span style="color: #94E2D5;">-</span><span>struct</span><span style="color: #94E2D5;">-</span><span>napi</span></span></code></pre>
+<p>그리고 이런식으로 호출해서 사용하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> ffi</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;ffi-napi&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> Struct</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;ref-struct-napi&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> GoString</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> Struct</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>  p</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;string&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  n</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;longlong&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> goffi</span><span style="color: #94E2D5;"> =</span><span> ffi</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Library</span><span>(</span><span style="color: #A6E3A1;">&quot;./libgoffi.so&quot;</span><span style="color: #9399B2;">, {</span></span>
+<span class="giallo-l"><span>  Add</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;longlong&quot;</span><span>]]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  Sub</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;longlong&quot;</span><span>]]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  Mul</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;longlong&quot;</span><span>]]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  Div</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span> [</span><span style="color: #A6E3A1;">&quot;longlong&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;longlong&quot;</span><span>]]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  PrintToConsole</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;void&quot;</span><span style="color: #9399B2;">,</span><span> [GoString]]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">&quot;Add(12, 99) = &quot;</span><span style="color: #9399B2;">,</span><span> goffi</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Add</span><span>(</span><span style="color: #FAB387;">12</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 99</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">&quot;Sub(1, 555) = &quot;</span><span style="color: #9399B2;">,</span><span> goffi</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sub</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 555</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>str</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> GoString</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>str[</span><span style="color: #A6E3A1;">&quot;p&quot;</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;Hello Node!&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>str[</span><span style="color: #A6E3A1;">&quot;n&quot;</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 11</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>goffi</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">PrintToConsole</span><span>(str)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>문자열 타입을 GO에 맞춰서 정의해주고</p>
+<p><img src="/images/img_fffddefc0e20ecb0.png" alt="" /></p>
+<p>so 파일을 로드하면서 가져올 항목들을 다시금 정의한다.</p>
+<p><img src="/images/img_b3a4d34ee101d9d8.png" alt="" />
+배열의 첫번째 항목이 리턴타입이고, 두번째 배열이 파라미터 타입이다.</p>
+<br>
+<p><img src="/images/img_671f58d764dc109c.png" alt="" />
+그러면 이제 그대로 사용할 수가 있다.</p>
+<p>실행하면 된다.</p>
+<p><img src="/images/img_0061ab0b7cf8445a.png" alt="" />
+다행스럽게도 잘 돈다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/30951751/how-to-make-nodejs-to-talk-with-golang">https://stackoverflow.com/questions/30951751/how-to-make-nodejs-to-talk-with-golang</a><br />
+<a rel="external" href="https://medium.com/learning-the-go-programming-language/calling-go-functions-from-other-languages-4c7d8bcc69bf">https://medium.com/learning-the-go-programming-language/calling-go-functions-from-other-languages-4c7d8bcc69bf</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222959089158/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] CGO FFI: C 코드 내보내기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222958023107/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.66.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

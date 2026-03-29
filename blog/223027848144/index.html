@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] deployment | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223027848144/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] deployment">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223027848144/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-02-26T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223027848144/">[k8s] deployment</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-02-26T00:00:00+00:00"><time datetime="2023-02-26T00:00:00+00:00">2023.02.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="401 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223027848144" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>deployment는 파드를 관리하는 그룹 개념이라고 볼 수 있다.<br />
+정확히는 파드에 대한 컨트롤러(controller)라고 부른다. 컨트롤러는 deployment 말고도 몇가지가 더 있지만, 가장 대표적으로 쓰이는 놈이 이놈이다.</p>
+<p>실제로 많은 리소스가 필요한 경우에는 단일 파드로만은 감당이 불가능한데, 뭐 띄우고 배포할때마다 파드를 직접 다 관리하는건 상당히 번거로운 일이다.</p>
+<p>그래서 보통 서버같은걸 띄운다고 하면 deployment 단위를 구성해서 올리곤 한다.<br />
+deployment는 replica 등의 좀더 발전된 상위 제어 개념이 제공된다.</p>
+<br>
+<br>
+<br>
+<h2 id="deployment-mandeuleobogi">deployment 만들어보기</h2>
+<p>deployment는 create deployment 명령을 사용해서 만들 수 있다.<br />
+한번 이미지 하나 갖다가 만들어보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl create deployment test</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;"> --</span><span>image</span><span style="color: #94E2D5;">=</span><span>myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span></span></code></pre>
+<p>도커허브에 있는 myyrakle/node-server-for-test이미지로 test-server라는 이름의 deployment를 만든다는 뜻이다.<br />
+myyrakle/node-server-for-test 이미지는 내가 급조해서 올린 것인데, 80포트로 심플한 HTTP 서버를 올려주는 것만 딱 들어있다.<br />
+코드나 구성을 보고 싶다면, 아래 레포지토리를 참조해보면 되겠다.<br />
+<a rel="external" href="https://github.com/myyrakle/infrastructures/tree/master/k8s/examples/conrollers/deployments/node-server-for-test">https://github.com/myyrakle/infrastructures/tree/master/k8s/examples/conrollers/deployments/node-server-for-test</a></p>
+<br>
+<p>아무튼 돌아와서 저 커맨드를 실행시키면</p>
+<p><img src="/images/img_340993f6f867ad4c.png" alt="" />
+파드가 뜨고,</p>
+<p>deployment 단위도 생성이 된다.</p>
+<p><img src="/images/img_e6a504b0fa03dc63.png" alt="" /></p>
+<br>
+<p><img src="/images/img_1afc290861bbcda6.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="deployment-seukeilringhagi-replica-set">deployment 스케일링하기 (replica set)</h2>
+<p>deployment의 장점 중 하나는, 언급했던대로 파드를 레플리카 단위로 관리할 수 있다는 것이다.<br />
+한번 test-server의 레플리카를 3개로 늘려보겠다.<br />
+이런식으로 하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl scale deployment test</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;"> --</span><span>replicas</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">3</span></span></code></pre>
+<p><img src="/images/img_af22303998bb9349.png" alt="" />
+그럼 이제 이렇게 파드를 3개나 띄워주게 된다.</p>
+<p>또 0으로 하면 줄여서 활성 파드를 없앨 수도 있다.</p>
+<p><img src="/images/img_c75058d0f34bca15.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="deployment-sagjehagi">deployment 삭제하기</h2>
+<p>이번에는 만들어뒀던 deployment를 삭제해보겠다.<br />
+delete deployment 명령을 사용하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl</span><span style="color: #94E2D5;"> delete</span><span> deployment test</span><span style="color: #94E2D5;">-</span><span>server</span></span></code></pre>
+<p><img src="/images/img_eb3224cb68de5130.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="yamlro-malabogi">yaml로 말아보기</h2>
+<p>위에서는 create deployments 명령을 사용해서 deployment를 바로 만들어봤지만, 실제로 응용할 때는 그렇게 하지 않고 yaml로 구성을 말아놓고 사용한다.</p>
+<p>위에서 했던걸 yaml로 구성하면 아래와 같은 형태가 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> apps</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    metadata</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      labels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>        app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    spec</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      containers</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>          image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span></span></code></pre>
+<p>replicas를 3개로 하고, 이미지는 동일하게 가져왔다.<br />
+저렇게 파일을 만들어놓고</p>
+<p>kubectl create 명령으로 파일만 넘겨주면 된다.</p>
+<p><img src="/images/img_bbbdd9461eb77a82.png" alt="" />
+그럼 이렇게 잘 만들어질 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="applyro-sujeonghagi">apply로 수정하기</h2>
+<p>근데 만약 뭔가 구성에서 바꿔야 할게 생긴다면 어떻게 해야할까?<br />
+그럴때는 yaml에서 구성을 변경한 다음, apply 명령으로 반영하는 것이 일반적이다.</p>
+<p>레플리카를 4로 수정한다음에</p>
+<p><img src="/images/img_45f51380ee6915da.png" alt="" /></p>
+<p>반영해보도록 했다.</p>
+<p><img src="/images/img_97264e3780f12994.png" alt="" />
+그럼 이렇게 잘 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="vs-replicaset">vs ReplicaSet</h2>
+<p>deployment와 비슷한 기능으로 replicaset이라는게 있는데, 기본적으로 레플리카 단위로 파드를 관리한다는 것은 동일하다. 하지만 replicaset은 배포에 대한 방법론을 제공하지 않아서 무중단배포를 구성할 수가 없었다.<br />
+이런 배포에 대한 단점을 개선해서 나온 것이 deployment다.</p>
+<p>그래서 deployment는 배포에 대한 몇가지 옵션을 제공한다. 이건 별도 포스트로 정리해보도록 하겠다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@squarebird/Kubernetes-Replica-Set%EA%B3%BC-Deployment">https://velog.io/@squarebird/Kubernetes-Replica-Set%EA%B3%BC-Deployment</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223028688449/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] cronjob<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223025929368/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Cloudsearch<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

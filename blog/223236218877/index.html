@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>stack buffer overflow 취약점 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223236218877/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="stack buffer overflow 취약점">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223236218877/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-10-14T00:00:00+00:00">
+    <meta property="article:tag" content="보안">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223236218877/">stack buffer overflow 취약점</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-14T00:00:00+00:00"><time datetime="2023-10-14T00:00:00+00:00">2023.10.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="383 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/boan/">보안</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223236218877" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<h2 id="stack-buffer-overflow">stack buffer overflow</h2>
+<p>말 그대로 스택이 흘러넘치는 상황을 지칭한다.<br />
+만만한 취약점이라서 오랫동안 공격의 대상이 되어왔고, 지금도 종종 취약점 보고가 나온다.</p>
+<p>쉽게 말해서, 버퍼 크기보다 큰 데이터를 집어넣었을때 발생할 수 있는 끔찍한 UB를 이용하는 취약점이라 할 수 있다.<br />
+C/C++ 같은 unsafe한 언어를 쓸때 주로 발생한다...</p>
+<p>아래 코드는 해당 취약점을 갖고있는 예제 코드다.</p>
+<p><strong>#include &lt;string.h&gt;</strong></p>
+<hr />
+<p><em><em>void foo(char <em>bar)</em></em><br />
+<strong>{</strong><br />
+**     char buffer[12];</em>*</p>
+<hr />
+<p>**     strcpy(c, bar);  // no bounds checking**<br />
+<strong>}</strong></p>
+<hr />
+<p><strong>int main(int argc, char <strong>argv)</strong><br />
+<strong>{</strong><br />
+**     foo(argv[1]);</strong><br />
+**     return 0;**<br />
+<strong>}</strong></p>
+<p>strcpy는 바운드체크 없이 무식하게 문자열을 복사해넣는 함수라서, 명령행 매개변수가 12글자 이상일 경우에는 오동작한다.</p>
+<p>문제는 저 buffer라는 배열 변수의 범위를 넘어서는 구간까지 write를 해버릴 수 있다는 것이다.</p>
+<p>통상적으로 지역변수들은 인접한 주소 위치에 몰려있는 편이고, 그걸 이용하면 "return address"의 영역까지 조작할 수가 있다.</p>
+<p><img src="/images/img_1d257bcb02a2a67a.png" alt="" />
+그러니까 공격자는 악의적인 함수를 정의한 다음에 기 함수의 주소를 return address에 덮어써서 사실상 실행권한을 탈취할 수 있는 셈이다.</p>
+<p>그럼 공격자는 해당 시스템의 물리 자원을 탈취하거나, 네트워크를 이용하거나, 혹은 해당 프로세스에 부여된 권한을 이용해서 별 짓을 다 할 수가 있다. 무궁무진하다.</p>
+<br>
+<br>
+<h2 id="bangeobeob-1-kodeu-sujun-ceori">방어법 1: 코드 수준 처리</h2>
+<p>상당수의 경우는 그냥 코드 내에서 체크를 빡세게 해서 그런 쓰기 자체가 발생하지 않게 하는 것으로 해결된다.</p>
+<p>예를 들어 위에서는 strcpy라는 위험한 함수를 사용했는데, 대신 안전한 strncpy 등의 함수를 사용하면 눈앞의 위험은 제거할 수 있다.</p>
+<br>
+<br>
+<h2 id="bangeobeob-2-stack-canary">방어법 2: stack canary</h2>
+<p>스택 카나리는 오버플로 공격을 탐지하기 위한 방법론이다.</p>
+<p>원리는 이렇다. 리턴어드레스와 일반 메모리 영역 사이에 항상 canary word라는 특수한 데이터를 세팅해둔다.</p>
+<p><img src="/images/img_9701cb832b25ca8e.png" alt="" />
+이 word 값은 정해져있지 않고 그때그때 바뀌는 난수다.</p>
+<p>그리고 만약 이 상태에서 word 값이 바뀐다면 버퍼 오버플로가 발생한 것이라 간주하고 오류를 발생시키거나 하는 것이다.<br />
+그게 아니면 바뀔 이유가 없으니까...</p>
+<p>단점은 성능이 약간은 저하될 수 있다는 것이다. 메모리도 조금 더 먹을 것이고.</p>
+<p>c/c++나 기타 네이티브 언어 컴파일러들은 보통 이와 관련된 stack protection 기능을 갖고 있다.<br />
+기본으로 켜져있는지 아닌지는 구현체나 플랫폼마다 다르고, 옵션을 통해 사용여부를 선택할 수 있다.</p>
+<br>
+<br>
+<h2 id="bangeobeob-3-aslr">방어법 3: ASLR</h2>
+<p>Address space layout randomization의 준말로, 그냥 프로세스의 주소 자체를 랜덤화해서 주소를 추측도 할 수 없게 하자는 것이다.</p>
+<p><img src="/images/img_1b4f5d29060580fe.png" alt="" />
+https://itpenote.tistory.com/701</p>
+<p>이건 대개 일반 사용자 수준에서는 제어할 수 없고, 운영체제 수준에서만 구현된다.<br />
+프로세스를 띄우고 관리하는건 결국 OS니까...</p>
+<p>Linux, macOS, Windows, BSD 등 거의 대부분의 OS가 이런 기능을 제공한다.<br />
+최신 버전의 OS들은 설정하지 않아도 기본으로 ASLR이 활성화되어있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/Stack_buffer_overflow">https://en.m.wikipedia.org/wiki/Stack_buffer_overflow</a><br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/Buffer_overflow_protection#Canaries">https://en.m.wikipedia.org/wiki/Buffer_overflow_protection#Canaries</a></p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223237551660/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] pprof: 프로파일 시각화하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223236643886/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Concurrency] spinlock<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] consul: Service Discovery | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223132163781/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] consul: Service Discovery">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223132163781/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-06-18T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223132163781/">[k8s] consul: Service Discovery</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-06-18T00:00:00+00:00"><time datetime="2023-06-18T00:00:00+00:00">2023.06.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="215 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223132163781" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223132055988">https://blog.naver.com/sssang97/223132055988</a></p>
+<p>consul을 사용하는 주 목적 중 하나는 Service Discovery다.<br />
+특정 서버들의 IP를 consul의 Service Registry에 등록하고, 그걸 클라이언트가 접속할때마다 꺼내서 호출할 수 있도록 하는 것이다.</p>
+<p><img src="/images/img_cb402cbc5a6973df.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="seobeo-eijeonteu-silhaeng-with-consul-cli">서버 에이전트 실행 (with consul CLI)</h2>
+<p>서버의 IP 주소를 consul에 등록하려면, 우선 consul cli를 설치해야 한다.</p>
+<p>다음과 같이 서버용 Pod를 먼저 띄운 다음에</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Pod</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> server</span></span>
+<span class="giallo-l"><span>  labels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #9399B2;">:</span><span> server </span></span>
+<span class="giallo-l"><span>  annotations</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    consul</span><span style="color: #94E2D5;">.</span><span>hashicorp</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>connect</span><span style="color: #94E2D5;">-</span><span>inject</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;true&#39;</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> server </span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span></span></code></pre>
+<p>접속해서</p>
+<p><img src="/images/img_dfbef6e15e55d02f.png" alt="" /></p>
+<p>consul CLI를 설치한다.</p>
+<p><img src="/images/img_97797211dffde017.png" alt="" /></p>
+<p><img src="/images/img_9a8d98d17669fa9e.png" alt="" /></p>
+<p>그럼 아래와 같은 명령어를 사용해서 서비스를 등록할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>consul services register</span><span style="color: #94E2D5;"> -</span><span>name</span><span style="color: #94E2D5;">=</span><span>서비스명</span><span style="color: #94E2D5;"> -</span><span>address</span><span style="color: #94E2D5;">=</span><span>IP주소</span><span style="color: #94E2D5;"> -</span><span>port</span><span style="color: #94E2D5;">=</span><span>포트</span><span style="color: #94E2D5;"> --</span><span>http</span><span style="color: #94E2D5;">-</span><span>addr</span><span style="color: #94E2D5;">=</span><span>웹UI주소</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>consul services register</span><span style="color: #94E2D5;"> -</span><span>name</span><span style="color: #94E2D5;">=</span><span>test</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;"> -</span><span>address</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;">$</span><span>(hostname</span><span style="color: #94E2D5;"> -</span><span>I)</span><span style="color: #94E2D5;"> -</span><span>port</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">80</span><span style="color: #94E2D5;"> --</span><span>http</span><span style="color: #94E2D5;">-</span><span>addr</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">34.123</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">54.86</span></span></code></pre>
+<p><img src="/images/img_afd4f9b8ad496de4.png" alt="" /></p>
+<p>그러면 콘솔 UI에도 서비스가 연동이 될 것이고</p>
+<p><img src="/images/img_7b7392045b755a94.png" alt="" /></p>
+<p><img src="/images/img_87a0d064350b8408.png" alt="" />
+IP를 확인할 수 있다.</p>
+<p>여기서는 직관적인 확인을 위해 컨테이너에 직접 들어가서 작업을 했는데, 실제로 프로덕션에 사용할 때는 Docker Entrypoint에서 자동으로 register 실행을 하게 해야 한다.<br />
+아니면 sidecar 컨테이너를 별도로 구성해서 거기에만 consul agent를 설치하는 것도 좋은 방법일 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="service-ip-jeobsogjeongbo-ggeonaeogi-service-discovery">Service IP 접속정보 꺼내오기 (Service Discovery)</h2>
+<p>등록된 서비스의 정보를 꺼내오려면 Restful API를 사용할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">.../</span><span>v1</span><span style="color: #94E2D5;">/</span><span>catalog</span><span style="color: #94E2D5;">/</span><span>service</span><span style="color: #94E2D5;">/</span><span>서비스명</span></span></code></pre>
+<p><img src="/images/img_52a106a600b4e5e7.png" alt="" />
+여기서 ServiceAddress와 ServicePort를 꺼내와서 요청할때 사용하면 되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="service-registry-deungrog-haejehagi">Service Registry 등록 해제하기</h2>
+<p>CLI에서 deregister 명령을 사용하면 서비스 정보를 다시 내릴 수 있다.</p>
+<p><img src="/images/img_6eac64f9f0aac85d.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://developer.hashicorp.com/consul/commands/services/register">https://developer.hashicorp.com/consul/commands/services/register</a><br />
+<a rel="external" href="https://developer.hashicorp.com/consul/api-docs/catalog#list-services">https://developer.hashicorp.com/consul/api-docs/catalog#list-services</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223132055988/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] consul: Consul on Kubernetes (GCP)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223131630420/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Concurrency] Test And Set (TAS)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

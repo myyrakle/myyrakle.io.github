@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Database] 최종 일관성 (Eventual consistency) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223982028537/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Database] 최종 일관성 (Eventual consistency)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223982028537/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-08-25T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223982028537/">[Database] 최종 일관성 (Eventual consistency)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-25T00:00:00+00:00"><time datetime="2025-08-25T00:00:00+00:00">2025.08.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="610 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223982028537" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>최종 일관성(Eventual consistency)은 데이터베이스, 특히 분산형 시스템에서 주요하게 다뤄지는 핵심 키워드 중 하나다.</p>
+<br>
+<br>
+<br>
+<h2 id="ilgwanseonggwa-ceori-seongneung">일관성과 처리 성능</h2>
+<p>분산시스템에서 일관성은 참 어려운 주제다.<br />
+일단 쓰기가 발생하면, 특정 서버 노드에 먼저 쌓일 것이다.</p>
+<br>
+<p><img src="/images/img_a1f28b5e67767426.png" alt="" />
+그럼 당연히 나머지 노드에게도 복제를 할텐데</p>
+<p>문제는 이 복제라는게 실시간 보장을 할 수가 없다는 것이다.<br />
+당연히 지연이 발생할 수 있고, 다른 Client끼리 동일한 값을 수정할 수도 있다.</p>
+<p><img src="/images/img_fa6cf9207eed54c3.png" alt="" />
+그러면 어떤 Client가 write한 값을 어떤 Client는 볼 수 있고, Client는 보지 못할 수도 있다.</p>
+<p>사소한 문제로 느껴질 수도 있지만, 실제 시스템 구현에 들어가면 중대한 버그와 데이터 부정합성으로 나타나기 쉽다. 결국에는 전부 데이터를 기반으로 또 데이터를 쌓거나 계산을 하게 되는 것이기 때문이다.</p>
+<p>최종 일관성 (Eventual consistency)이란 이런 데이터 일관성 상실을 정당화하는 단어다. 아무튼 결과적으로는 다 맞춰지긴 하니까 부분적으로나마 일관성을 보장할 수 있다는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="cungdol-sinariowa-sigan">충돌 시나리오와 "시간"</h2>
+<p>만약 같은 값 A 행에 대해서, 서로 다른 DB 노드가 동시에 update를 했다면 어떻게 해야할까?<br />
+강력하게 Lock을 걸거나 뭔가 write에 주체가 되는 master가 있다면 쉽지만, 각 DB 노드들이 평등한 경우에는 깔끔하게 처리하기가 쉽지 않다.</p>
+<p>CassandraDB를 예로 들면, 상당수의 DB 구현체에서는, 각 write에 대해 타임스탬프나 버전을 부여한다. 그리고 최신 버전의 write만을 보존하고, 나머지를 전부 버린다.<br />
+문제는 각 서버의 시간이 정확하지 않을 수 있다는 것이다. 시계 동기화는 생각보다... 오차가 많다.<br />
+여기에는 잡다한 트릭들이 많은 편이고, 상세히 다루지는 않고 넘어가겠다.</p>
+<p>CouchDB는 좀 특이한 방식으로 충돌이란 문제를 소거한다. 하나만 남기고 버리거나 하는게 아니라, 그냥 버전 단위로 전부 쌓아두는 append only 방식을 취한다. 그 이후에 어떻게 처리할지는 애플리케이션의 책임이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jojeong-ganeunghan-ilgwanseong-quorum">조정 가능한 일관성 (QUORUM)</h2>
+<p>Eventual consistency를 주장하는 DB들도 그게 문제라는 것은 잘 인지하고 있다.<br />
+그래서 일관성을 자유롭게 선택할 수 있는 선택권을 주기도 한다. 이를 통해 read after write로 발생하는 문제를 최소화할 수 있다.</p>
+<p>CassandraDB의 경우에는 QUORUM 기반의 일관성 보장을 제공한다.<br />
+모든 노드의 절반에 복제되었을때 쓰기가 성공했다고 치고 넘어갈 수 있고, 한놈만 받아도 됐다고 치고 넘어갈 수도 있고, 전부 복제되어야 쓰기가 성공했다고 판단하게 할 수도 있다.</p>
+<p>"전부 복제"를 거는게 아니면 전부 일관성 손실 위험은 존재한다. 그 확률을 낮출 뿐이다.<br />
+그렇다고 "전부 복제"를 걸면 그만큼 성능이나 처리량이 저하되기 때문에, 이건 권장하는 옵션은 아니다.</p>
+<br>
+<br>
+<br>
+<h2 id="jangjeom">장점</h2>
+<p>네트워크 지연이나 장애에 영향을 덜 받는다. 데이터 동기화를 반드시 기다리지는 않기 때문이다.</p>
+<p>동기화를 책임지는 중심 Master Node 없이도 병렬적으로 서버를 확장하기 좋은 구조가 된다.<br />
+Eventual consistency를 보장하는 DB들은 대부분 수평 확장이 잘 된다.  그에 따라 write 처리량도 잘 늘어나는 편이다.</p>
+<p>실제 성능도 전반적으로 더 나은 편이다. 특히 write 성능에 있어서 더 그렇다. write 후 동기화를 기다리지 않거나 덜 기다릴 수 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="danjeom">단점</h2>
+<p>말은 최종 일관성이라고 하는데, 결국은 일관성이 보장되지 않는다는 소리나 마찬가지다. 저런 조어를 누가 했는지 모르겠다.</p>
+<p>최종 일관성을 제공하는 DB들은 결국, 발생할 수 있는 엣지케이스들에 대해서 일관성 손실 가능성을 어느 정도 감수해야 하고, 일관성 부족으로 인한 문제를 애플리케이션 수준에서 가져가야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="guhyeon-sarye">구현 사례</h2>
+<p>쓰기 처리량에 집중한, 쓰기 확장에 자유로운 분산 DB들은 대부분 최종 일관성에 기반한 write 구조를 구현한다.</p>
+<p>AWS DynamoDB는 기본적으로 Eventual consistency를 제공한다. 읽어도 그게 최신이 아닐 수 있다는 것이다.<br />
+하지만 원한다면 강한 수준의 일관성 옵션을 사용할 수 있다. 대신 비용이 2배가 된다.<br />
+노드 관리를 우리가 할 수 있는게 아니라서 write할때 일관성을 제어하는건 없다.</p>
+<p>CassandraDB는 기본적으로 Eventual consistency를 제공한다. 다만 상술했듯 write를 할 때 일관성 수준을 자유롭게 조절하는 것이 가능하다.</p>
+<p>CouchDB는 위에서 설명한 것처럼 좀 특이한 방식으로 접근한다. 애초에 DB 수준에서 많은 보장을 하려 하지 않고, 일단 대충 다 쌓은 다음에 application에서 처리하도록 하는 방식이다. 게다가 quorum 기반의 복제 동기화 대기 기능도 제공하지 않는다. 복제가 된건지 아닌지 알 수가 없고, 완전한 비동기 복제다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Eventual_consistency">https://en.wikipedia.org/wiki/Eventual_consistency</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html">https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html</a><br />
+<a rel="external" href="https://guide.couchdb.org/draft/consistency.html">https://guide.couchdb.org/draft/consistency.html</a><br />
+<a rel="external" href="https://docs.couchdb.org/en/stable/intro/consistency.html">https://docs.couchdb.org/en/stable/intro/consistency.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223981993212/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 인덱스와 최적화 전략<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223983226007/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] ECS: Service Connect<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

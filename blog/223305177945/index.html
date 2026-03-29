@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] 점검페이지 리디렉션 구성하기 (with WAF) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223305177945/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] 점검페이지 리디렉션 구성하기 (with WAF)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223305177945/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-12-28T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223305177945/">[AWS] 점검페이지 리디렉션 구성하기 (with WAF)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-12-28T00:00:00+00:00"><time datetime="2023-12-28T00:00:00+00:00">2023.12.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="371 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223305177945" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222921945368">https://blog.naver.com/sssang97/222921945368</a></p>
+<p>AWS의 서비스들을 활용해서 점검페이지를 구성해보겠다.<br />
+아마 우리는 대충 이러한 동작을 기대할 것이다.</p>
+<br>
+<p><img src="/images/img_78228287b3a8dbcc.png" alt="" />
+내부망의 경우에는 개발자나 관계자가 접근을 할 수 있어야 하니 접근을 열어줘야 한다.<br />
+하지만 외부망의 경우에는 미리 구성해놓은 점검 페이지로 이동을 하게끔 한다.</p>
+<p>이런건 사실 응용프로그램 수준에서 구현하려 해도 할 수는 있다.<br />
+하지만 WAF를 쓰면 이런 통제를 좀더 탄력적으로 수행할 수 있다.</p>
+<p><img src="/images/img_3a6e263fb92f96f2.png" alt="" /></p>
+<ol>
+<li>
+<p>허용할 IP 목록의 관리 같은걸 콘솔을 통해 유동적으로 관리할 수 있으며</p>
+</li>
+<li>
+<p>접속과 차단 내역을 추적할 수 있고</p>
+</li>
+<li>
+<p>추후 다른 형태의 트래픽 제어가 필요할 경우에도 탄력적으로 대응할 수 있다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>먼저 다음과 같은 cloudfront 배포 페이지가 있다고 가정하겠다.</p>
+<p><img src="/images/img_9cf7f27ab6b9ae14.png" alt="" />
+여기에다가 WAF를 달아볼 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ip-jibhab-mandeulgi">IP 집합 만들기</h2>
+<p>내부망에 대한 접근은 허용해줄 필요가 있다고 말했었다.<br />
+이런 IP 목록에 대한 관리는 IP set을 통해서 처리하게 된다.</p>
+<p>생성 페이지로 이동해서</p>
+<p><img src="/images/img_adcad6b2149a81ec.png" alt="" />
+이름 짓고, 허용해줄 IP 목록을 넣어준다.</p>
+<br>
+<p><img src="/images/img_de6bee37757b88f8.png" alt="" />
+이런식으로 만들어지면 잘 된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="web-acl-mandeulgi">웹 ACL 만들기</h2>
+<p>이게 블락을 걸어주는 녀석이다.<br />
+생성 창으로 이동해서</p>
+<p><img src="/images/img_9cae7d2de03ca984.png" alt="" />
+cloudfront 배포 타입으로 고르고, 이름을 짓고</p>
+<br>
+<p><img src="/images/img_28cd08d65949028d.png" alt="" />
+걸어줄 cloudfront 배포를 연결해준다.</p>
+<br>
+<p><img src="/images/img_f4a4354a31b374d9.png" alt="" />
+다음에는 이제 차단/허용 규칙을 정의해줘야 한다.<br />
+나는 화이트리스트를 전부 허용해주고 나머지를 차단하는 형태로 구성을 해보겠다.</p>
+<br>
+<p><img src="/images/img_a9a6060365e7f61c.png" alt="" />
+이렇게 추가하고</p>
+<br>
+<p><img src="/images/img_8006deda9e8f9a56.png" alt="" />
+디폴트동작은 블락.<br />
+그리고 커스텀 리스폰스를 헤더를 설정해서 내 블로그로 리다이렉트시키도록 유도했다.<br />
+내가 실수한게 있는데, 상태코드는 302로 넣어야 한다.</p>
+<br>
+<p><img src="/images/img_04fd89779d6aa1ec.png" alt="" />
+규칙이 여러개인 경우에는 우선순위 설정도 가능하다.</p>
+<br>
+<p><img src="/images/img_e775c4af9afe283c.png" alt="" />
+그렇게 해서 만들어지면</p>
+<br>
+<p><img src="/images/img_577c71b0ba897608.png" alt="" />
+내부망에서는 잘 접속이 되겠지만</p>
+<br>
+<p><img src="/images/img_03caf982621b202e.jpg" alt="" />
+외부망으로 접근하니 블락을 먹고 블로그로 이동됐다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeomgeom-on-offhagi">점검 on/off하기</h2>
+<p>왜인지는 모르겠는데 WAF는 간단하게 딸깍할 수 있는 기능이 없다. 왜지?</p>
+<p>그래서 만약 점검을 종료하고 다시 모든걸 허용하게 하려면</p>
+<p><img src="/images/img_4d55b5c0f3918a13.png" alt="" />
+디폴트 동작을 바꾸거나</p>
+<br>
+<p><img src="/images/img_9c2a1e9f9dbf3ac9.png" alt="" />
+연관된 cloudfront 리소스를 임시로 제거하면 된다.<br />
+다른 사람들의 사용사례를 보니, 리소스를 뗐다 붙였다 하는 방식으로 더 많이 사용하는 것 같더라.</p>
+<br>
+<p>서버의 경우에는 대상만 cloudfront에서 Loadbalancer로 바꿔서 비슷하게 진행하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://repost.aws/questions/QUeXIw1g0hSxiF0BpugsT7aw/how-to-implement-the-maintenance-page-using-route-53-to-switch-between-cloudfront-distributions">https://repost.aws/questions/QUeXIw1g0hSxiF0BpugsT7aw/how-to-implement-the-maintenance-page-using-route-53-to-switch-between-cloudfront-distributions</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223306429993/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.75.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223305207365/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>rupring v0.6.0<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

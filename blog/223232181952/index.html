@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>LSM 트리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223232181952/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="LSM 트리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223232181952/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-10-09T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223232181952/">LSM 트리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-09T00:00:00+00:00"><time datetime="2023-10-09T00:00:00+00:00">2023.10.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="605 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223232181952" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>LSM 트리는 Log Structured Merge Tree의 준말로, 로그와 같이 사이즈가 큰 데이터를 트리 형태로 저장해서 인덱싱할 수 있게 해주는 자료구조다.</p>
+<p>Patrick O'Neil외 3명에 의해 1996년에 고안되었다.</p>
+<p>응용 수준에서 자주 쓰진 않고, 데이터베이스 같은걸 만들때 주로 사용된다.<br />
+RDB에서 지배적으로 사용되는 전통적인 인덱스 구조인 B-Tree와 대비되는 편이다.</p>
+<br>
+<br>
+<br>
+<h2 id="lsm-teuriyi-gujowa-weonri">LSM 트리의 구조와 원리</h2>
+<br>
+<p><img src="/images/img_c7486e684e67aa2f.png" alt="" />
+LSM 트리는 일반적인 트리와 다르게 몇개의 레이어로 구성된다. 최초로 제안된 형태는 2단계이나, 일반적으로는 위 그림과 같이 3단계로 구성된다.<br />
+파일 사이즈가 너무 클 때를 고려해서 중간 sort 레이어를 하나 더 추가한 것이다.</p>
+<p>여하튼 기본적인 저장 원리는 이렇다.</p>
+<ol>
+<li>빠르고 작은 메모리(RAM)에는 진짜 트리 형태로 인덱스 데이터를 관리한다. 이를 memtable이라고 부르며, 레드블랙 트리, skiplist 등으로 구현될 수 있다.<br />
+(level 0)</li>
+<li>느리고 큰 디스크에는 정렬된 배열의 형태로 데이터를 관리한다. 이를 Sorted String Table(SST)이라고도 부른다.<br />
+(level 1, 2)</li>
+</ol>
+<p>쓰기 동작 원리는 이렇다.</p>
+<ol>
+<li>처음 데이터를 삽입/수정할 때는 작고 빠른 memtable에 데이터를 저장한다.</li>
+<li>만약 memtable의 크기가 일정치(몇 MB)를 초과하면 그걸 파일로 저장해서 디스크에 보관한다.</li>
+<li>파일이 생성되는 과정은 항상 append only로 이루어지기 때문에 seq I/O로 돌아서 매우 빠르다.</li>
+</ol>
+<p>읽기 동작 원리는 간단하다.</p>
+<ol>
+<li>읽기 요청이 들어오면 memtable에서 키를 찾는다.</li>
+<li>키가 memtable에 없다면 디스크의 최신 세그먼트부터 SS Table을 뒤져서 값을 찾는다.</li>
+<li>이 읽기 성능은 O(N)로 이루어지기 때문에 파일이 커짐에 따라 성능이 심각하게 저하될 수 있다.</li>
+<li>때문에 성능 보완을 위해 여러가지 보조적인 알고리즘을 활용한다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="keompaegsyeon-compaction">컴팩션 (Compaction)</h2>
+<p>LSM은 계속해서 파일을 append하는 구조라고 했다.<br />
+때문에 파일이 늘어날때마다 read 시간이 선형적으로 늘어나는데, 그걸 좀 줄이기 위한 방법이 컴팩션이다.</p>
+<p>그래서 LSM에 기반한 대부분의 DB 시스템에서는 백그라운드 프로세스에서 컴팩션을 돌려서 여러개의 SS Table 파일을 병합하는 과정을 거친다.</p>
+<p>애초에 각 파일들이 정렬된 상태로 저장되어있기 때문에 이 병합은 매우 빠르게 이루어지고, 이 동작형태가 merge sort와 비슷하다고 해서 Merge Tree라고 불리는 것이기도 하다.</p>
+<p>아무튼 이 컴팩션 과정에서 중복된 키나 삭제된 키는 제거된다.</p>
+<br>
+<br>
+<br>
+<h2 id="beulrum-pilteo">블룸 필터</h2>
+<p>LSM에서 read 성능을 끌어올리기 위해서 사용하는 주된 방법 중 하나가 블룸 필터다.<br />
+자세한 것은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/223231946274">https://blog.naver.com/sssang97/223231946274</a></p>
+<br>
+<br>
+<br>
+<h2 id="lsm-tree-vs-b-tree">LSM Tree vs B-Tree</h2>
+<p>LSM 트리가 새로 떠오르는 형태의 구조라고 해서 B-Tree보다 우월하다거나 한건 아니다.<br />
+그러면 다 갈아엎고 B-Tree를 버렸겠지...</p>
+<p>각각 장단점이 있는데, 간단하게 말하면 대체로 LSM은 write가 빠르고, B-Tree는 read가 빠르다고 할 수 있다.<br />
+write에 최적화된 NoSQL 시스템들이 대부분 LSM을 차용하는 이유이기도 하다.</p>
+<p>디스크 저장 효율도 LSM이 좋은 편이다. LSM이 순차적으로 저장돼서 디스크가 낭비없이 꽉꽉 차는 반면에, B-Tree는 파편화돼서 빈 공간이 많이 생긴다.</p>
+<p>동시성 제어 측면에서는 LSM이 느슨한 구조를 가져서 불리한 부분이 있다.<br />
+B-Tree는 한 키가 동시에 한 곳에만 존재한다는게 보장되는데, LSM은 여러 파일에 퍼져있을 수 있기 때문이다. 해서, 강력한 트랜잭션 수준을 보장해야 할 때는 B-Tree가 유리한 부분이 많다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongrye">사용례</h2>
+<p>응용 수준의 사용례는 적지만, 시스템 수준에서는 매우 많이 사용된다.</p>
+<p>Apache AsterixDB, Bigtable, HBase, LevelDB, Apache Accumulo, SQLite4, Tarantool, RocksDB, WiredTiger(MongoDB), Apache Cassandra, InfluxDB, YugabyteDB, ScyllaDB, and CockroachDB 등... 비교적 근래에 탄생한 DB 시스템들은 대부분 LSM 트리로 인덱스 시스템을 구현했다.<br />
+이거 말고도 많다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/Log-structured_merge-tree">https://en.m.wikipedia.org/wiki/Log-structured_merge-tree</a><br />
+<a rel="external" href="https://jaeyeong951.medium.com/%EC%83%89%EC%9D%B8-index-%EC%9D%98-%EB%91%90-%EA%B0%80%EC%A7%80-%ED%98%95%ED%83%9C-lsm-%ED%8A%B8%EB%A6%AC-b-%ED%8A%B8%EB%A6%AC-7a4ab7887db5">https://jaeyeong951.medium.com/%EC%83%89%EC%9D%B8-index-%EC%9D%98-%EB%91%90-%EA%B0%80%EC%A7%80-%ED%98%95%ED%83%9C-lsm-%ED%8A%B8%EB%A6%AC-b-%ED%8A%B8%EB%A6%AC-7a4ab7887db5</a><br />
+<a rel="external" href="https://getchan.github.io/data/LSM_tree/">https://getchan.github.io/data/LSM_tree/</a><br />
+<a rel="external" href="https://sukill.tistory.com/m/87">https://sukill.tistory.com/m/87</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223232089632/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] Concurrency: return channel<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223231444031/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Network] UDP 홀펀칭 (Hole punching)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

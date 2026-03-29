@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] lifetime: async와 콜백 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223745667272/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] lifetime: async와 콜백">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223745667272/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-02-03T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223745667272/">[Rust] lifetime: async와 콜백</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-03T00:00:00+00:00"><time datetime="2025-02-03T00:00:00+00:00">2025.02.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="558 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223745667272" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>2025.02.03 작성<br />
+2025.02.23 수정</p>
+<p>Rust의 라이프타임 시스템이 어렵고 난해하다고 하지만, 사실 일반적인 경우에서는 그렇게 벽을 느낄만한 경우가 많지는 않다.<br />
+단순하게 함수에 참조를 넘기거나 하는 경우는 문제가 될 경우가 잘 없다.</p>
+<p>하지만 참조에 async가 붙고 콜백도 엮인다면 머리가 아파지기 시작한다.</p>
+<br>
+<br>
+<br>
+<h2 id="munje-eobsneun-gyeongu">문제 없는 경우</h2>
+<p>async가 아니라면 뒷면에서의 코드 생성이 거의 일어나지 않기도 하고, 대체로는 별 문제가 없다.<br />
+콜백함수를 받아서 실행하는 retry 함수를 만든다고 하면, 이런 식으로 할 수 있을 것이다.</p>
+<p><img src="/images/img_040c22faa058426a.png" alt="" /></p>
+<p><img src="/images/img_1d8b710e0d5b0234.png" alt="" />
+잘 동작한다.</p>
+<p>그러면 콜백에 가변 참조 같은 값을 파라미터로 넘기면 어떨까? 참조라서 문제가 생길까?</p>
+<p><img src="/images/img_eb86318ce85e95f1.png" alt="" /></p>
+<p><img src="/images/img_e90311832ddf8582.png" alt="" />
+동기 코드에서는 별다른 문제가 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="munje-async-callbackgwa-camjo-jeondal">문제: async callback과 참조 전달</h2>
+<p>문제가 생기는건 보통 async를 쓸때부터다.<br />
+하지만 콜백이 파라미터를 받지 않는다면 이 또한 문제는 없다.</p>
+<p><img src="/images/img_97e9b43417ea6897.png" alt="" /></p>
+<p><img src="/images/img_f20fedb28165e770.png" alt="" /></p>
+<p>문제가 생기는건, async 콜백이 참조 파라미터를 받을때부터다<br />
+async 자체가 문제라기보단, async가 trait으로 확장되는 과정에서 미묘한 뭐시기들이 생기는 것이다.</p>
+<p><img src="/images/img_441f63d0305169d7.png" alt="" /></p>
+<p><img src="/images/img_112a8a4230572dee.png" alt="" />
+이런 식으로 짜면</p>
+<br>
+<p><img src="/images/img_1857ce7d24fa48e5.png" alt="" /></p>
+<p><img src="/images/img_5a02b1a1626cc357.png" alt="" />
+사용할때 lifetime 관련 오류가 돌출되기 시작한다.</p>
+<p>이러한 오류 메세지는 관련해서 아는게 없다면 직관적으로 받아들이기 어렵다.<br />
+저기서 문제가 된건 클로저인데, 하나씩 까보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">|</span><span>context</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> &amp;</span><span>mut Context</span><span style="color: #94E2D5;">|</span><span> async</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Hello, world!&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">do_something</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>일단 클로저의 파라미터 타입이 (context: &amp;'1 mut Context)로 해석된다.<br />
+그리고 클로저의 반환 타입 (여기서는 async block)이 라이프타임 '2로 암시된다.</p>
+<p>타입 시그너처로 표현하면 이렇게 풀린다고 보면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">context</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #A6E3A1;font-style: italic;">1 mut Context) -&gt; </span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">(impl Fn(</span><span style="color: #94E2D5;">&amp;</span><span style="color: #F9E2AF;font-style: italic;">mut Context) -&gt; impl</span><span style="color: #A6E3A1;"> &#39;</span><span style="color: #A6E3A1;font-style: italic;">2 + Future&lt;Output = anyhow::Result&lt;()&gt;&gt;)</span></span></code></pre>
+<p>이것도 어지럽긴 하다.</p>
+<p>아무튼 여기서 rust가 말하는건, '1 참조가 '2보다 오래 살아있다는 보장이 없다는 것이다.</p>
+<p>사실 로직상으로는 별다른 문제가 없긴 한데, parameter와 return Future 사이의 이 미묘한 간극을 rust 컴파일러가 완벽히 추적을 하지는 못해서 생기는 문제다.<br />
+어떤 식으로라든 이 부정교합을 해결해야 컴파일이 될 것이다. 여기엔 2가지 정도의 방법이 있었는데, 1.85부터 깔끔한 방법이 생겼다.</p>
+<br>
+<br>
+<br>
+<h2 id="best-async-keulrojeowa-asyncfn-teureis-since-1-85">Best - async 클로저와 AsyncFn 트레잇 (since 1.85)</h2>
+<p>만약 이걸 보는 당신이 1.85 버전 이상을 쓴다면, async 클로저를 사용하는게 가장 깔끔한 해결책이다.<br />
+Fn 대신 AsyncFn 같은 async 함수용 트레잇으로 함수 타입을 정의하고</p>
+<p><img src="/images/img_06437934cd039ce3.png" alt="" /></p>
+<p>클로저를 넘길 때도 async 클로저를 넘기는 것이다.</p>
+<p><img src="/images/img_ef7a84a483526c84.png" alt="" /></p>
+<p>그럼 아주 깔끔하게 동작한다.</p>
+<p><img src="/images/img_f500383e715552d0.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="legacy-haegyeolcaeg-1-pin-box">Legacy - 해결책 1: Pin Box</h2>
+<p>가장 일반적인 해결책은, 클로저가 반환하는 Future 값 자체를 Box로 묶고 Pin으로 고정하는 것이다.<br />
+현재로서는 클로저를 받아서 동작할 수 있게 하려면 이 방법을 선택해야 한다.</p>
+<p><img src="/images/img_d0f336f5b54afbe1.png" alt="" />
+Future를 generic으로 반환하지 않고, Box에 감싸고 Pin으로 고정해서 반환토록 한다.</p>
+<br>
+<p><img src="/images/img_7cff13438d8eced5.png" alt="" />
+그리고 클로저를 넣을 때도 그 반환값이 Pin&lt;Box<T>&gt;가 되도록 해야한다.<br />
+보통 이렇게 async 블럭을 pin으로 걸면 된다.</p>
+<br>
+<p><img src="/images/img_5583fc344cb8965a.png" alt="" />
+그러면 잘 동작할 것이다.</p>
+<p>참고로 futures crate에 있는 BoxFuture가 이 Pin&lt;Box<Future>&gt;에 대한 숏컷이다. 귀찮으면 그거 쓰면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="legacy-haegyeolcaeg-2-callback-jeonyong-trait-jeongyi">Legacy - 해결책 2: callback 전용 trait 정의</h2>
+<p>굳이 클로저 말고 함수로 받아도 되고, Box 없이 처리하고 싶다면 조금 우회적인 방법이 있다.</p>
+<p>결국 parameter와 return Future 사이의 lifetime을 어떻게 잘 엮고 연결해주기만 하면 되는 건데, 그게 안돼서 이 난리가 벌어진 것이다.<br />
+그걸 표현하려면 현재로서는 trait을 하나 따야 한다. HRTB도 써야 한다.</p>
+<p><img src="/images/img_a261714cf11adee3.png" alt="" />
+이런 식으로 정의해주고</p>
+<br>
+<p><img src="/images/img_5903b311b0ae3f6d.png" alt="" />
+그걸 콜백 타입으로 받으면 된다.</p>
+<br>
+<p><img src="/images/img_e2a5bf0711af92dd.png" alt="" /></p>
+<p><img src="/images/img_d89c0c2e7897d3b7.png" alt="" />
+그럼 잘 동작할 것이다.<br />
+다만 이건 클로저를 쓰지 못한다는게 단점이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://users.rust-lang.org/t/lifetime-bounds-to-use-for-future-that-isnt-supposed-to-outlive-calling-scope/89277/2">https://users.rust-lang.org/t/lifetime-bounds-to-use-for-future-that-isnt-supposed-to-outlive-calling-scope/89277/2</a><br />
+<a rel="external" href="https://users.rust-lang.org/t/asynchronous-wrapper-function-taking-a-reference/89940/2">https://users.rust-lang.org/t/asynchronous-wrapper-function-taking-a-reference/89940/2</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223746817865/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] hello async book.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223739579012/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 추천 crate 목록.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Python] Locust를 통한 부하테스트 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223846384864/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Python] Locust를 통한 부하테스트">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223846384864/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-04-25T00:00:00+00:00">
+    <meta property="article:tag" content="Python">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223846384864/">[Python] Locust를 통한 부하테스트</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-25T00:00:00+00:00"><time datetime="2025-04-25T00:00:00+00:00">2025.04.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="298 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/python/">Python</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223846384864" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_41920f2b54e76cae.png" alt="" />
+Locust는 파이썬으로 만들어진 부하 테스트 프레임워크다.<br />
+Python 사용자들이 꽤 많이 쓰고, 유명한 편이다.</p>
+<p>기본적인 사용법만 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-seobeo-jagseong-fastapi">예제 서버 작성 (FastAPI)</h2>
+<p>부하테스트를 때리려면, 당연히 맞는 서버가 있어야 한다. 적당히 만들어줬다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># FastAPI Server Code</span></span>
+<span class="giallo-l"><span>from fastapi</span><span style="color: #CBA6F7;"> import</span><span> FastAPI</span></span>
+<span class="giallo-l"><span>import uvicorn</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>app = FastAPI()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>@app.get(</span><span style="color: #A6E3A1;">&quot;/foo&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>async def foo():</span></span>
+<span class="giallo-l"><span>    return</span><span style="color: #9399B2;"> {</span><span style="color: #A6E3A1;">&quot;message&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;Foo&quot;</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>@app.get(</span><span style="color: #A6E3A1;">&quot;/bar&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>async def bar():</span></span>
+<span class="giallo-l"><span>    # random delay 100-1000ms</span></span>
+<span class="giallo-l"><span>    import random</span></span>
+<span class="giallo-l"><span>    import time</span></span>
+<span class="giallo-l"><span>    delay = random.randint(100</span><span style="color: #9399B2;">,</span><span> 1000) / 1000.0</span></span>
+<span class="giallo-l"><span>    time.sleep(delay)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    return</span><span style="color: #9399B2;"> {</span><span style="color: #A6E3A1;">&quot;message&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;Bar&quot;</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>uvicorn.run(app</span><span style="color: #9399B2;">,</span><span> host=</span><span style="color: #A6E3A1;">&quot;0.0.0.0&quot;</span><span style="color: #9399B2;">,</span><span> port=7070)</span></span></code></pre>
+<p><img src="/images/img_ea4299e2ab1647f3.png" alt="" />
+잘 실행된다.</p>
+<br>
+<br>
+<br>
+<h2 id="locust-seolci">locust 설치</h2>
+<p>locust는 CLI 형태로도 쓰고, 모듈 형태로도 쓴다.<br />
+여기선 uv를 통해서 설치해보겠다.</p>
+<p><img src="/images/img_082aad4ecb0e330e.png" alt="" /></p>
+<p>그리고 이렇게 실행이 되면 잘 깔린 것이다.</p>
+<p><img src="/images/img_fc0d03cc476ac4af.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="teseuteukodeu-jagseong">테스트코드 작성</h2>
+<p>방금 만들었던 2개 api에 대해서 테스트코드를 작성해보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>from locust</span><span style="color: #CBA6F7;"> import</span><span> HttpUser</span><span style="color: #9399B2;">,</span><span> task</span><span style="color: #9399B2;">,</span><span> between</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>HOST=</span><span style="color: #A6E3A1;">&quot;http://localhost:7070&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>class WebsiteUser(HttpUser):</span></span>
+<span class="giallo-l"><span>    host = HOST</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    wait_time = between(1</span><span style="color: #9399B2;">,</span><span>2) # 1-2 초 랜덤 대기</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    @task</span></span>
+<span class="giallo-l"><span>    def test(self):</span></span>
+<span class="giallo-l"><span>        with self.client.get(</span><span style="color: #A6E3A1;">&#39;/foo&#39;</span><span style="color: #9399B2;">,</span><span> name=</span><span style="color: #A6E3A1;">&quot;test-foo&quot;</span><span style="color: #9399B2;">,</span><span> catch_response=True) as response:</span></span>
+<span class="giallo-l"><span>            print(response)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        with self.client.get(</span><span style="color: #A6E3A1;">&#39;/bar&#39;</span><span style="color: #9399B2;">,</span><span> name=</span><span style="color: #A6E3A1;">&quot;test-bar&quot;</span><span style="color: #9399B2;">,</span><span> catch_response=True) as response:</span></span>
+<span class="giallo-l"><span>            print(response)</span></span></code></pre>
+<p><img src="/images/img_3b80481250117975.png" alt="" />
+wait_time은 하나의 유저가 api를 쏘고 기다리는 딜레이다.<br />
+그리고 각 테스트 함수에서는 api를 적당히 쏘도록 작성하면 된다. locust는 이 테스트 함수를 최소 단위로 해서 테스트 루프를 돌린다.</p>
+<br>
+<br>
+<br>
+<h2 id="teseuteu-silhaeng-beuraujeo">테스트 실행 (브라우저)</h2>
+<p>locust는 기본적으로 웹UI 기반의 테스트 도구다.<br />
+locust cli로 테스트코드를 실행하면</p>
+<p><img src="/images/img_985bca7f5b515001.png" alt="" />
+이렇게 웹UI가 뜬다.</p>
+<p><img src="/images/img_acfc3083ffa719ec.png" alt="" /></p>
+<p><img src="/images/img_761289c63010c71b.png" alt="" />
+여기서 유저 개수와 ramp up을 지정하고 시작하면 된다.<br />
+유저가 동시에 요청을 날리는 스레드 단위고, ramp up은 최초 시작 이후에 점진적으로 늘릴 유저 개수디.</p>
+<p>그리고 실행이 되면</p>
+<p><img src="/images/img_854b7405479e932c.png" alt="" /></p>
+<p><img src="/images/img_ddb13c3b9ee8cf90.png" alt="" />
+조건에 따라 계속 요청을 쏘고 내용을 기록한다.<br />
+멈추려면 수동으로 STOP 버튼을 눌러야한다.</p>
+<br>
+<p><img src="/images/img_84c22f677de7a230.png" alt="" />
+이런 식으로 그래프도 제공하고</p>
+<br>
+<p><img src="/images/img_fd58cc9be3158b36.png" alt="" />
+csv로 다운받는 것도 지원한다.</p>
+<br>
+<br>
+<p>웹UI 없이 테스트하기</p>
+<p>GUI가 없는 환경에서 테스트를 돌려야 하거나, 혹은 워크플로를 자동화해야한다면 웹 UI 없이도 제어할 수 있어야 한다.</p>
+<p>그러려면 다음과 같이 헤드리스 옵션을 주고, 유저 개수, rampup 개수, 테스트 시간, 출력 형태를 지정하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>locust</span><span style="color: #94E2D5;"> -</span><span>f test</span><span style="color: #94E2D5;">.</span><span>py</span><span style="color: #94E2D5;"> --</span><span>headless</span><span style="color: #94E2D5;"> -</span><span>u</span><span style="color: #FAB387;"> 10</span><span style="color: #94E2D5;"> -</span><span>r</span><span style="color: #FAB387;"> 1</span><span style="color: #94E2D5;"> -</span><span>t 10s</span><span style="color: #94E2D5;"> --</span><span>csv</span><span style="color: #94E2D5;">=</span><span>results</span></span></code></pre>
+<p><img src="/images/img_9812a6f35e23e5cd.png" alt="" />
+그럼 자동으로 돌고</p>
+<br>
+<p><img src="/images/img_8c5b5a8ea851ea1b.png" alt="" /></p>
+<p><img src="/images/img_44d150fb7bd864ba.png" alt="" />
+결과물도 적당히 뱉어줄 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://locust.io/">https://locust.io/</a><br />
+<a rel="external" href="https://devocean.sk.com/blog/techBoardDetail.do?ID=165998&amp;boardType=techBlog">https://devocean.sk.com/blog/techBoardDetail.do?ID=165998&amp;boardType=techBlog</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/25392451/locust-how-to-make-locust-run-for-a-specific-amount-of-time">https://stackoverflow.com/questions/25392451/locust-how-to-make-locust-run-for-a-specific-amount-of-time</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223845582324/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Vector Search] HNSW 인덱스<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223844422700/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Qdrant] 성능 벤치마크<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>ripgrep: grep의 고성능 대안 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224233109422/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="ripgrep: grep의 고성능 대안">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224233109422/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-03-29T01:47:42.906082+00:00">
+    <meta property="article:tag" content="Linux">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224233109422/">ripgrep: grep의 고성능 대안</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-29T01:47:42.906082+00:00"><time datetime="2026-03-29T01:47:42.906082+00:00">2026.03.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="365 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/linux/">Linux</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224233109422" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>grep은 Unix에서 가장 널리 사용되는 파일 탐색 도구다.<br />
+하지만 일반적이고 기본적인 도구라고 해서 빠르다는 보장은 없다. grep이 그 경우에 속한다.<br />
+ripgrep은 고질적인 성능 한계를 해소하기 위해 나온 도구다.</p>
+<br>
+<br>
+<br>
+<h2 id="grepyi-munje">Grep의 문제</h2>
+<p>grep은 켄 톰슨이 유닉스 초창기에 만든 고대유물인데, 프로그램 자체의 성능에는 문제가 없다.<br />
+문제는, 그때와 지금의 환경이 많이 달라졌다는 것이다.</p>
+<p>해봤다면 알겠지만, grep으로 전체 파일 탐색을 하면 비정상적으로 오래걸릴 경우가 많다. grep은 텍스트파일을 전부 읽으면서 무한한 루프를 돌기 때문이다.</p>
+<p>옛날에는 파일이 그렇게 많지도 않고, 종속성도 대부분 바이너리라서 괜찮았지만, 지금은 말이 좀 많이 달라졌다. 자바스크립트나 perl, python, ruby 같은 텍스트 형태의 스크립트 무더기들이 사방에 지뢰처럼 심어져있기 때문이다. 이런 것들이 grep의 탐색 성능을 극심하게 저하시킨다.</p>
+<br>
+<br>
+<br>
+<h2 id="ripgrepyi-mogpyo">ripgrep의 목표</h2>
+<p>순수하게 빠른 탐색을 가능하게 하는 것이다. 여기에는 몇가지 방법이 있다.</p>
+<p>**순수한 최적화 수준 **<br />
+SIMD 및 향상된 리터럴 처리 알고리즘을 사용해서 탐색 성능을 끌어올린다.</p>
+<p><strong>불필요한 파일 SKIP</strong><br />
+ripgrep은 아주 간단한 논리를 사용해서 전체 스캔에서 발생하는 부하를 줄인다. 바이너리나 숨김 파일을 그냥 과감하게 검색 대상에서 빼버리는 것이다.<br />
+그래서 ripgrep은 .gitigore, .rgignore 같은 ignore 계열 파일도 읽어서 거기에 들어있는건 과감하게 무시해버린다. 이 때문에 의도치 않은 부작용이 발생할 수도 있긴 하지만, 대체로는 node_modules 같은 불필요하게 비대한 파일이 더 많으므로 실보다 득이 더 크다.</p>
+<br>
+<br>
+<br>
+<h2 id="seolci">설치</h2>
+<p>대부분의 주요 패키지매니저에서 사전 빌드 패키지가 제공된다. 그냥 깔면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>brew install ripgrep # MacOS </span></span>
+<span class="giallo-l"><span>sudo pacman</span><span style="color: #94E2D5;"> -</span><span>Sy ripgrep # Arch Linux</span></span></code></pre>
+<p><a rel="external" href="https://github.com/burntsushi/ripgrep?tab=readme-ov-file#installation">https://github.com/burntsushi/ripgrep?tab=readme-ov-file#installation</a></p>
+<p><img src="/images/img_08ba8d2b15e45abe.png" alt="" /></p>
+<p>설치가 된다면 rg라는 명령으로 실행 가능해진다.</p>
+<p><img src="/images/img_69fb58a2c3bcd3c9.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>rg는 기본적으로 정규식 기반으로 파일을 검색한다.<br />
+만약 _SUSPEND라는 텍스트가 포함된 것을 찾으려면, 다음과 같이 쿼리를 날릴 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>rg</span><span style="color: #A6E3A1;"> &quot;검색 패턴&quot;</span><span> 검색 경로</span></span></code></pre>
+<p><img src="/images/img_c270400982b70e1c.png" alt="" />
+-n은 라인 번호를 표시하는 옵션이고, -w은 exact word 패칭을 위한 옵션이다. 이게 또 나름 형태소를 분석해서 다른 단어의 형태를 거르는 기능도 있다.</p>
+<br>
+<p><img src="/images/img_f2a05c5c1e528a05.png" alt="" />
+만약 숨김 파일과 ignore에 등록된 파일까지 다 찾고 싶다면, 위와 같이 플래그를 주면 된다.</p>
+<br>
+<p><img src="/images/img_e5e9a346b6af39f3.png" alt="" />
+특정 파일 포맷만 필터링해서 볼 수도 있다. 위 플래그는 rust 코드만 찾는다.</p>
+<p>-w word match는 상당히 강력한 기능 중 하나다.<br />
+그냥 function을 검색하면, 무식하게 그게 포함된 변형을 전부 찾는데</p>
+<p><img src="/images/img_594b4e671d07dcad.png" alt="" /></p>
+<p><img src="/images/img_f81f825387d5c06a.png" alt="" />
+w를 넣으면 똑똑하게 진짜 그 단어만 찾아서 검색한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://burntsushi.net/ripgrep/">https://burntsushi.net/ripgrep/</a><br />
+<a rel="external" href="https://github.com/burntsushi/ripgrep">https://github.com/burntsushi/ripgrep</a><br />
+<a rel="external" href="https://burntsushi.net/ripgrep/">https://burntsushi.net/ripgrep/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="prev" href="https://myyrakle.github.io/blog/224231359845/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[MongoDB] User 및 권한 관리<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

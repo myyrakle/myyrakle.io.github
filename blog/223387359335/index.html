@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] gobreaker | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223387359335/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] gobreaker">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223387359335/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-03-18T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223387359335/">[Go] gobreaker</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-18T00:00:00+00:00"><time datetime="2024-03-18T00:00:00+00:00">2024.03.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="196 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223387359335" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>sony에서 만든 서킷브레이커 구현체다. 자기들이 쓰려고 만든거같다.<br />
+정석적인 서킷브레이커 패턴을 따른다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222890127728">https://blog.naver.com/sssang97/222890127728</a></p>
+<br>
+<br>
+<br>
+<h2 id="seolci">설치</h2>
+<p>설치는 간단하다. 디펜던시도 별거없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>go get github</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>sony</span><span style="color: #94E2D5;">/</span><span>gobreaker</span></span></code></pre>
+<p><img src="/images/img_357d9b9b732b3df3.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gibonguseong">기본구성</h2>
+<p>전역변수나 전역에 가까운 라이프타임을 가진 변수로 서킷브레이거 변수를 둔다.</p>
+<p><img src="/images/img_cacb60efb689adbe.png" alt="" />
+그리고 Setting 객체를 통해 설정값들을 넣고 서킷브레이커 객체를 생성하면 된다.</p>
+<p>세팅에는 이런 값들이 있다.</p>
+<p><img src="/images/img_8a5d1920ec0e03b5.png" alt="" /></p>
+<ol>
+<li>Name은 메타데이터성 이름이고.</li>
+<li>MaxRequets는 half-open 상태일때 한번에 들어올 수 있는 요청 수다.</li>
+<li>Interval은 close 상태에서 내부 카운트를 초기화하기 위한 주기다. 0이면 초기화하지 않는다.</li>
+<li>Timeout은 말 그대로 타임아웃 설정이다. 해당 초가 지나면 half-open 상태가 된다. 0이면 60초다.</li>
+<li>ReadyToTrip은 close 상태로 진입하기 위한 조건이다. 저 반환값이 true가 되면 close가 된다.</li>
+<li>OnStateChange는 그냥 상태가 변경될때마다 호출된다.</li>
+<li>IsSuccessful는 성공 조건을 지정한다. error가 반환될때 특정 오류만 성공으로 간주해야 하거든 사용하면 된다.</li>
+</ol>
+<p>아래는 서킷브레이커 기반으로 Get 요청을 날리는 함수를 구현한 예다.</p>
+<p><img src="/images/img_f08796591f51db27.png" alt="" />
+별건 없다. Execute로 감싸서 실행하기만 하면 된다.<br />
+저 내부 함수에서 오류를 반환하면 그게 ReadyToTrip으로 검사해서 close 상태로 진입하고, 그런 식으로 제어가 되는 것이다.</p>
+<br>
+<p><img src="/images/img_4088f8dd9433c9a6.png" alt="" />
+그러면 그냥 쓰면 된다.</p>
+<br>
+<p>아래는 전체 예제 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;io&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/sony/gobreaker&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> circuitBreaker *gobreaker.CircuitBreaker</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> init</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> setting gobreaker.Settings</span></span>
+<span class="giallo-l"><span>	setting</span><span style="color: #94E2D5;">.</span><span>Name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;HTTP GET 테스트&quot;</span></span>
+<span class="giallo-l"><span>	setting</span><span style="color: #94E2D5;">.</span><span>ReadyToTrip</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(counts gobreaker</span><span style="color: #94E2D5;">.</span><span>Counts) bool</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 3번 이상 호출되고, 60% 이상 실패하면 circuit breaker가 열린다.</span></span>
+<span class="giallo-l"><span>		failureRatio</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(counts</span><span style="color: #94E2D5;">.</span><span>TotalFailures)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(counts</span><span style="color: #94E2D5;">.</span><span>Requests)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> counts</span><span style="color: #94E2D5;">.</span><span>Requests</span><span style="color: #94E2D5;"> &gt;=</span><span style="color: #FAB387;"> 3</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> failureRatio</span><span style="color: #94E2D5;"> &gt;=</span><span style="color: #FAB387;"> 0.6</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	circuitBreaker</span><span style="color: #94E2D5;"> =</span><span> gobreaker</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewCircuitBreaker</span><span>(setting)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// Get wraps http.Get in CircuitBreaker.</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> Get</span><span>(url string) ([]byte</span><span style="color: #9399B2;">,</span><span> error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 서킷브레이커를 통해 호출한다.</span></span>
+<span class="giallo-l"><span>	body</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> circuitBreaker</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Execute</span><span>(</span><span style="color: #89B4FA;font-style: italic;">func</span><span>() (interface</span><span style="color: #9399B2;">{},</span><span> error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		resp</span><span style="color: #9399B2;">,</span><span> err </span><span style="color: #94E2D5;">:=</span><span> http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(url)</span></span>
+<span class="giallo-l"><span>		if err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			return nil</span><span style="color: #9399B2;">,</span><span> err</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		defer resp</span><span style="color: #94E2D5;">.</span><span>Body</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"><span>		body</span><span style="color: #9399B2;">,</span><span> err </span><span style="color: #94E2D5;">:=</span><span> io</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ReadAll</span><span>(resp</span><span style="color: #94E2D5;">.</span><span>Body)</span></span>
+<span class="giallo-l"><span>		if err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			return nil</span><span style="color: #9399B2;">,</span><span> err</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		return body</span><span style="color: #9399B2;">,</span><span> nil</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> nil</span><span style="color: #9399B2;">,</span><span> err</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> body</span><span style="color: #94E2D5;">.</span><span>([]byte)</span><span style="color: #9399B2;">,</span><span> nil</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	body</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> Get</span><span>(</span><span style="color: #A6E3A1;">&quot;http://www.google.com/robots.txt&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatal</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #89B4FA;font-style: italic;">string</span><span>(body))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/sony/gobreaker">https://github.com/sony/gobreaker</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223386613432/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] ObjectID<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223385770902/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] S3: Presigned URL<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

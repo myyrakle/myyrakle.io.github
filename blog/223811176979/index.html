@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] ABA Problem | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223811176979/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] ABA Problem">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223811176979/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-03-27T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223811176979/">[Concurrency] ABA Problem</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-03-27T00:00:00+00:00"><time datetime="2025-03-27T00:00:00+00:00">2025.03.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="715 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223811176979" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>ABA 문제는 Lock-Free 알고리즘, 특히 Compare and Swap 기반의 구현체에서 발생할 수 있는 대표적인 동시성 버그 패턴이다.<br />
+이에 대한 충분한 이해 없이는 의도대로 동작하는 Lock-Free 자료구조를 만들 수 없다.</p>
+<p>일반적으로 non-GC 언어에서만 발생한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-guhyeon-linked-stack">기본 구현 (Linked Stack)</h2>
+<p>먼저 기본적인 Lock-Free Stack 구현체를 만들어보겠다. 언어는 Rust고, 단순한 형태로 구현했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:ptr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:atomic</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AtomicPtr</span><span style="color: #9399B2;">,</span><span> Ordering</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:Arc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>struct Node</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    value</span><span style="color: #9399B2;">:</span><span> i32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    next</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> *</span><span>mut Node</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>struct Stack</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    head</span><span style="color: #9399B2;">:</span><span> AtomicPtr</span><span style="color: #94E2D5;">&lt;</span><span>Node</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>unsafe impl Sync for Stack</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"><span>unsafe impl Send for Stack</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl Stack</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Self</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        Stack</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            head</span><span style="color: #9399B2;">:</span><span> AtomicPtr</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">ptr</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">null_mut</span><span style="color: #9399B2;">())</span><span>,</span></span>
+<span class="giallo-l"><span>        }</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    fn push</span><span style="color: #9399B2;">(</span><span>&amp;</span><span style="color: #EBA0AC;font-style: italic;">self</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> value</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> i32</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span>        let new_node</span><span style="color: #94E2D5;"> =</span><span> Box::</span><span style="color: #89B4FA;font-style: italic;">into_raw</span><span>(Box::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(Node</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            value</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            next</span><span style="color: #94E2D5;">:</span><span> ptr::</span><span style="color: #89B4FA;font-style: italic;">null_mut</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>));</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let mut current_head</span><span style="color: #94E2D5;"> =</span><span> self</span><span style="color: #94E2D5;">.</span><span>head</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">load</span><span>(Ordering::Relaxed);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            unsafe</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                (</span><span style="color: #94E2D5;">*</span><span>new_node)</span><span style="color: #94E2D5;">.</span><span>next</span><span style="color: #94E2D5;"> =</span><span> current_head</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            match self</span><span style="color: #94E2D5;">.</span><span>head</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">compare_exchange</span><span>(</span></span>
+<span class="giallo-l"><span>                current_head</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                new_node</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                Ordering::Release</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                Ordering::Relaxed</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            )</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                Ok</span><span>(_)</span><span style="color: #CBA6F7;"> =&gt; break</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">                   // 성공적으로 교체됨</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                Err</span><span>(head)</span><span style="color: #CBA6F7;"> =&gt;</span><span> current_head</span><span style="color: #94E2D5;"> =</span><span> head</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // 실패, 새 head 사용해 재시도</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> pop</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self)</span><span style="color: #94E2D5;"> -&gt;</span><span> Option</span><span style="color: #94E2D5;">&lt;</span><span>i32</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        let mut current_head</span><span style="color: #94E2D5;"> =</span><span> self</span><span style="color: #94E2D5;">.</span><span>head</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">load</span><span>(Ordering::Relaxed);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            if</span><span> current_head</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">is_null</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                return</span><span> None</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 스택이 비어 있음</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> next</span><span style="color: #94E2D5;"> =</span><span> unsafe</span><span style="color: #9399B2;"> {</span><span> (*current_head).next</span><span style="color: #9399B2;"> };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            match self</span><span style="color: #94E2D5;">.</span><span>head</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">compare_exchange</span><span>(</span></span>
+<span class="giallo-l"><span>                current_head</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                next</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                Ordering::Release</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                Ordering::Relaxed</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            )</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                Ok</span><span>(_)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                    let</span><span> value</span><span style="color: #94E2D5;"> =</span><span> unsafe</span><span style="color: #9399B2;"> {</span><span> (*current_head).value</span><span style="color: #9399B2;"> };</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                    // 메모리 누수 방지를 위해 Box로 변환하여 소멸</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                    let</span><span> _</span><span style="color: #94E2D5;"> =</span><span> unsafe</span><span style="color: #9399B2;"> {</span><span> Box</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_raw</span><span>(current_head)</span><span style="color: #9399B2;"> };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                    return</span><span style="color: #89B4FA;font-style: italic;"> Some</span><span>(value)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                Err</span><span>(head)</span><span style="color: #CBA6F7;"> =&gt;</span><span> current_head</span><span style="color: #94E2D5;"> =</span><span> head</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // 실패, 새 head 사용해 재시도</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> stack</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Stack</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">())</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 초기 상태: [1, 2] (위에서부터)</span></span>
+<span class="giallo-l"><span>    stack.push</span><span style="color: #9399B2;">(</span><span>2</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"><span>    stack.push</span><span style="color: #9399B2;">(</span><span>1</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"><span>    println!</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;초기 스택: [1, 2]&quot;</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let a</span><span style="color: #94E2D5;"> =</span><span> stack</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">pop</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;팝: {:?}&quot;</span><span style="color: #9399B2;">,</span><span> a)</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> b</span><span style="color: #94E2D5;"> =</span><span> stack</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">pop</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;팝: {:?}&quot;</span><span style="color: #9399B2;">,</span><span> b)</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 2</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_e657080e6ef935a2.png" alt="" />
+일단은 싱글스레드에서 잘 동작한다.</p>
+<p>구현도 간단히 한번 풀어보겠다.</p>
+<p><img src="/images/img_400cd706efc4945e.png" alt="" />
+사실 막 그렇게 특별할 것은 없다.<br />
+Stack이라서 Push할때는 맨 앞의 head에 새 노드를 할당하고, 새 노드가 (구) head를 가리키게 한다.</p>
+<p>근데 Push/Pop은 동시적으로 들어올 수 있고 head가 언제든 바뀌어있을 수 있기 때문에, compare_exchange(compare and swap)으로 본인이 알던 정보가 최신일 때만 수정을 하도록 했다.<br />
+아니면 맞을때까지 뺑뺑이를 돈다. 그래서 data race가 심할 때는 루프 뺑뺑이돌면서 CPU를 혹사시킬 수 있다.</p>
+<p>pop도 방법론은 비슷하다.</p>
+<p><img src="/images/img_1a0f7a03b0ca0a3c.png" alt="" />
+head를 넣고 밀어내는게 아니라, head를 빼고 끌어당기는게 다를 뿐이다.</p>
+<br>
+<br>
+<br>
+<h2 id="aba-munje">ABA 문제</h2>
+<p>그럼 뭐가 문제일까? 그냥 봐서는 잘 동작할 것처럼 보인다.<br />
+하지만 이면에는 생각보다 난감한 그.. 뭐시기가 존재해서 꼬이는 상황이 발생할 수 있다.</p>
+<p>시나리오는 이렇다.</p>
+<ol>
+<li>
+<p>첫번째 스레드가 pop/push에 앞서 head 데이터를 Load한다. = A(v1)</p>
+</li>
+<li>
+<p>첫번째 스레드가 일을 끝내기 전에, 두번째 스레드가 head를 pop한다. = (없음)</p>
+</li>
+<li>
+<p>두번째 스레드가 B를 push한다. = B</p>
+</li>
+<li>
+<p>두번째 스레드가 A를 push한다. = A(v2)-&gt;B</p>
+</li>
+<li>
+<p>첫번째 스레드가 A(v1)을 A(v2)와 다르다는 것을 알지 못해(가정) A(v1)를 잘못된 형태로 CAS 처리해버린다.</p>
+</li>
+<li>
+<p>여기서 C를 push할 경우에는 C-&gt;A(v1)??, A(v2)-&gt;B 같은 형태로 연결이 꼬여버린다.</p>
+</li>
+<li>
+<p>pop을 할 경우에는 없다고 생각하고 head를 비워버리나, A(v2)-&gt;B가 누수된 형태로 붕 떠버린다.</p>
+</li>
+</ol>
+<br>
+<br>
+<br>
+<br>
+<p>그림으로 나타내면 이렇다.</p>
+<p><img src="/images/img_e5499487b54be280.jpg" alt="" />
+참고로 A -&gt; B -&gt; A 이런 설명이 유래가 되어서 ABA 문제라고 부른다.</p>
+<p>근데<br />
+*첫번째 스레드가 A(v1)을 A(v2)와 다르다는 것을 알지 못해(가정) *</p>
+<ul>
+<li>
+<p>이 부분은 약간 혼란스럽게 느껴질 수 있다. 현재 구현 버전에서는 CAS 단위가 포인터이기 때문이다.</p>
+</li>
+<li>
+<p>할당이 다른 시기에 되었다면 A(v1)와 A(v2)의 주소값이 다르다고 판단할 수 있을텐데, 이게 어떻게 가능할까?</p>
+</li>
+</ul>
+<br>
+<br>
+<p>**문제: 메모리 재사용 **</p>
+<ul>
+<li>
+<p>사실 메모리의 주소라는 것은 그다지 unique하지 않고, 재사용이 되기도 좋은 대상이다.</p>
+</li>
+<li>
+<p>대부분의 메모리 allocator는 동일한 크기의 할당 요청을 받으면 최근에 사용되었다 해제된 메모리 블록을 다시 재사용하게 주기도 한다.</p>
+</li>
+<li>
+<p>게다가 스레드 로컬 캐시를 적극 사용하는 allocator의 경우에는 동일 스레드에서 메모리를 재할당할 경우 같은 주소를 받을 가능성이 특히나 더 높다.</p>
+</li>
+</ul>
+<br>
+<br>
+<p><strong>GC 언어</strong></p>
+<ul>
+<li>
+<p>GC 언어들은 의도한 것은 아니지만 이 문제를 에둘러서 회피한다.</p>
+</li>
+<li>
+<p>메모리 재사용이 발생하려면 첫번째 A(v1)가 할당해제되어야 하는데, 애초에 Load해서 들고있는 시점에서는 참조가 존재해서 할당해제를 하지 않고, 그 동안에는 당연히 그 주소를 다시 쓰지도 않기 때문이다.</p>
+</li>
+<li>
+<p>그래서 Java 등 GC 언어들에서는 고민을 별로 할 필요가 없는 문제다.</p>
+</li>
+</ul>
+<br>
+<br>
+<br>
+<p>이 문제에 대한 해결책은 이것저것 있지만, 가장 대표적인 것은 2가지 정도다.</p>
+<br>
+<h2 id="haegyeolcaeg-1-tagged-pointer">해결책 1: Tagged Pointer</h2>
+<p>일반적인 해결책 중 하나는, 아예 주소 공간에다가 추가적인 태그값을 넣어서 할당되거나 수정될때마다 값이 고유성을 가지게끔 만드는 것이다. 그러면 실제 주소 공간이 같더라도, 일부 비트가 달라서 CAS 연산이 실패할 것이다.<br />
+어차피 CAS는 주소 자체를 의미있게 보는게 아니라 주소라는 정수값을 기반으로 처리하는 것이기 때문이다.</p>
+<p>64비트 환경에서는 비트 공간이 좀 남기 때문에 사용할 수 있는 꼼수다. 보통 10-20비트 정도는 메타데이터로 응용할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="haegyeolcaeg-2-memori-haldang-haeje-jiyeonsikigi">해결책 2: 메모리 할당 해제 지연시키기</h2>
+<p>ABA 문제가 발생하는 원인 중 하나는, 할당이 해제된 뒤에 그 주소를 다시 줄 수 있기 때문이다.</p>
+<p>그러면... 해제를 안시키면 그 주소를 다시 안주니까 되는거 아닌가?</p>
+<p>그래서 아예 객체의 삭제를 미뤄서 재사용을 방지하는 방법도 몇가지 존재한다.</p>
+<br>
+<p>**Hazard Pointer **</p>
+<p>메모리 해제 지연의 대표적인 접근 방법이다.<br />
+현재 사용되고 있는, 해제되지 말아야 하는 주소 목록을 Hazard Pointer라고 해서 중앙화해서 관리한다.<br />
+그리고 Hazard Pointer 목록에 속해있는 주소는 할당해제를 하지 않게끔 하는 것이다.</p>
+<p><img src="/images/img_ae837f394dac85fc.png" alt="" />
+<a rel="external" href="https://chfhrqnfrhc.tistory.com/entry/ABA-Problem-1">https://chfhrqnfrhc.tistory.com/entry/ABA-Problem-1</a><br />
+근데 그냥 해제를 미루기만 하면 누수가 될테니, RetireList라는 해제용 풀을 또 스레드별로 만들어서 관리한다.<br />
+pop으로 인해서 메모리를 해제해야 한다면, 그걸 해제하는게 아니라 객체를 RetireList로 옮긴 다음에 Hazard Pointer 리스트와 비교해서 괜찮으면 lazy하게 제거하는 것이다.</p>
+<p>추가적인 성능 소모가 좀 일어날 수 있지만, ABA와 메모리 재사용 문제는 회피할 수 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://chfhrqnfrhc.tistory.com/m/entry/ABA-Problem-1">https://chfhrqnfrhc.tistory.com/m/entry/ABA-Problem-1</a><br />
+<a rel="external" href="https://minikin.me/blog/solving-the-aba-problem-in-rust-tagged-pointers">https://minikin.me/blog/solving-the-aba-problem-in-rust-tagged-pointers</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/ABA_problem">https://en.wikipedia.org/wiki/ABA_problem</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Hazard_pointer">https://en.wikipedia.org/wiki/Hazard_pointer</a><br />
+<a rel="external" href="https://chfhrqnfrhc.tistory.com/entry/ABA-Problem-1">https://chfhrqnfrhc.tistory.com/entry/ABA-Problem-1</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223816015005/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Amazon Q: Developer<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223808633111/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Concurrency] Lock-Free 자료구조<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

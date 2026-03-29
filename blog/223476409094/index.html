@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] 계정, 인증과 권한 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223476409094/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] 계정, 인증과 권한">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223476409094/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-06-11T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223476409094/">[k8s] 계정, 인증과 권한</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-06-11T00:00:00+00:00"><time datetime="2024-06-11T00:00:00+00:00">2024.06.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="400 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223476409094" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>k8s에서 계정을 만들고, 권한을 제어하는 방법을 정리한다.</p>
+<p>k8s는 기본적으로 토큰 방식의 인증 방식을 제공하며, RBAC에 기반한 섬세한 인가-권한 제어 방식을 지향한다.</p>
+<p>그림으로 표현하면 이렇다.</p>
+<p><img src="/images/img_7a85003aa3dce0f2.jpg" alt="" />
+<a rel="external" href="https://medium.com/rahasak/kubernetes-role-base-access-control-with-service-account-e4c65e3f25cc">https://medium.com/rahasak/kubernetes-role-base-access-control-with-service-account-e4c65e3f25cc</a></p>
+<ol>
+<li>ServiceAccount라는 단위를 통해 계정을 관리한다.</li>
+<li>행위 기반으로 Role을 정의한다. Pod를 조회할 수만 있다든지 하는 실제 행동의 범위를 제약한다.</li>
+<li>ServiceAccount와 Role을 RoleBinding으로 연결한다.</li>
+<li>ServiceAccount는 RoleBinding을 통해 연결된 Role의 행위만을 허가받고 사용할 수 있다.</li>
+</ol>
+<p>한번 직접 계정과 권한을 만들어서 접속해보고, 외부접속까지 해보는 시간을 가져보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="serviceaccount">ServiceAccount</h2>
+<p>ServiceAccount는 말 그대로 계정을 관리하는 리소스 단위다.<br />
+딱히 뭘 직접 만든게 아니라도</p>
+<p><img src="/images/img_6151ea649f384c0a.png" alt="" />
+기본적으로 생성되어있는 계정은 많을 것이다.</p>
+<br>
+<br>
+<p><img src="/images/img_06c092dc90de2dee.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> ServiceAccount</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> testaccount</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span></span></code></pre>
+<p><img src="/images/img_18c382dc46c52cf7.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="serviceaccount-secret-token">ServiceAccount - Secret Token</h2>
+<p>k8s 1.24 버전 이전에서는 ServiceAccount를 만들면 토큰을 자동으로 만들어줬지만, 1.24부터는 보안상의 이유로 직접 만들게끔 바뀌었다.</p>
+<p>그래서 아무리 조회해봐도</p>
+<p><img src="/images/img_3136d8fe10bf8106.png" alt="" /></p>
+<p><img src="/images/img_3f90d115103b5b84.png" alt="" />
+토큰이 나오지는 않을 것이다.</p>
+<p>아래와 같이 시크릿 리소스를 정의해서</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Secret</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>secret</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span></span>
+<span class="giallo-l"><span>  annotations</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>service</span><span style="color: #94E2D5;">-</span><span>account</span><span style="color: #94E2D5;">.</span><span>name: testaccount</span></span>
+<span class="giallo-l"><span>type</span><span style="color: #9399B2;">:</span><span> kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>service</span><span style="color: #94E2D5;">-</span><span>account</span><span style="color: #94E2D5;">-</span><span>token</span></span></code></pre>
+<p><img src="/images/img_98c4db15c298a3da.png" alt="" />
+만들어주면</p>
+<br>
+<p><img src="/images/img_af81f592a474a902.png" alt="" /></p>
+<p><img src="/images/img_f8f67ab06916fcdd.png" alt="" />
+동기화가 될 것이다.</p>
+<br>
+<p><img src="/images/img_77b4ed504491a70f.png" alt="" />
+그럼 토큰 정보를 가져다가 쓸 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="rest-apiro-hoculhaebogi">Rest API로 호출해보기</h2>
+<p>토큰이 있으면 외부에서도 찔러서 사용해볼 수 있다.</p>
+<p>k8s 클러스터의 엔드포인트를 모른다면, kubectl config view 명령으로 바로 확인할 수 있다.</p>
+<p><img src="/images/img_6aec578d15de13dd.png" alt="" />
+이제 저기다 찔러보자.</p>
+<p>이런 식으로 헤더에 토큰을 담아서 보내면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> --</span><span>insecure</span><span style="color: #94E2D5;"> -</span><span>H</span><span style="color: #A6E3A1;"> &quot;Authorization: Bearer 토큰&quot;</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//IP:6443/apis</span></span></code></pre>
+<p><img src="/images/img_23299668008cf0e5.png" alt="" />
+잘 호출되어야 한다.<br />
+이 apis라는 api는 그냥 api 목록을 조회하는 것 뿐이라서 별 동작은 없다.</p>
+<p>근데 어떻게 해도 pods를 조회하거나 하는 일반적인 기능들에 대해서는 사용이 불가능할 것이다.</p>
+<p><img src="/images/img_fcd9057f29e59209.png" alt="" />
+이건 권한이 하나도 없어서 그렇다.</p>
+<br>
+<br>
+<br>
+<h2 id="clusterrolegwa-clusterrolebinding">ClusterRole과 ClusterRoleBinding</h2>
+<p>k8s는 RBAC 방식으로 세밀한 권한제어를 제공한다.<br />
+AWS 같은 클라우드에서 IAM 기반 권한관리를 사용해봤다면, 그것과 원리가 거의 같다고 볼 수 있다.</p>
+<p>먼저 ClusterRole을 통해서 어떤 리소스에 대해서 어떤 행위를 할 수 있는지를 정의해야 한다.</p>
+<p><img src="/images/img_48288244724e2d90.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> ClusterRole</span></span>
+<span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> rbac</span><span style="color: #94E2D5;">.</span><span>authorization</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> testrole</span></span>
+<span class="giallo-l"><span>rules</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">-</span><span> apiGroups</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span style="color: #A6E3A1;"> &quot;&quot;</span></span>
+<span class="giallo-l"><span>  resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> pods</span></span>
+<span class="giallo-l"><span>  verbs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span style="color: #A6E3A1;"> &#39;list&#39;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span style="color: #A6E3A1;"> &#39;get&#39;</span></span></code></pre>
+<p>이러면 pods list와 describe pods를 할 수 있는 역할이 된다.</p>
+<p>그러면 이제 저 Role와 ServiceAccount를 연결해서 Account에 권한이 부여될 수 있도록 해야 한다.<br />
+이런 매핑은 ClusterRoleBinding이라는 리소스를 통해서 처리할 수 있다.</p>
+<p><img src="/images/img_48ae140e198c4891.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> rbac</span><span style="color: #94E2D5;">.</span><span>authorization</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> ClusterRoleBinding</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>rolebinding</span></span>
+<span class="giallo-l"><span>roleRef</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  apiGroup</span><span style="color: #9399B2;">:</span><span> rbac</span><span style="color: #94E2D5;">.</span><span>authorization</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span></span>
+<span class="giallo-l"><span>  kind</span><span style="color: #9399B2;">:</span><span> ClusterRole</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> testrole</span></span>
+<span class="giallo-l"><span>subjects</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">-</span><span> kind</span><span style="color: #9399B2;">:</span><span> ServiceAccount</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> testaccount</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span></span></code></pre>
+<p>testaccount와 testrole를 연결하기만 하는 단순한 정의다.</p>
+<p>이걸 먹여주면</p>
+<p><img src="/images/img_933b164962ba6fd7.png" alt="" /></p>
+<p>이제 pods list는 잘 동작할 것이다.</p>
+<p><img src="/images/img_57f45b4f069c7c3a.png" alt="" />
+이런 느낌으로 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/docs/reference/access-authn-authz/authentication/">https://kubernetes.io/docs/reference/access-authn-authz/authentication/</a><br />
+<a rel="external" href="https://kubernetes.io/ko/docs/tasks/access-application-cluster/access-cluster/">https://kubernetes.io/ko/docs/tasks/access-application-cluster/access-cluster/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223476467591/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] Graceful Shutdown<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223473289560/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] Cargo: 종속성 관리<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

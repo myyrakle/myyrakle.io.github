@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] DynamoDB: Streams | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223387796830/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] DynamoDB: Streams">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223387796830/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-03-19T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223387796830/">[AWS] DynamoDB: Streams</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-19T00:00:00+00:00"><time datetime="2024-03-19T00:00:00+00:00">2024.03.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="561 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223387796830" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Dynamo Streams는 DynamoDB를 기반으로 제공되는 CDC 기반 스트림 서비스다.</p>
+<p>데이터를 밀어넣고 consume하는 Kinesis나 Kafka 같은 역할을 기대할 수 있다. 특히 Lambda와 통합해서 사용하기 용이하다.<br />
+데이터가 중복없이 단 한번만 전송되는 것을 보장하고, 실제 삽입된 순서에 따라 FIFO 형태로 동작한다.<br />
+Kafka의 가볍고 저렴한 대체재로 쓰기에 괜찮다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://aws.amazon.com/ko/dynamodb/pricing/on-demand/">https://aws.amazon.com/ko/dynamodb/pricing/on-demand/</a><br />
+비용 단위는 DynamoDB와 거의 동일하고, 추가 요금이 따로 발생하지 않는다.</p>
+<p><img src="/images/img_552327c03ce46697.png" alt="" />
+그냥 기존 읽기 요금과 동일하게 낸다고 보면 된다.</p>
+<br>
+<p>한번 직접 사용해보자</p>
+<br>
+<br>
+<br>
+<h2 id="dynamo-stream-hwalseonghwa">Dynamo Stream 활성화</h2>
+<p>먼저 DynamoDB 테이블이 있어야 한다.</p>
+<p><img src="/images/img_6b76fa1aee2f57f6.png" alt="" />
+적절히 돈 안나가게 온디맨드로만 만들어준다.</p>
+<p>"내보내기 및 스트림" 탭을 보면</p>
+<p><img src="/images/img_3830b08856f899d6.png" alt="" />
+스트림을 활성화하는 부분이 있다. 이걸 켠다.</p>
+<br>
+<p><img src="/images/img_f53092a31e357292.png" alt="" />
+스트림 트리거에서 어떤 값을 받을지 정한다.<br />
+일단 키만 받도록 했다.</p>
+<br>
+<p><img src="/images/img_c8bdd1814c6a4569.png" alt="" />
+그럼 스트림 ARN이 만들어지는데, 저걸 aws sdk를 통해 바로 사용할 수도 있다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDBStreams.html">https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/DynamoDBStreams.html</a><br />
+하지만 여기서는 Lambda 기반으로 제공되는 자동화된 통합만 사용해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="lambdaro-teurigeo-deungrog">Lambda로 트리거 등록</h2>
+<p>먼저 트리거에 사용할 Lambda 함수를 하나 만들어준다.</p>
+<p><img src="/images/img_2d66645f5525e018.png" alt="" />
+이게 메시지를 전송받아서 처리하는 역할을 맡게 될 것이다.<br />
+일단은 로그만 찍었다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;Version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2012-10-17&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;Statement&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;Sid&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Statement1&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;Effect&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Allow&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;Action&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;dynamodb:GetRecords&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;dynamodb:GetShardIterator&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;dynamodb:DescribeStream&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;dynamodb:ListStreams&quot;</span></span>
+<span class="giallo-l"><span>			]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;Resource&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;*&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span>	]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>Lambda 권한은 이정도 주면 된다.</p>
+<p>이제 저걸 트리거로 걸면 된다. Dynamo Stream 하단으로 이동해서</p>
+<p><img src="/images/img_75c489906720ac9b.png" alt="" /></p>
+<p><img src="/images/img_30eb1404481bf9f9.png" alt="" />
+트리거를 만들어준다.<br />
+배치 크기는 한번에 최대 몇개씩을 받을지를 정하는 옵션이다.</p>
+<br>
+<p><img src="/images/img_90f7a0eb13199eef.png" alt="" />
+그럼 이렇게 연동될 것이고</p>
+<br>
+<p><img src="/images/img_e7f46b7cd54fb833.png" alt="" />
+Dynamo 테이블에 데이터가 삽입, 수정, 삭제될때마다 반응해서 메세지를 전송하게 된다.<br />
+대충 하나 넣어봤다.</p>
+<br>
+<p><img src="/images/img_10aa3de8b2637995.png" alt="" />
+그럼 상태확인도 해주는데</p>
+<br>
+<p><img src="/images/img_c57e4a133318d99b.png" alt="" />
+와서 보면 삽입정보에 대한 이벤트가 찍혀있음을 볼 수 있다.<br />
+키만 받는 것으로 했기 때문에 키값만 넘어왔다. 저거 조회해서 잘 처리하면 된다.</p>
+<p>스트림 타입을 다른걸로 생성한다면</p>
+<p><img src="/images/img_aa7dc225e5f30682.png" alt="" /></p>
+<p><img src="/images/img_1ee9ca28697cf05d.png" alt="" /></p>
+<p><img src="/images/img_8abd47276ef3d215.png" alt="" />
+이런 느낌으로 온다. 이건 이전 상태와 현재 상태가 다 나와서 추가 조회 없이도 처리가 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="jaesido">재시도</h2>
+<p>Dynamo Stream은 실행한 Lambda가 실패하면 실패 상태로 간주하고 성공할때까지 재시도를 한다.</p>
+<p><img src="/images/img_5a9ec0d6991f18ab.png" alt="" />
+실행 로그 보니까 처음에는 초단위로 빠르게 재시도를 하다가 몇번 이상 실패하면 긴 간격으로 재시도를 하더라</p>
+<br>
+<br>
+<br>
+<h2 id="teurigeo-seoljeong-byeongyeong">트리거 설정 변경</h2>
+<p>Lambda의 트리거 탭으로 이동하면 Dynamo&lt;&gt;Lambda 간 상호작용 설정을 확인하거나 제어할 수 있다.</p>
+<p><img src="/images/img_079bcd6ae7c68c76.png" alt="" /></p>
+<br>
+<p><img src="/images/img_28bd3b63c53b8b98.png" alt="" />
+배치 옵션을 변경하거나</p>
+<br>
+<p><img src="/images/img_606c577f2f58a27f.png" alt="" />
+재시도 같은 몇가지 옵션을 조정할 수도 있다.<br />
+이게 앞의 프로세스가 실패하면 그게 성공할때까지 계속 retry를 하면서 이후 처리를 블락하기 때문에, 재시도를 usecase에 따라 조정하는게 중요하다.</p>
+<p>Retry attempts는 최대 재시도 횟수다. 기본값 -1는 계속 시도하는거다.<br />
+On-failure destination는 재시도가 끝나고 최종적으로 실패했을때 메세지를 어디로 보낼지를 지정한다. 보통 SNS나 SQS로 보낼 수 있다.</p>
+<p>Split batch on error는 오류가 발생하면 배치를 더 잘게 나눠서 재시도하는 옵션이다.<br />
+배치 단위가 너무 많아서 성능적 문제로 오류가 생길때 꽤 효과적으로 대응할 수 있는 기능이다.</p>
+<p>Concurrent batches per shard는 한 샤드에서 동시에 몇개의 배치를 돌릴지를 결정한다. 디폴트는 1이므로 한번에 하나의 배치만 돌린다.<br />
+동시에 실행되어도 되고 순서가 꼬여도 된다면 저걸 높이는게 성능상 유리할 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/Streams.html">https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/Streams.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/38571922/difference-between-kinesis-stream-and-dynamodb-streams">https://stackoverflow.com/questions/38571922/difference-between-kinesis-stream-and-dynamodb-streams</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/48676604/dynamodb-stream-in-ordering-processing">https://stackoverflow.com/questions/48676604/dynamodb-stream-in-ordering-processing</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Streams.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/lambda/latest/dg/with-ddb.html">https://docs.aws.amazon.com/lambda/latest/dg/with-ddb.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223388988975/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] ECS: Private Server 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223388803849/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>닷넷 개발자를 위한 Rust 가이드북.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

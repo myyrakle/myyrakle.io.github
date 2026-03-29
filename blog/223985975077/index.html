@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Qdrant] 샤드 (Shard) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223985975077/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Qdrant] 샤드 (Shard)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223985975077/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-08-28T00:00:00+00:00">
+    <meta property="article:tag" content="qdrant">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223985975077/">[Qdrant] 샤드 (Shard)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-28T00:00:00+00:00"><time datetime="2025-08-28T00:00:00+00:00">2025.08.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="514 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/qdrant/">qdrant</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223985975077" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223984676160">https://blog.naver.com/sssang97/223984676160</a><br />
+분산 DB 클러스터를 구성할 경우에는, 샤드와 레플리카를 관리하는 것이 중요한 지점이 된다.</p>
+<p>좀 헷갈릴 수 있는데, 샤드는 큰 데이터를 별도의 노드에 분산해서 저장하는 것을 말하고, 레플리카는 같은 데이터를 여러 노드에 복제해서 일종의 백업을 하는 것을 말한다.<br />
+샤드는 파티션이라고도 한며, 전적으로 큰 데이터를 효율적으로 핸들링하기 위한 수단이다.</p>
+<p>여기서는 샤드를 다루는 방법만 정리해본다.</p>
+<p>Qdrant DB는 3노드 클러스터로 구성되어있다고 가정하겠다.</p>
+<p><img src="/images/img_e103015dd1abfdeb.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="jadong-syadeu-guseong">자동 샤드 구성</h2>
+<p>분산 클러스터 모드에서는 따로 옵션을 주지 않고 컬렉션을 생성하더라도 샤드가 자동으로 구성된다.<br />
+데이터의 분포도를 예측할 수 없고, 항상 전체 데이터셋 기준으로 dynamic한 검색만을 수행해야 한다면 그냥 자동 샤딩을 사용해도 된다.</p>
+<p>샤드의 개수는 컬렉션 생성 시에 "shard_number"로 지정할 수 있으나, 기본값은 현재 노드의 개수다.</p>
+<p>그러니까 이 경우에는 그냥 만들어도 3개의 샤드로 분산되게 되는 셈이다.</p>
+<p><img src="/images/img_3f02ca0ac074ba81.png" alt="" /></p>
+<p><img src="/images/img_3c40c2c96ce3e56a.png" alt="" />
+만들고 보면 shard_number가 3개로 설정된 것을 볼 수 있다.</p>
+<p>그리고 컬렉션의 클러스터 정보를 보면</p>
+<p><img src="/images/img_877f63036bed6356.png" alt="" />
+해당 컬렉션이 설정된 샤드 목록을 또 볼 수 있다.<br />
+그리고 저 shard_id를 이용해서 섬세한 제어를 할 수도 있다.</p>
+<p>이 상태에서 데이터를 넣으면</p>
+<p><img src="/images/img_9d373b6b59ad8559.png" alt="" />
+그러면 qdrant가 자동으로 알아서 해싱하고, 적절한 샤드를 찾아서 각 노드에 쪼개서 저장하게 된다.</p>
+<p>그럼 검색할 때는 각 노드에 분산된 데이터를 어떻게 찾을까?<br />
+이것도 사실 elasticsearch와 접근법은 비슷하다.</p>
+<p><img src="/images/img_b7d377675983f54c.png" alt="" />
+query를 받은 DB 노드가 coordinator가 되어서, 다른 노드에서 데이터를 또 필요한 만큼 가져온다.<br />
+이 단계에서 사용자가 고려할 것은 딱히 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="syadeuyi-gaesu">샤드의 개수</h2>
+<p>샤드는 노드의 개수보다 많아도 된다. 기본적으로는 노드당 2개의 샤드를 잡는 것을 권장한다. 노드가 3개면 6개로 잡아도 되는 것이다.</p>
+<p>향후 확장이 예상된다면 훨씬 크게 잡아도 된다. 그러면 이후에 재샤딩을 할 필요 없이 편하게 확장할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="keoseuteom-syading-sudong-patisyeon">커스텀 샤딩 (수동 파티션)</h2>
+<p>근데 자동 샤딩을 쓰면 편하긴 하지만, 성능적으로 조정하기 어려운 부분이 생긴다.</p>
+<p>예상하고 있는 범위의 특정 데이터 군집을 반복적으로 접근한다고 하면, 그 군집을 샤드별로 쪼개고 매번 따로 조회하는 것은 지나치게 비효율적이기 때문이다.</p>
+<p>예를 들어, 특정 채팅방 안에 있는 채팅 데이터는 함께 조회되는 경우가 매우 많을 것이다.<br />
+이럴 때는 "채팅방 ID" 같은 것을 기반으로 어떤 데이터가 어떤 샤드에 저장될지를 직접 조정할 필요가 생긴다.</p>
+<p>그러면 다른 하나의 샤드만 조회해도 필요한 데이터를 빠르게 가져올 수 있다.</p>
+<p>한번 설정해보자.<br />
+컬렉션을 만들때 샤드 개수를 1로 지정하고, 샤딩 method를 커스텀으로 지정해야 한다.</p>
+<p><img src="/images/img_0cef8c49aff629e8.png" alt="" /></p>
+<p>그러면, 자동 샤딩모드와는 다르게 샤드 목록이 기본으로 생기지는 않을 것이다.</p>
+<p><img src="/images/img_eeef04b34a8eaf4f.png" alt="" />
+이걸 이제 우리 필요에 맞게 설정해줘야 한다.</p>
+<br>
+<p><img src="/images/img_747832ad3c4012b8.png" alt="" /></p>
+<p><img src="/images/img_3eba9edde12d1462.png" alt="" />
+이런 식으로 말이다.<br />
+그러면 이제부터는 데이터를 밀어넣을 때마다 저장할 샤드의 키를 정해줘야 한다.</p>
+<br>
+<p><img src="/images/img_1da12265fe4e1d27.png" alt="" />
+이제는 샤드 키 없이는 샵입도 안된다.</p>
+<br>
+<p><img src="/images/img_8de9c4d22df57479.png" alt="" />
+적당히 지정해서 넣고</p>
+<p>쿼리를 날려보면</p>
+<p><img src="/images/img_72e2b68660cb69e4.png" alt="" />
+기본 동작은 모든 샤드를 스캔하는 것이다.<br />
+그래서 지금은 개별 샤드에 존재하는 모든 값을 가져온 것을 볼 수 있다.</p>
+<p>특정 샤드에 있는 데이터만 조회해도 된다면, 쿼리할 때도 샤드 키를 지정할 수 있다.</p>
+<p><img src="/images/img_1f6b9e62a852ff7f.png" alt="" />
+그럼 딱 그거만 가져온 것을 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="juyisahang-keoseuteom-syading">주의사항: 커스텀 샤딩</h2>
+<p>다른 샤드에 동일한 point ID를 사용하는 것은 권장하지 않는다.<br />
+일단, 다른 샤드마다 동일한 point ID를 생성하는 것이 허용되긴 한다. 하지만 전체 샤드 대상으로 검색할 때는 확실하지 않은 방식으로 중복이 제거된다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://qdrant.tech/documentation/guides/distributed_deployment/#sharding">https://qdrant.tech/documentation/guides/distributed_deployment/#sharding</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223987265282/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Concurrency] 채널과 Pipeline Pattern<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223985985991/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Qdrant] 샤드 - 레플리카<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

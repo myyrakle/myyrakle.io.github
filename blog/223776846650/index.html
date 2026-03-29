@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana Tempo] API 기본 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223776846650/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana Tempo] API 기본">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223776846650/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-02-27T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223776846650/">[Grafana Tempo] API 기본</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-27T00:00:00+00:00"><time datetime="2025-02-27T00:00:00+00:00">2025.02.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="227 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223776846650" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이번엔 그냥 대시보드랑 sdk로 대충 끼우는거 말고, 직접 HTTP API 쏴보면서 구조를 파악해보자.<br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/api_docs/">https://grafana.com/docs/tempo/latest/api_docs/</a></p>
+<p>구성은 docker compose 기반이다.<br />
+이게 tempo.yml이고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>stream_over_http_enabled</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>server</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  http_listen_port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3200</span></span>
+<span class="giallo-l"><span>  log_level</span><span style="color: #9399B2;">:</span><span> info</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>query_frontend</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  search</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>    throughput_bytes_slo</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1.073741824e+09</span></span>
+<span class="giallo-l"><span>    metadata_slo</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>      throughput_bytes_slo</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1.073741824e+09</span></span>
+<span class="giallo-l"><span>  trace_by_id</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>  metrics</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    max_duration</span><span style="color: #9399B2;">:</span><span> 120h</span></span>
+<span class="giallo-l"><span>    query_backend_after</span><span style="color: #9399B2;">:</span><span> 5m</span></span>
+<span class="giallo-l"><span>    duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>    throughput_bytes_slo</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1.073741824e+09</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>distributor</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  receivers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    otlp</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      protocols</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        http</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          endpoint</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;0.0.0.0:4318&quot;</span></span>
+<span class="giallo-l"><span>        grpc</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          endpoint</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;0.0.0.0:4317&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>ingester</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  max_block_duration</span><span style="color: #9399B2;">:</span><span> 5m # cut the headblock when</span><span style="color: #F38BA8;"> this</span><span> much time passes</span><span style="color: #94E2D5;">.</span><span> this is being set for demo purposes and should probably be left alone normally</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>compactor</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  compaction</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    block_retention</span><span style="color: #9399B2;">:</span><span> 168h</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>metrics_generator</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  registry</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    external_labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      source</span><span style="color: #9399B2;">:</span><span> tempo</span></span>
+<span class="giallo-l"><span>      cluster</span><span style="color: #9399B2;">:</span><span> docker</span><span style="color: #94E2D5;">-</span><span>compose</span></span>
+<span class="giallo-l"><span>  storage</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo/generator/wal</span></span>
+<span class="giallo-l"><span>  traces_storage</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo/generator/traces</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>storage</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  trace</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    backend</span><span style="color: #9399B2;">:</span><span> local # backend configuration to use</span></span>
+<span class="giallo-l"><span>    wal</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo/wal # where to store the wal locally</span></span>
+<span class="giallo-l"><span>    local</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo/blocks</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>overrides</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  defaults</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    metrics_generator</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      processors</span><span style="color: #9399B2;">:</span><span> [service</span><span style="color: #94E2D5;">-</span><span>graphs</span><span style="color: #9399B2;">,</span><span> span</span><span style="color: #94E2D5;">-</span><span>metrics</span><span style="color: #9399B2;">,</span><span> local</span><span style="color: #94E2D5;">-</span><span>blocks] # enables metrics generator</span></span>
+<span class="giallo-l"><span>      generate_native_histograms</span><span style="color: #9399B2;">:</span><span> both</span></span></code></pre>
+<p>이게 docker-compose.yml이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>services</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  tempo</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> grafana</span><span style="color: #94E2D5;">/</span><span>tempo</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">2.7</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;3200:3200&quot;</span></span>
+<span class="giallo-l"><span>    command</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;-config.file=/etc/tempo.yaml&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> tempo_data</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">var</span><span>/tempo</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - ./</span><span>tempo</span><span style="color: #94E2D5;">.</span><span>yaml:</span><span style="color: #94E2D5;">/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>tempo</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  tempo_data</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span></code></pre>
+<p><img src="/images/img_f909476b40681199.png" alt="" />
+실행한다.<br />
+3200 포트로 Tempo 서버를, 4318 포트로 open telemetry 호환 서버를 열었다.</p>
+<br>
+<br>
+<br>
+<h2 id="sangtae-hwagin">상태 확인</h2>
+<p>기본적으로 Tempo에 직접 읽기를 쏘는 것은 3200 포트를 사용한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>X GET http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//localhost:3200/status</span></span></code></pre>
+<p><img src="/images/img_d0244fd575f06bbe.png" alt="" />
+그럼 이렇게 상태 정보나 api 목록같은게 뜬다.</p>
+<br>
+<br>
+<br>
+<h2 id="trace-sabibhagi">trace 삽입하기</h2>
+<p>데이터를 집어넣을 때는 oltp 호환 엔드포인트를 통해 찔러야 한다.<br />
+이렇게 넣으면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>X POST http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//localhost:4318/v1/traces \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>H</span><span style="color: #A6E3A1;"> &quot;Content-Type: application/json&quot;</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>d</span><span style="color: #A6E3A1;"> &#39;{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;resourceSpans&quot;</span><span>: [</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;resource&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;attributes&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;key&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;service.name&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span style="color: #A6E3A1;"> &quot;stringValue&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;test-service&quot;</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;scopeSpans&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;spans&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;traceId&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;5b8aa5a2d2c872e8321cf37308d69df2&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;spanId&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;5fb397be34d25d8b&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;test-span&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;kind&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;startTimeUnixNano&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;1644238522000000000&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;endTimeUnixNano&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;1644238522000000000&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      }</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>]</span></span>
+<span class="giallo-l"><span>  }</span><span style="color: #A6E3A1;">&#39;</span></span></code></pre>
+<p><img src="/images/img_f80cad15c1b8ff38.png" alt="" />
+이렇게 뜨면 잘 된 것이다.<br />
+scopeSpans에 있는게 기본적인 span 필드 값들이다.<br />
+kind가 서버인지 consumer인지 구분하는 enum 정수값이고, resource.attribute가 부가적인 태그값들이다.</p>
+<br>
+<br>
+<br>
+<h2 id="dansun-johoe">단순 조회</h2>
+<p>traceID 기반의 상세 조회는 그냥 trace ID를 path parameter로 채워서 쏘면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>X GET http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//localhost:3200/api/traces/5b8aa5a2d2c872e8321cf37308d69df2</span></span></code></pre>
+<p><img src="/images/img_53fdb654a8269709.png" alt="" /></p>
+<p>search API를 쓰면 태그값들을 기반으로 필터해서 가져올 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>X GET</span><span style="color: #A6E3A1;"> &quot;http://localhost:3200/api/search?tags=service.name%3Dtest-service&quot;</span></span></code></pre>
+<p><img src="/images/img_ea4bbab519ce51b8.png" alt="" /></p>
+<p>grafana에서도 explorer 탭에서 이 search 기능을 시각화된 형태로 사용할 수 있다.</p>
+<p><img src="/images/img_1e3684ba6187f481.png" alt="" /></p>
+<p>근데 이런 방식은 좀 불편하기도 하고, 보통 traceQL이라는 확장 구문을 통해서 Grafana에서 직접 쏘는 형태로 자주 쓴다.</p>
+<p>q라는 파라미터에 TraceQL 표현식을 담아서 쏘면 거기 맞춰서 뿌려준다.</p>
+<p><img src="/images/img_e3b2e9e100e60e8e.png" alt="" />
+TraceQL의 문법과 사용법은 다음 포스트에서 다뤄본다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/api_docs/">https://grafana.com/docs/tempo/latest/api_docs/</a><br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/api_docs/pushing-spans-with-http/">https://grafana.com/docs/tempo/latest/api_docs/pushing-spans-with-http/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223776513738/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Prometheus] 메모리 사용 구조 및 최적화<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223776961843/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Grafana Tempo] TraceQL<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

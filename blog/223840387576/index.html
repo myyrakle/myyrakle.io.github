@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Vector Search 벤치마크 (pgvector, elasticsearch, qdrant) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223840387576/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Vector Search 벤치마크 (pgvector, elasticsearch, qdrant)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223840387576/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-04-20T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223840387576/">Vector Search 벤치마크 (pgvector, elasticsearch, qdrant)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-20T00:00:00+00:00"><time datetime="2025-04-20T00:00:00+00:00">2025.04.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="707 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223840387576" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Vector Search를 약간 실험적으로 도입해볼 필요가 있었는데, 리소스를 대략적으로 얼마나 요구하는지, 성능은 어떤지 등을 확인해보려고 간단하게 벤치마크를 구성해서 돌려봤다.</p>
+<p>예상되는 초기 데이터 크기는 1000만개 정도.<br />
+벡터의 크기는 256, dot product를 사용할 예정이었다.<br />
+처리 시간은 빠르면 빠를수록 좋지만, 밀리초 단위만 보장되더라도 충분했다.</p>
+<p>시스템 리소스도 적으면 적을수록 좋았다. 확실한 유용성이 아직 검증되지 않았으므로, 일단 가볍게 시작해서 데이터셋과 사용량이 증가한 다음에 본격적으로 옮기는 것도 검토해볼만했다.</p>
+<p>그래서 단일 노드에, 메모리는 8GB, CPU는 단일코어로 가정하고 얼마나 잘 버티는지를 검증했다.</p>
+<p>후보는 PostgreSQL(pgvector), Elasticsearch 정도다.<br />
+milvus 같은 전문 vectordb도 생각은 해봤지만, 충분한 사용량이 생긴 뒤에 옮겨도 무방하다고 판단했다.</p>
+<p>테스트에 사용한 전체 소스코드는 깃헙에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/benchmarks/tree/master/vector_search">https://github.com/myyrakle/benchmarks/tree/master/vector_search</a></p>
+<br>
+<br>
+<br>
+<h2 id="begteo-saengseong">벡터 생성</h2>
+<p>먼저 테스트에 사용할 벡터열 1000만개를 사전에 생성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use rand</span><span style="color: #9399B2;">:</span><span>:Rng</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:fs</span><span style="color: #9399B2;">:</span><span>:OpenOptions</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:io</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>BufWriter</span><span style="color: #9399B2;">,</span><span> Write</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:Instant</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> NUM_VECTORS</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10_000_000</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> VECTOR_DIM</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 256</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> OUTPUT_FILE</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">str</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;vectors.txt&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    println!(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;Generating {} vectors of dimension {}...&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        NUM_VECTORS</span><span style="color: #9399B2;">,</span><span> VECTOR_DIM</span></span>
+<span class="giallo-l"><span>    );</span></span>
+<span class="giallo-l"><span>    let start_time</span><span style="color: #94E2D5;"> =</span><span> Instant::</span><span style="color: #89B4FA;font-style: italic;">now</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let file</span><span style="color: #94E2D5;"> =</span><span> OpenOptions::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span></span>
+<span class="giallo-l"><span>        .create(true)</span></span>
+<span class="giallo-l"><span>        .write(true)</span></span>
+<span class="giallo-l"><span>        .truncate(true)</span></span>
+<span class="giallo-l"><span>        .open(OUTPUT_FILE)</span></span>
+<span class="giallo-l"><span>        .unwrap();</span></span>
+<span class="giallo-l"><span>    let mut writer</span><span style="color: #94E2D5;"> =</span><span> BufWriter::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(file);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut randomizer</span><span style="color: #94E2D5;"> =</span><span> rand::</span><span style="color: #89B4FA;font-style: italic;">rng</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    for i in </span><span style="color: #FAB387;">0.</span><span>.NUM_VECTORS {</span></span>
+<span class="giallo-l"><span>        let vector</span><span style="color: #94E2D5;">:</span><span> Vec</span><span style="color: #94E2D5;">&lt;</span><span>f32</span><span style="color: #94E2D5;">&gt; =</span><span> (</span><span style="color: #FAB387;">0.</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">VECTOR_DIM</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">map</span><span>(</span><span style="color: #94E2D5;">|</span><span>_</span><span style="color: #94E2D5;">|</span><span> randomizer</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">random_range</span><span>(</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">.1</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">collect</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let magnitude: f32</span><span style="color: #94E2D5;"> =</span><span> vector</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">iter</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">map</span><span>(</span><span style="color: #94E2D5;">|&amp;</span><span>val</span><span style="color: #94E2D5;">|</span><span> val</span><span style="color: #94E2D5;"> *</span><span> val)</span><span style="color: #94E2D5;">.</span><span>sum::</span><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">f32</span><span style="color: #94E2D5;">&gt;</span><span>().sqrt();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        // 각 요소를 크기로 나누어 정규화</span></span>
+<span class="giallo-l"><span>        let normalized_vector: Vec&lt;half::f16&gt; = vector</span></span>
+<span class="giallo-l"><span>            .iter()</span></span>
+<span class="giallo-l"><span>            .map(|&amp;val| half::f16::from_f32(val / magnitude))</span></span>
+<span class="giallo-l"><span>            .collect();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        // 벡터를 문자열 레코드로 변환</span></span>
+<span class="giallo-l"><span>        let record: Vec</span><span style="color: #94E2D5;">&lt;</span><span style="color: #F5C2E7;">String</span><span style="color: #94E2D5;">&gt;</span><span> = normalized_vector</span></span>
+<span class="giallo-l"><span>            .iter()</span></span>
+<span class="giallo-l"><span>            .map(|&amp;val| val.to_string())</span></span>
+<span class="giallo-l"><span>            .collect();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        // 진행 상황 표시 (선택 사항, 성능에 약간 영향 줄 수 있음)</span></span>
+<span class="giallo-l"><span>        if (i + 1) % 1_000_000 == 0 </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Generated {} vectors...&quot;</span><span style="color: #9399B2;">,</span><span> i</span><span style="color: #94E2D5;"> +</span><span style="color: #FAB387;"> 1</span><span>);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let row_string = record.join(&quot;,&quot;);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        // 파일에 벡터 문자열을 append로 저장</span></span>
+<span class="giallo-l"><span>        writer.write_all(row_string.as_bytes())?;</span></span>
+<span class="giallo-l"><span>        writer.write_all(b&quot;\n&quot;)?;</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let duration = start_time.elapsed();</span></span>
+<span class="giallo-l"><span>    println!(</span></span>
+<span class="giallo-l"><span>        &quot;Successfully generated and saved </span><span style="color: #9399B2;">{}</span><span> vectors to </span><span style="color: #9399B2;">{}</span><span>&quot;,</span></span>
+<span class="giallo-l"><span>        NUM_VECTORS, OUTPUT_FILE</span></span>
+<span class="giallo-l"><span>    );</span></span>
+<span class="giallo-l"><span>    println!(&quot;Total time taken: </span><span style="color: #9399B2;">{</span><span>:</span><span style="color: #94E2D5;">?</span><span>}</span><span style="color: #A6E3A1;">&quot;, duration);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p><img src="/images/img_643a0877b47fe10e.png" alt="" />
+뽑으니까 7기가 정도의 텍스트가 나왔다.</p>
+<br>
+<br>
+<br>
+<h2 id="db-seoljeong">DB 설정</h2>
+<p>데이터베이스는 pgvector(hnsw용), pgvector(ivfflat용), elasticsearch 정도만 고려했다.</p>
+<p>도커 컨테이너 기반으로 테스트 환경을 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>services</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  pgvector</span><span style="color: #94E2D5;">-</span><span>IVFFlat</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> pgvector</span><span style="color: #94E2D5;">/</span><span>pgvector</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">0.8</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0</span><span style="color: #94E2D5;">-</span><span>pg17</span></span>
+<span class="giallo-l"><span>    container_name</span><span style="color: #9399B2;">:</span><span> pgvector</span><span style="color: #94E2D5;">-</span><span>ivfflat</span></span>
+<span class="giallo-l"><span>    environment</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> POSTGRES_USER</span><span style="color: #94E2D5;">=</span><span>postgres</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> POSTGRES_PASSWORD</span><span style="color: #94E2D5;">=</span><span>q1w2e3r4</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> POSTGRES_DB</span><span style="color: #94E2D5;">=</span><span>postgres</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;15432:5432&quot;</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> pg</span><span style="color: #94E2D5;">-</span><span>IVFFlat</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">var</span><span>/lib/postgresql/data</span></span>
+<span class="giallo-l"><span>    deploy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        limits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          cpus</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;1&quot;</span></span>
+<span class="giallo-l"><span>          memory</span><span style="color: #9399B2;">:</span><span> 8096M</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  pgvector</span><span style="color: #94E2D5;">-</span><span>HNSW</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> pgvector</span><span style="color: #94E2D5;">/</span><span>pgvector</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">0.8</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0</span><span style="color: #94E2D5;">-</span><span>pg17</span></span>
+<span class="giallo-l"><span>    container_name</span><span style="color: #9399B2;">:</span><span> pgvector</span><span style="color: #94E2D5;">-</span><span>hnsw</span></span>
+<span class="giallo-l"><span>    environment</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> POSTGRES_USER</span><span style="color: #94E2D5;">=</span><span>postgres</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> POSTGRES_PASSWORD</span><span style="color: #94E2D5;">=</span><span>q1w2e3r4</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> POSTGRES_DB</span><span style="color: #94E2D5;">=</span><span>postgres</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;15433:5432&quot;</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> pg</span><span style="color: #94E2D5;">-</span><span>HNSW</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">var</span><span>/lib/postgresql/data</span></span>
+<span class="giallo-l"><span>    deploy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        limits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          cpus</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;1&quot;</span></span>
+<span class="giallo-l"><span>          memory</span><span style="color: #9399B2;">:</span><span> 8096M</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  esdata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span>
+<span class="giallo-l"><span>  pg</span><span style="color: #94E2D5;">-</span><span>IVFFlat</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span>
+<span class="giallo-l"><span>  pg</span><span style="color: #94E2D5;">-</span><span>HNSW</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span></code></pre><br>
+<br>
+<br>
+<br>
+<h2 id="deiteo-cogihwa">데이터 초기화</h2>
+<p>인덱스를 전부 구성해놓은 상태에서 만들어뒀던 벡터 1000만개를 밀어넣었다.</p>
+<p>단순성을 위해 순진하게 하나씩 순서대로 넣는 방식을 취했다.</p>
+<p>그렇게 했을때</p>
+<p><img src="/images/img_9b05b24ac34f044d.png" alt="" />
+pgvector(IVFFLAT)는 9시간 정도 걸렸고</p>
+<p>pgvector(hnsw)는 특히나 오래 걸렸다. 메모리 병목에 걸린건지 뭔지는 잘 모르겠다.</p>
+<p><img src="/images/img_4fd28ece9e4a07e0.png" alt="" /></p>
+<p><img src="/images/img_6498cb43fea0cbb9.png" alt="" />
+확실한건 전반적인 리소스 소모량이 압도적으로 많았다는 것이다. 디스크 I/O도 무슨 테라급으로 소모했다.</p>
+<br>
+<p><img src="/images/img_851fd491ed9009e6.png" alt="" /></p>
+<p><img src="/images/img_ee505a638e779eda.png" alt="" />
+pgvector(hnsw)는 3일 정도 걸렸다.</p>
+<br>
+<p><img src="/images/img_264ec6a9f8933fef.png" alt="" />
+elasticsearch는 25시간이 걸렸다.</p>
+<br>
+<p><img src="/images/img_b2bc29d95d78cf22.png" alt="" /></p>
+<p><img src="/images/img_2919f3dae448237f.png" alt="" />
+평상시 리소스 사용량은 대략 이렇다.<br />
+ivfflat이 유독 리소스를 적게 먹는 편이긴 하더라.</p>
+<br>
+<p><img src="/images/img_007fbf1a387d1e22.png" alt="" /></p>
+<p><img src="/images/img_162b3d6186481aee.png" alt="" />
+qdrant는 삽입 속도는 준수하고 메모리 사용량도 낮았는데, 가끔 CPU가 훅 치고 yellow가 뜨는 구간이 있었다. 뭔가 모아서 한번에 디스크에 압축하거나 하는 패턴이 있는 것 같다.</p>
+<br>
+<br>
+<br>
+<h4 id="daman">다만</h4>
+<p>실제 응용 환경에서는 초기화에 걸리는 시간이 이와는 크게 다를 것이다.</p>
+<p>일단 벡터 임베딩을 모델로부터 받아오는 딜레이가 존재할 것이다. 이건 느려질 수 있는 요인이다.</p>
+<p>보통의 DB 환경에서는 이보다 리소스가 넉넉할 것이다. 나는 1cpu로 빡세게 걸어놔서 스로틀링이 과하게 걸렸을 것이다. 보통 메모리를 8 잡으면 코어는 2~4개쯤 넣는다.</p>
+<p>그리고 데이터 추가시에도 batch 단위로 모아서 insert를 하면 처리시간을 좀 높일 수 있다.</p>
+<p>(pgvector의 경우) 인덱스를 만들기 전에 벡터를 밀어넣고, 데이터가 있는 상태에서 인덱스를 한번에 생성할 수도 있다. 워커 메모리 충분히 주고 돌리면 이보다는 빨리 될 것이다.</p>
+<br>
+<p>자, 그럼 준비가 됐으니 벤치를 적당히 찔러보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="diseukeu-sayongryang">디스크 사용량</h2>
+<p>디스크 사용량은 DB별로 차이가 좀 나긴 했다.</p>
+<p><img src="/images/img_dc20df9b096b5d6f.png" alt="" /></p>
+<p><img src="/images/img_5528d0715642a0a2.png" alt="" /></p>
+<p><img src="/images/img_add9fbf1afd50f80.png" alt="" />
+elasticsearch가 가장 많은 공간을 차지했고</p>
+<br>
+<p><img src="/images/img_fe18a3d957c22d99.png" alt="" />
+qdrant가 그래도 벡터 전문이라고 가장 컴팩트하게 썼다.</p>
+<br>
+<br>
+<br>
+<h2 id="pgvector-ivfflat-bencimakeu">pgvector(IVFFLAT) 벤치마크</h2>
+<p>로직에 별로 특별한 부분은 없다.</p>
+<p><img src="/images/img_0ba58274bb2849ec.png" alt="" />
+쿼리는 100번 정도만 찔러보게 했다.<br />
+그리고 동시처리 태스크느 16개 정도만 잡았다.</p>
+<br>
+<p><img src="/images/img_c8d297ce2ddd7bc2.png" alt="" />
+가져올 데이터는 10개로 잡았다.</p>
+<br>
+<p><img src="/images/img_45c9cb405f31d669.png" alt="" /></p>
+<p><img src="/images/img_22d0ad1d7b2dd15c.png" alt="" />
+최대 레이턴시가 300ms 정도까지 나와서엄청 빠르다고 할 정도는 아니었지만, 평균 처리속도는 크게 나쁘지 않았다.</p>
+<p>DB측의 CPU 리소스 압박은 약간 있었다.</p>
+<br>
+<br>
+<br>
+<h2 id="pgvector-hnsw-bencimakeu">pgvector(HNSW) 벤치마크</h2>
+<p>hnsw는 꽤나 빠르고 안정적이었다.</p>
+<p><img src="/images/img_f07205292bbbccb8.png" alt="" /></p>
+<p><img src="/images/img_0db1ba65ad3a5619.png" alt="" />
+확실히 레이턴시가 lvfflat에 비해서 짧고 안정적이었다.</p>
+<br>
+<br>
+<br>
+<h2 id="elasticsearch-bencimakeu">elasticsearch 벤치마크</h2>
+<p>elasticsearch도 비슷하게 구성해서 벤치를 때렸다.</p>
+<p><img src="/images/img_d48803c335f7db90.png" alt="" /></p>
+<p><img src="/images/img_1d4e661337177d35.png" alt="" />
+생각했던 것 보다는 레이턴시가 저조했다.</p>
+<p>샤드를 나누고, 정확도를 낮추고, 성능을 높이게끔 옵션을 조정하면 성능이 더 나오겠지만, 일단은 여기서 기본적인 단일노드 테스트로 마무리해보려고 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="qdrant-bencimakeu">qdrant 벤치마크</h2>
+<p>qdrant는 전용 VectorDB인 것에 비해 평균 처리량은 생각보다 그리 빠르지는 않았다.</p>
+<p><img src="/images/img_1924565f0f9918a8.png" alt="" />
+3자리 밀리초 정도로 처리가 되었다.</p>
+<br>
+<p><img src="/images/img_627a1172a886980b.png" alt="" />
+그리고 돌때 CPU 리소스를 조금 먹긴 했다.</p>
+<p>이것도 효율적으로 쓰려면 옵션 조정이 필요할 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeongri">정리</h2>
+<p>특이하게도 레이턴시만 보자면 pgvector-hnsw가 꽤나 빨랐다. elasticsearch와 qdrant 같은 경우에는 뭔가 리소스 요구량이 더 많아서인지 모르겠는데, 이 정도 각박한 사양에서는 아주 그렇게 빠르지는 못했다.</p>
+<p>다만 qdrant가 레이턴시보다는 메모리 사용량에 있어서 장점이 두드러진 것 같다. 1000만개 넣었는데도 평상시 메모리 점유율이 1기가 조금 넘는 수준이더라. 다른 DB들은 평상시에도 메모리의 대부분을 썼는데, 리소스 효율성 자체는 압도적이었다.</p>
+<p>추가 DB 구성을 반기지 않는다면 pgvector-ivfflat도 꽤나 쓸만한거같다. 데이터 규모가 커질때 옵션을 조정하는게 까다롭고, 레이턴시가 조금 튀다는 단점은 있다.</p>
+<p>초기버전에서 "사전 필터링" 같은 고급기능이 필요하지 않다면 pgvector도 고려해볼만한 것 같다.<br />
+기존에 검색엔진으로 elasticsearch를 쓰던 상황이면 elasticsearch 또한 고려해봄직하다.</p>
+<p>하지만 둘다 쓰지 않았거나, 정말 수천만을 넘어가는 데이터셋을 적은 리소스로 효율적으로 관리하고 싶다면 qdrant가 좋은 선택일 것 같긴 하다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223839344102">https://blog.naver.com/sssang97/223839344102</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/223802994977">https://blog.naver.com/sssang97/223802994977</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223840155251/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Database] 데이터의 분산: 샤드와 레플리카<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223840728230/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Rust GUI 도구 정리.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

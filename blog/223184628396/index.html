@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] 다형적인 값에 대한 JSON 역직렬화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223184628396/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] 다형적인 값에 대한 JSON 역직렬화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223184628396/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-08-16T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223184628396/">[Go] 다형적인 값에 대한 JSON 역직렬화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-16T00:00:00+00:00"><time datetime="2023-08-16T00:00:00+00:00">2023.08.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="244 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223184628396" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Go에서는 아래와 같이 구조체와 구조체 태그를 이용해서 직렬화/역직렬화를 수행한다.</p>
+<p><img src="/images/img_4ab6e667492085e9.png" alt="" />
+근데 Go는 경직된 언어 특성 탓에 조금.. 한계를 맞이할 때가 있다.</p>
+<p>예를 들면, 이런 경우다.</p>
+<p><img src="/images/img_d33171808ff58669.png" alt="" />
+특정 필드가 어떨때는 배열로 날라오고 어떨때는 객체로 날라온다거나 하는 그런 경우 말이다.<br />
+이런 경우가 있을까 싶을 수도 있지만, 있다. 생각보다 적지가 않다.</p>
+<p>혹은 특정 type 필드에 따라서 다른 필드값이 죄다 바뀌는 형태로 설계가 되어있는 것들도 있다.</p>
+<p>일단 돌려보기나 해보자.</p>
+<p><img src="/images/img_25adbdf9c399a0b9.png" alt="" /></p>
+<p><img src="/images/img_59e23949f4efa669.png" alt="" />
+그러면 당연히 에러가 터진다.</p>
+<p>Golang은 이에 대한 세련된 해결책을 제공할까? 사실 없다.<br />
+이런걸 제대로 처리하려면 Rust, Typescript처럼 Union 타입이 있어야 하는데, Go는 그런게 아예 없기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jigryeolhwa-musi">직렬화 무시</h2>
+<p>이 오류를 제거하는 가장 간단한 방법은, 그냥 무시하도록 하는 것이다.<br />
+json.RawMessage 타입을 붙이면 json 디코더는 해당 필드를 굳이 역직렬화하려고 시도하지 않고, byte 슬라이스 그대로 남겨둔다.</p>
+<p><img src="/images/img_a4c0ad2a7ac9517e.png" alt="" /></p>
+<p><img src="/images/img_62f530dd4c163e92.png" alt="" /></p>
+<p><img src="/images/img_7270832d21f718e9.png" alt="" />
+그러면 이걸 받아서 수동으로 직접 처리하거나 하면 된다...</p>
+<br>
+<br>
+<br>
+<h2 id="any-baggi">Any 박기</h2>
+<p>혹은 타입에 그냥 Any를 박는 것도 방법이다.<br />
+그럼 대충 넣어주긴 한다. 타이핑이 안돼서 그렇지</p>
+<p><img src="/images/img_855b340e4d6c33ce.png" alt="" /></p>
+<p>이것도 마찬가지로 꺼내쓰려면 뻘짓을 해야한다.</p>
+<p><img src="/images/img_126e6f6aa875b98d.png" alt="" /></p>
+<p>돌기는 잘 돈다.</p>
+<p><img src="/images/img_e817eba198cbd8f7.png" alt="" /></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/55994888/unmarshal-json-tagged-union-in-go">https://stackoverflow.com/questions/55994888/unmarshal-json-tagged-union-in-go</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/42721732/is-there-a-way-to-have-json-unmarshal-select-struct-type-based-on-type-prope">https://stackoverflow.com/questions/42721732/is-there-a-way-to-have-json-unmarshal-select-struct-type-based-on-type-prope</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223184617858/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] data race와 mutex, atomic<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223183049195/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] Zero Value 응용<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

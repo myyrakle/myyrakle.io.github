@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Database] Offset과 성능 문제 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223643145309/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Database] Offset과 성능 문제">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223643145309/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-11-01T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223643145309/">[Database] Offset과 성능 문제</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-01T00:00:00+00:00"><time datetime="2024-11-01T00:00:00+00:00">2024.11.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="405 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223643145309" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_05ac2fec767406a7.png" alt="" />
+RDB, NoSQL을 불문하고 데이터를 N번째부터 걸러서 조회하는 기능들은 다 제공된다.<br />
+용어는 offset, skip 등 몇가지가 있지만 근본 원리나 동작 방식은 대동소이하다.</p>
+<p>근데 문제는 이게 결과가 배열에서 인덱싱하는 것처럼(arr[i:]) 보인다고 해서, 정말 배열처럼 동작하는게 아니라는 것이다.</p>
+<p>배열은 그냥 메모리에 전부 로드해놓고 쓰니까 어느 지점에서의 직접 접근이든 빠른 성능을 보장할 수 있지만, 데이터베이스들은 소스가 디스크에 있고 필터도 있기 때문에 그리 간단하지만은 않다.</p>
+<p><img src="/images/img_ea98a882d248ec99.png" alt="" />
+이렇게 데이터가 5000개 정도 있다고 가정해보자</p>
+<p>그리고 저기서 데이터를 1000개씩 가져온다 치면, 쿼리를 이렇게 날릴 것이다.</p>
+<p><img src="/images/img_f3f862975e8286e2.png" alt="" />
+이렇게 오프셋이 0일때는 문제가 없다.<br />
+딱 1000개만 스캔해서 빠르게 가져온다.</p>
+<br>
+<p><img src="/images/img_47ba8d32bbb7afe9.png" alt="" />
+근데 좀 건너뛰어서 3000-4000을 조회하려고 한다면 어떻게 동작할까?<br />
+딱 3000부터 순서대로 가져올 거라고 기대할 수도 있지만, 그렇지 않을 확률이 더 높다.</p>
+<br>
+<br>
+<p><img src="/images/img_caf5cd9f1c5da8da.png" alt="" />
+대부분의 데이터베이스는 이 상황에서, 처음부터 다 스캔한 다음에 그 메모리 뭉치에서 마지막 3000번째부터를 잘라서 반환한다.</p>
+<p>RDB의 경우에는 LIMIT/OFFSET이 가장 마지막에 처리되는 프로세스고, 애초에 DB 입장에서는 디스크에서 데이터를 로드하지 않고서는 3000번째 데이터가 뭔지를 알 수가 없다.</p>
+<p>그러니 일단 메모리에 다 올린 다음에 확인할 수 밖에 없는 것이다.</p>
+<p>때문에 row가 많은 데이터에서 큰 offset으로 조회하는 쿼리는 매우 무겁고 느리게 동작한다.</p>
+<p>딱 정렬조건에 맞는 인덱스가 컴팩트하게 걸려있고 필터가 뭐 없다면 offset 인덱스를 탈 수도 있지만, 현실세계의 쿼리들은 복잡한 필터를 수반하므로 인덱스가 걸릴 확률은 없다.<br />
+애당초 offset 자체가 필터를 거친 다음에 이뤄지는 것이기 때문에 오프셋 기준으로 딱 맞춰서 인덱스 스캔을 하는게 사실상 불가능하기 때문이다.</p>
+<p>이건 RDB만 그런게 아니고 거의 모든 DB들이 공유하는 근본적인 한계점이다.</p>
+<br>
+<br>
+<br>
+<h2 id="haegyeolcaeg-a-opeusese-coedaegabs-jijeong">해결책 A: 오프셋에 최대값 지정</h2>
+<p>offset의 대표적인 사용처는 아무래도 페이지네이션일 것이다.</p>
+<p>근데 사실 페이지네이션이 존재하는 대부분의 서비스에서는... 성능 문제때문에 그냥 페이지 접근을 어느 한도 이상으로는 하지 못하게 막는다.</p>
+<p>네이버도 그렇고, 구글도 그렇고 다 그렇다. 이름난 서비스 중에서 페이지네이션을 무한하게 제공하는 서비스는 못본거같다.</p>
+<br>
+<br>
+<br>
+<h2 id="haegyeolcaeg-b-keoseo">해결책 B: 커서</h2>
+<p>아무튼 이런 성능 문제 때문에 요즘 나오는 대부분의 서비스는 페이지 숫자로 접근하는 페이지네이션 대신, "커서(cursor)" 기반의 방식을 사용한다.<br />
+무한 스크롤이라고도 부른다.</p>
+<p>이 기법에서는, 일단 정렬 기준을 정해야 한다.<br />
+ID로 오름차순 정렬을 한다 치자</p>
+<p><img src="/images/img_fd32a0416b6c7461.png" alt="" />
+먼저 1...1000를 조회해서 받아왔다면, 그 다음에는 1000보다 큰 값을 기준으로 필터링을 하도록 하는 것이다. 여기서 전달하는 값 기준을 커서라 한다.</p>
+<p>이러면 딱 3000인 지점부터 빠르게 긁어서 가져올 수 있고, 복잡한 필터가 달린 상황에서도 최적화가 비교적 수월하게 된다.</p>
+<p>아래는 Postgres 기반의 간단한 성능테스트 예제다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create table</span><span style="color: #89B4FA;font-style: italic;"> test_table</span><span> (</span></span>
+<span class="giallo-l"><span>	id INT primary key</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	num INT not</span><span style="color: #CBA6F7;"> null</span><span> </span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>insert into</span><span style="color: #89B4FA;font-style: italic;"> test_table</span><span>(id</span><span style="color: #9399B2;">,</span><span> num)</span></span>
+<span class="giallo-l"><span>select t</span><span style="color: #94E2D5;">.</span><span>n</span><span style="color: #9399B2;">,</span><span> (</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;">*</span><span style="color: #FAB387;">100</span><span>)::INTEGER</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">from</span><span> (</span></span>
+<span class="giallo-l"><span>	select</span><span style="color: #89B4FA;font-style: italic;"> generate_series</span><span>(</span><span style="color: #FAB387;">0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 10000000</span><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> n</span><span> </span></span>
+<span class="giallo-l"><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> t</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_6ad0fd386ee9697e.png" alt="" />
+1000만개쯤 넣고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">explain</span><span>(analyze)</span></span>
+<span class="giallo-l"><span>select</span><span style="color: #94E2D5;"> *</span><span> </span></span>
+<span class="giallo-l"><span>from test_table</span></span>
+<span class="giallo-l"><span>offset</span><span style="color: #FAB387;"> 9900000</span></span>
+<span class="giallo-l"><span>limit</span><span style="color: #FAB387;"> 1000</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_3f0f259a0d8b582a.png" alt="" />
+그냥 뒷부분부터 조회하면, 0.5초 가까이 걸렸다.<br />
+풀스캔때린다음에 맨 뒷부분까지 다 가서 조회한 것이기 때문이다.</p>
+<p>하지만 커서 기반으로 처리하면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">explain</span><span>(analyze)</span></span>
+<span class="giallo-l"><span>select</span><span style="color: #94E2D5;"> *</span><span> </span></span>
+<span class="giallo-l"><span>from test_table</span></span>
+<span class="giallo-l"><span>where id</span><span style="color: #94E2D5;"> &gt;=</span><span style="color: #FAB387;"> 9900000</span></span>
+<span class="giallo-l"><span>limit</span><span style="color: #FAB387;"> 1000</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_05e3ddcb9c74a782.png" alt="" />
+인덱스로 긁어오니 이번엔 매우 빨라졌다.<br />
+0.02초가 걸렸다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223645594088/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] control plain 노드에 pod 띄우기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223639069654/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Inverted Index<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

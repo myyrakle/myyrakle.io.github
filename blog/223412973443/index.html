@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ECR: pull 방식 gitops 적용 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223412973443/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ECR: pull 방식 gitops 적용">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223412973443/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-04-12T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223412973443/">[AWS] ECR: pull 방식 gitops 적용</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-04-12T00:00:00+00:00"><time datetime="2024-04-12T00:00:00+00:00">2024.04.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="189 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223412973443" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Build와 Deploy의 책임을 분리할지 말지는 별거 아닌것처럼 보이지만 Devops와 보안 관점에서는 꽤 깊이있게 다뤄지는 것 같다.</p>
+<p>k8s에서 흔히 말하는 pull 방식의 gitops에서는 build와 deploy를 아예 분리해서 관리하는 것을 권장하는 모양새다. Build 책임자가 빌드를 수행해서 이미지 레지스트리에 이미지를 push하면, Deploy 책임자가 이미지 push를 감지하고 배포를 수행하는 것이다.</p>
+<p>자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223122991133?trackingCode=blog_bloghome_searchlist">https://blog.naver.com/sssang97/223122991133</a></p>
+<p>AWS에서도 원한다면 이러한 전략을 취할 수 있다.<br />
+Cloudwatch Event만 사용해도 어렵지 않게 워크플로를 구성하는 것이 가능하다.</p>
+<p>먼저 Event 규칙 생성페이지로 이동해서</p>
+<p><img src="/images/img_9e335c941d88c6a5.png" alt="" />
+이벤트 패턴이 있는 규칙 선택</p>
+<br>
+<p><img src="/images/img_53f273fc1cbbefbb.png" alt="" /></p>
+<p><img src="/images/img_b0b594872c8df31e.png" alt="" />
+이벤트 패턴은 대략 위와 같은 형태로 구성하면 된다.<br />
+저러면 ECR에 이미지가 성공적으로 push될때마다 트리거를 걸 수 있다.<br />
+저기서는 레포지토리 지정을 하지 않았지만, 특정하는 것도 가능하다.</p>
+<br>
+<p><img src="/images/img_21abd9f81ccba681.png" alt="" />
+대상으로는 원하는 트리거 대상을 고르면 된다.<br />
+AWS의 CodeStack으로만 배포를 제어하고 싶다면 Code Pipeline을, 아니면 그 외의 수단으로 제어를 하고 싶다면 Lambda 같은 걸로 중개자를 띄우고 신호를 보내게끔 할 수도 있겠다.</p>
+<p>이벤트 페이로드는 이런 식으로 나온다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;account&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;123456789012&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;detail&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;action-type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;PUSH&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;image-digest&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;sha256:f98d67af8e53a536502bfc600de3266556b06ed635a32d60aa7a5fe6d7e609d7&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;image-tag&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;latest&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;repository-name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ubuntu&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;result&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;SUCCESS&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;manifest-media-type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;application/vnd.oci.image.manifest.v1+json&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;artifact-media-type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;application/vnd.oci.image.config.v1+json&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;detail-type&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;ECR Image Action&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;id&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;4f5ec4d5-4de4-7aad-a046-56d5cfe1df0e&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;region&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;us-east-1&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;resources&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;source&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;aws.ecr&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;time&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2019-08-06T00:58:09Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;0&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>detail에서 꺼내쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/58464687/aws-trigger-a-pipeline-on-ecr-push-action">https://stackoverflow.com/questions/58464687/aws-trigger-a-pipeline-on-ecr-push-action</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223414675925/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Algorithm] Perfect Hash Function<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223412427281/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] BPF, eBPF<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] lock 동기화: Mutex, RwLock | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223087309595/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] lock 동기화: Mutex, RwLock">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223087309595/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-04-28T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223087309595/">[Rust] lock 동기화: Mutex, RwLock</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-04-28T00:00:00+00:00"><time datetime="2023-04-28T00:00:00+00:00">2023.04.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="448 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223087309595" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>러스트에서 스레드를 사용해서 동시성을 구현할 때는, 러스트의 근엄한 규칙에 따라 항상 안전한 동기화 기능을 이용해야 한다.</p>
+<p>그럴때 사용하는게 채널이나 Atomic, 그리고 Lock인데, 오늘은 Lock 중에서도 자주 사용하는 Mutex와 RWLock을 다뤄보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="mutex">Mutex<T></h2>
+<p>Mutex는 내부 가변성 패턴을 구현한 스마트 포인터 타입 중 하나다.</p>
+<p>Rust뿐만 아니라 범용적으로 다 쓰이는 기술인데, 바이너리 세마포어라고도 부른다.</p>
+<p>내부적으로 lock 플래그값을 하나 두고, 스레드에서 lock()으로 접근하면 다른 스레드에서의 잠금을 차단하고, lock()이 drop되면 잠근이 풀리는 형태로 엄격한 serialize를 구현한다. 한번에 한놈만 들어오게 하는 것이다.</p>
+<p>매우 단순하고 강력하지만, 성능의 손실과 데드락을 항상 경계해야한다.</p>
+<p>아래와 같은 형태로 사용할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Arc</span><span style="color: #9399B2;">,</span><span> Mutex</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mutex</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Mutex</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #F9E2AF;font-style: italic;">10</span><span style="color: #9399B2;">))</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;start&quot;</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        let a</span><span style="color: #94E2D5;"> =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>(); </span><span style="color: #9399B2;font-style: italic;">// lock 획득</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;a: {}&quot;</span><span style="color: #9399B2;">,</span><span> a);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #9399B2;font-style: italic;"> // a의 unlock은 여기서 발생</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;end&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>Mutex 같은 Lock 타입이나, Atomic 타입들은 Arc로 감싸서 사용하는게 기본이다. 그래야 스레드 간에 복제가 가능해지기 때문이다.<br />
+그리고 lock 함수를 통해서 원본 값에 접근 가능한 MutexGuard라는 유사 포인터 객체를 반환한다. 이걸로 락을 거는 것이고, 이 MutexGuard가 drop되면 unlock이 되는 것이다.</p>
+<p><img src="/images/img_d606a0b5dea68477.png" alt="" /></p>
+<p>가장 주의해야할 케이스인 데드락을 한번 보겠다.<br />
+아래 코드는 데드락이 발생하는 코드다.<br />
+무심코 짤 수도 있는, 매우 간단한 형태의 코드임에도</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Arc</span><span style="color: #9399B2;">,</span><span> Mutex</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mutex</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Mutex</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #F9E2AF;font-style: italic;">10</span><span style="color: #9399B2;">))</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;start&quot;</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        let a</span><span style="color: #94E2D5;"> =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>(); </span><span style="color: #9399B2;font-style: italic;">// lock 획득</span></span>
+<span class="giallo-l"><span>        let b</span><span style="color: #94E2D5;"> =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>(); </span><span style="color: #9399B2;font-style: italic;">// lock 대기중...</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;a: {}, b: {}&quot;</span><span style="color: #9399B2;">,</span><span> a</span><span style="color: #9399B2;">,</span><span> b);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #9399B2;font-style: italic;"> // a의 unlock은 여기서 발생</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;end&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_78a787f191dcee97.png" alt="" />
+데드락이 터진다.<br />
+첫번째로 호출한 lock 객체는 분명히 저 스코프를 벗어나야 해제가 된다.<br />
+근데 그러기도 전에 두번째로 lock을 호출하니, 말도 안되는 무한루프에 걸리게 된 것이다.<br />
+최대한 이런 상황이 발생하지 않게 유의해야 한다.</p>
+<p>그래서 lock을 걸때는 최대한 이런 식으로 스코프를 엄격하게 제한해야 한다.</p>
+<p><img src="/images/img_070fd78c8183aa7a.png" alt="" />
+그럼 lock이 바로바로 풀리니 데드락은 어느정도 회피할 수 있다.<br />
+물론 상호참조하면서 더럽게 꼬여있을때는 한땀한땀 디버깅하면서 풀어야한다.</p>
+<br>
+<br>
+<br>
+<h2 id="rwlock">RwLock<T></h2>
+<p>RwLock은 다중 read 작업에 최적화된 Lock이다.</p>
+<p>Mutex의 경우에는 read&amp;write 기능이 분리되어있지 않고, lock을 할때 반환되는 값은 읽기와 쓰기를 전부 할 수 있다.<br />
+그런데 쓰기에 비하면 읽기 작업은 멀티스레드환경에서도 상당히 안정적인 기능이고, 보통은 좀더 동시적으로 발생해도 무방한 편이다. 하지만 Mutex는 그런것을 구분하지 못하기 때문에.. 읽기만 하더라도 주구장창 lock을 걸어야 한다는게 좀 단점이 될 수 있다.</p>
+<p>RwLock은 Mutex의 그러한 단점을 보완하는 Lock 타입이다.<br />
+그래서 읽기 락과 쓰기 락을 분리해서 구현한다.</p>
+<p>엄청나게 큰 차이가 발생한 것은 아니다.<br />
+기본적인 규칙은 이렇다.</p>
+<ol>
+<li>
+<p>write 락이 걸려있을 때는 다른 모든 스레드가 대기한다.</p>
+</li>
+<li>
+<p>read 락이 걸려있을 때는 모든 read를 동시에 허용한다. 단, write는 대기시킨다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>그래서 아래와 같이 동시에 read를 시도하더라도, 데드락이 발생하지 않는다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Arc</span><span style="color: #9399B2;">,</span><span> RwLock</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mutex</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">RwLock</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #F9E2AF;font-style: italic;">10</span><span style="color: #9399B2;">))</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;start&quot;</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        let a</span><span style="color: #94E2D5;"> =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span>        let b</span><span style="color: #94E2D5;"> =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;a: {}, b: {}&quot;</span><span style="color: #9399B2;">,</span><span> a</span><span style="color: #9399B2;">,</span><span> b);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;end&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_ac4f7339a617ce59.png" alt="" /></p>
+<p>하지만 이렇게 write와 read가 혼재될 때는 Mutex와 마찬가지로 얼마든지 데드락이 발생할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    borrow</span><span style="color: #94E2D5;">:</span><span>:BorrowMut</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    sync</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Arc</span><span style="color: #9399B2;">,</span><span> RwLock</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mutex</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">RwLock</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #F9E2AF;font-style: italic;">10</span><span style="color: #9399B2;">))</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;start&quot;</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        let mut w</span><span style="color: #94E2D5;">:</span><span> std::sync::RwLockWriteGuard</span><span style="color: #94E2D5;">&lt;</span><span>i32</span><span style="color: #94E2D5;">&gt; =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">write</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>(); </span><span style="color: #9399B2;font-style: italic;">// write lock 획득</span></span>
+<span class="giallo-l"><span>        w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">borrow_mut</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone_from</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span style="color: #FAB387;">10</span><span>);</span></span>
+<span class="giallo-l"><span>        let a</span><span style="color: #94E2D5;"> =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>(); </span><span style="color: #9399B2;font-style: italic;">// read 대기</span></span>
+<span class="giallo-l"><span>        let b</span><span style="color: #94E2D5;"> =</span><span> mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span>        mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">write</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone_from</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span style="color: #FAB387;">20</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;a: {}, b: {}&quot;</span><span style="color: #9399B2;">,</span><span> a</span><span style="color: #9399B2;">,</span><span> b);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;end&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_3d28b2502067f894.png" alt="" /></p>
+<p>아무튼 그래서 쓰기가 적고 읽기가 굉장히 많을 때는 RwLock이 매우 적합하다고 할 수 있다.<br />
+그 반대로 쓰시가 많을 때는 mpsc channel 같은게 좋겠고...<br />
+primitive만 써도 되는 경우에는 Atomic이 가볍고 빠르다.</p>
+<p>Mutex는 그 사이의 애매한 지점일 때 사용하면 되지 않나 싶다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://onesignal.com/blog/thread-safety-rust/">https://onesignal.com/blog/thread-safety-rust/</a><br />
+<a rel="external" href="https://doc.rust-lang.org/std/sync/struct.RwLock.html">https://doc.rust-lang.org/std/sync/struct.RwLock.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/50704279/when-or-why-should-i-use-a-mutex-over-an-rwlock">https://stackoverflow.com/questions/50704279/when-or-why-should-i-use-a-mutex-over-an-rwlock</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223088272098/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Python] SQLAlchemy<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223087326147/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Control Tower: multi account 구성<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

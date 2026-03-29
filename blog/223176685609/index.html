@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] 고루틴과 채널, 동기화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223176685609/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] 고루틴과 채널, 동기화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223176685609/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-08-07T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223176685609/">[Go] 고루틴과 채널, 동기화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-07T00:00:00+00:00"><time datetime="2023-08-07T00:00:00+00:00">2023.08.07</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="331 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223176685609" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>고루틴의 대략적인 형태와 사용법 등을 다뤄보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="gorutini-mweonga">고루틴이 뭔가?</h2>
+<p>일종의 스레드라고 봐도 된다.</p>
+<p>정확히는 경량 스레드이고, Go 자체 스케줄러에 의해 효율적으로 관리된다.<br />
+때문에 네이티브 스레드에 비해서 사용하는데 부담도 없고, 최적화도 잘 먹히는 편이다.</p>
+<p>참조<br />
+<a rel="external" href="https://blog.naver.com/sssang97/221717390326">https://blog.naver.com/sssang97/221717390326</a></p>
+<p>Go에서 가장 강력한 기능이라고 단언할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gorutinyi-sayongbeob">고루틴의 사용법</h2>
+<p>고루틴은 "go"라는 키워드를 통해 동작한다.<br />
+함수 호출 앞에 go만 붙이면 그냥 함수 실행이 아니라 고루틴 실행이 돼서 비동기적으로 실행이 된다.</p>
+<p><img src="/images/img_bdf1d65179bd82b2.png" alt="" /></p>
+<p>근데 실행결과가 뭔가 이상하다.</p>
+<p><img src="/images/img_d203251d287031e0.png" alt="" />
+스레드와 유사한 비동기 태스크이기 때문에 발생하는 문제다.<br />
+고루틴은 다음 코드라인까지 완료를 기다리지 않고 병행적으로 실행된다.<br />
+때문에 고루틴이 제대로 시작되기도 전에 main 함수가 끝나버린 것이다...</p>
+<p>저걸 제대로 실행되게 하려면, 여라가지 방법이 있지만 가장 간단한 방법은 무한루프를 띄우는 것일 테다.</p>
+<p><img src="/images/img_2a743f712a470846.png" alt="" /></p>
+<p><img src="/images/img_ebb21af33f92385b.png" alt="" />
+그럼 당장은 실행이 된다.<br />
+하지만 여기에는 문제가 많다. 프로그램이 끝나지 않는다는 것이다.</p>
+<p>게다가 main task와 고루틴 task가 뭔가 서로 상호작용을 한다거나 할때는 어떻게 해야할까?<br />
+보통 Go에서는 채널 등을 활용해서 비동기 프로세스들을 동기화하고 합을 맞춘다.</p>
+<br>
+<br>
+<br>
+<h2 id="gorutingwa-caeneol">고루틴과 채널</h2>
+<p>채널은 Erlang에서 시작된 동기화 기법 중 하나인데, 일종의 큐를 만들어서 스레드가 큐를 통해 값을 주고받을 수 있게 하는 것이다.<br />
+성능 면에서의 최선은 아니지만, 굉장히 편리하고 안정적으로 동기화를 이룩할 수 있다는 장점이 있다.</p>
+<p>채널은 make와 chan 키워드를 통해 생성할 수 있고, 그 내부 값에 대해서는 타입을 지정해서 특수화할 수 있다.<br />
+그리고 "채널 &lt;- 값"의 형태로 송신할 수 있고, "&lt;- 채널"의 형태로 값을 수신받을 수 있다.</p>
+<p>채널이 값을 수신받으면 값이 들어올때까지 블럭이 된다는 점을 응용해서, 아래와 같이 동기화를 구현할 수 있다.<br />
+int 타입은 장식이고, 채널은 그냥 완료 여부만 체크하는 단순한 케이스로 활용했다.</p>
+<p><img src="/images/img_29dca9d78d4c7150.png" alt="" /></p>
+<p><img src="/images/img_5499ad6bdc71300e.png" alt="" />
+그럼 잘 실행되었을 것이다.</p>
+<p>당연하지만, 채널을 통해 고루틴에서 처리한 결과를 다른 태스크에 전달할 수도 있다.<br />
+이를 잘 응용하면 타 언어들의 async/await과 비슷한 루틴을 구성할 수 있다.</p>
+<p>아래는 단순한 덧셈 함수를 고루틴으로 구현한 것이다.<br />
+실용성이 있는 예제는 아니지만, 그 맥락을 파악하기에는 적절하다고 본다.</p>
+<p><img src="/images/img_76ac80de43b837b4.png" alt="" /></p>
+<p><img src="/images/img_5720c61acf2013bd.png" alt="" /></p>
+<p>이외에도 Go는 waitgroup, mutex 등 다양한 도구들을 사용해서 동시성을 제어할 수 있는 수단을 제공한다.<br />
+그건 차근차근 별도로 다뤄보도록 하겠다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223177695996/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] autopprof로 pprof 임계 알림 설정하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223175911112/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] circular import 문제<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

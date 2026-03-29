@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] RDS: Blue Green Deploy를 통한 DB 교체 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224206530309/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] RDS: Blue Green Deploy를 통한 DB 교체">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224206530309/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-03-06T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224206530309/">[AWS] RDS: Blue Green Deploy를 통한 DB 교체</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-06T00:00:00+00:00"><time datetime="2026-03-06T00:00:00+00:00">2026.03.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="635 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224206530309" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>RDS를 사용하다보면, 단순 DB 수정만으로 해결할 수 없는 문제가 종종 생긴다.<br />
+그 중 대표적인 것이 디스크의 축소다.</p>
+<p><img src="/images/img_952ab7e0c3a19225.png" alt="" />
+디스크를 줄이려면 새로운 DB를 만들고 거기에 데이터를 복제해서 옮겨써야 한다.<br />
+이런걸 하기 위해서 존재하는 것이 Blue Green Deploy다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajeon-jogeon">사전 조건</h2>
+<p>지원되는 대상과 버전이 어느 정도 정해져있다.<br />
+RDS PostgreSQL, MariaDB, MySQL만 지원한다.</p>
+<p>지원 수준은 PostgreSQL가 가장 좋다. 11 버전 이상이기만 하면 다 되고, 나머지는 지원되는 버전이 정해져있다.<br />
+지원 대상에 대한 전체 정보는 별도 문서를 참조하길 바란다.</p>
+<p><img src="/images/img_ec81b1f739bd2f93.png" alt="" />
+<a rel="external" href="https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.RDS_Fea_Regions_DB-eng.Feature.BlueGreenDeployments.html">https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.RDS_Fea_Regions_DB-eng.Feature.BlueGreenDeployments.html</a></p>
+<p>그리고 최소한 1개 이상의 백업이 켜져있어야 한다. 백업을 토대로 복제본을 만들기 때문인 것 같다.</p>
+<p><img src="/images/img_2ff5ccfcfbec0bad.png" alt="" /></p>
+<p>그리고 원본 DB에서 논리적 복제 등을 통해서 다른 소스로 옮기는게 있다면, 삭제해서 중단시켜야 한다. PostgreSQL의 논리적 Replication이 이에 속한다.</p>
+<br>
+<br>
+<br>
+<h2 id="akitegcyeowa-jehansahang">아키텍쳐와 제한사항</h2>
+<br>
+<p><img src="/images/img_4f94abe354d1b773.png" alt="" />
+기본적으로는 물리적 복제를 사용해서 동기화한다.</p>
+<p><img src="/images/img_0a96d46ad394b807.png" alt="" />
+새로운 버전의 DB(Green)을 띄워놓고 물리적 복제를 기반으로 데이터를 실시간으로 동기화하는 것이다.<br />
+그리고 동기화 상태에서의 Green DB는 읽기 전용이기 때문에 쓰기를 처리할 수 없다.</p>
+<p>복제가 문제 없다는 것이 판단되면 실제 DB를 교체하되, 외부의 DB 사용자 관점에서는 같은 DB URL로 사용할 수 있는 것이다.</p>
+<p>하지만 리스크가 없는 것은 아니다. 이 최종 교체에는 다운타임이 존재한다.<br />
+AWS 발표에 따르면 전환에 따른 다운타임은 5초 미만이고, DB 드라이버 세팅에 따라서는 DB를 쓰는 서버들을 재부팅할 필요도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>Blue Green Deploy만을 위한 추가 비용은 없다.<br />
+다만 RDS 복제본을 추가로 띄워야 하니, 그에 대한 비용이 발생할 뿐이다.</p>
+<br>
+<br>
+<br>
+<h2 id="beulrugeurin-baepo-saengseong">블루그린 배포 생성</h2>
+<p>먼저 DB를 선택하고 배포를 생성해야 한다.</p>
+<p><img src="/images/img_b4c19747cf085f7d.png" alt="" /></p>
+<p>그럼 이런 식으로 배포 생성 창이 뜬다.<br />
+새로운 DB(Green)을 어떤 옵션으로 생성할지 선택할 수 있다.</p>
+<p><img src="/images/img_5eb4e382b51ba9ca.png" alt="" />
+DB 버전도 마이너 버전은 업데이트가 가능하고</p>
+<br>
+<p><img src="/images/img_475b886f509e53ab.png" alt="" />
+스펙 변경 가능하고</p>
+<br>
+<p><img src="/images/img_f22c050e912112ad.png" alt="" />
+스토리지 옵션도 변경 가능하다.<br />
+다른건 그냥 DB 수정에서도 할 수 있어서 아마 이게 핵심일듯...</p>
+<br>
+<p><img src="/images/img_5355b2128c49d08c.png" alt="" />
+그리고 이 초기화-동기화 시간은 제법 걸린다. 걸어놓고 한숨 자고 다음날에 확인하는 것이 편하다.</p>
+<p>검토</p>
+<p><img src="/images/img_c79e4ece5da5c809.png" alt="" /></p>
+<p><img src="/images/img_ddcf2a2b46de094c.png" alt="" />
+시각화도 제법 잘 해준다.</p>
+<p>그렇게 생성을 하면, 클러스터 창처럼 배포 단위를 그룹화해서 보여주게 된다. 이런 식이다.</p>
+<p><img src="/images/img_8f8ff5244dd28172.png" alt="" /></p>
+<p><img src="/images/img_e2877afbd99ae457.png" alt="" />
+기존에 존재하던 old 서버가 blue, new 서버가 green으로 뜬다.</p>
+<br>
+<p><img src="/images/img_f44f56add9478d59.png" alt="" />
+그리고 blue DB에는 이 복제를 위한 replication이 생성된다. (PostgreSQL)</p>
+<br>
+<p><img src="/images/img_c0c9442b312138f0.png" alt="" />
+동기화가 완료되면 이렇게 될 것이고</p>
+<br>
+<p><img src="/images/img_259439ca79a3eb56.png" alt="" />
+green 서버에 대한 엔드포인트도 열릴 것이다.<br />
+(IAM 연결 옵션을 쓴게 아니라면) 엔드포인트만 다르고 같은 계정으로 접속할 수 있게 된다.</p>
+<br>
+<p><img src="/images/img_6303c499211995c2.png" alt="" /></p>
+<p><img src="/images/img_4b02a7ca21714810.png" alt="" />
+접속해서 문제가 없는지 이것저것 확인해보면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="blue-green-jeonhwan">Blue -&gt; Green 전환</h2>
+<p><img src="/images/img_45c68e9a2add0ff1.png" alt="" />
+문제가 없다는 것이 판단되면, 전환 기능을 사용해서 새로운 DB로 교체를 시작할 수 있다.</p>
+<p>전용 버튼 찾아서</p>
+<p><img src="/images/img_8bbcb328d1c0f331.png" alt="" /></p>
+<p>클릭만 하면 된다.</p>
+<p><img src="/images/img_8a15e11789e1965b.png" alt="" /></p>
+<p>제한시간만 적당히 설정하고 시도한다. 보통은 5분 내에 된다.</p>
+<p><img src="/images/img_84722498eab870c2.png" alt="" /></p>
+<p><img src="/images/img_2a2dbe201417101c.png" alt="" /></p>
+<p><img src="/images/img_84e0a37bdc14f2b5.png" alt="" />
+그럼 이렇게 전환 상태에 진입한다.</p>
+<p>경우에 따라서는 전환이 실패할 수도 있는데, 지금 UX에 문제가 좀 있다. 뭐때문에 실패한건지 제대로 보여주는게 없다.</p>
+<p><img src="/images/img_375c7b1df7f8bb4a.png" alt="" />
+내 경우에는 기존 blue DB에 논리적 복제가 남아있어서 생긴 문제였다. 논리적 복제를 전부 삭제한 뒤 재시도하니 성공했다.</p>
+<br>
+<p><img src="/images/img_504d338aafdf34a2.png" alt="" />
+전환이 완료되면 이렇게 뜰 것이고, 실제로도 새 버전으로 라우팅될 것이다.<br />
+이 상태에서는 단순 롤백이 불가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="blue-green-jegeo">blue green 제거</h2>
+<p>일 다 끝났으면 배포를 제거하면 된다.</p>
+<p><img src="/images/img_0584d9e1d06cf71f.png" alt="" />
+잘가라.</p>
+<br>
+<p><img src="/images/img_698f2f497cfe054e.png" alt="" />
+그리고 배포 삭제한다고 old DB가 자동으로 지워지진 않는다. 직접 지워야 한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/database/shrink-storage-volumes-for-your-rds-databases-and-optimize-your-infrastructure-costs/">https://aws.amazon.com/ko/blogs/database/shrink-storage-volumes-for-your-rds-databases-and-optimize-your-infrastructure-costs/</a><br />
+<a rel="external" href="https://www.lgcns.com/kr/moa/insight/detail.58480">https://www.lgcns.com/kr/moa/insight/detail.58480</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/about-aws/whats-new/2026/01/amazon-rds-blue-green-deployments-reduces-downtime/">https://aws.amazon.com/ko/about-aws/whats-new/2026/01/amazon-rds-blue-green-deployments-reduces-downtime/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224206363208/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Terraform] module 삭제시 state 오류 발생<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224207244370/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.94.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

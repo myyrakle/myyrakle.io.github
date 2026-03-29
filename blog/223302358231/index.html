@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] panic에 대해서 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223302358231/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] panic에 대해서">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223302358231/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-12-25T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223302358231/">[Rust] panic에 대해서</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-12-25T00:00:00+00:00"><time datetime="2023-12-25T00:00:00+00:00">2023.12.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="682 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223302358231" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust에서 Panic은 최후의 오류 처리 수단이다.</p>
+<p>현실적으로 발생하지 않아야 하는 상황에서 문제가 생길 경우 던지곤 한다.</p>
+<p>패닉은 배열 out of index 같은 상황에서 뜨기도 하지만, 직접 던지기도 쉽다.<br />
+아래와 같이 panic 매크로를 사용하면 바로 패닉이 발생하고</p>
+<p><img src="/images/img_450963bea2f3824f.png" alt="" /></p>
+<p>그 패닉 텍스트와 백트레이스가 로그에 찍힌다.</p>
+<p><img src="/images/img_24ef57e66d051fa8.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="paenigyi-jongryu">패닉의 종류</h2>
+<p>Rust의 패닉에는 2가지 종류가 있다.<br />
+unwind와 abort다.</p>
+<p><img src="/images/img_5258b862f2d435b5.png" alt="" />
+unwind는 패닉이 발생했을때 스택을 순서대로 풀면서 자원을 해제한다. 그리고 해제가 다 끝나면 종료를 한다.<br />
+하지만 abort는 정리고 뭐고 다 던지고 바로 종료를 한다.</p>
+<p>대부분의 플랫폼에서는 unwind가 기본으로 활성화되어있으나, 일부 불가능한 플랫폼은 abort가 기본값이다.</p>
+<p>unwind는 패닉 이후의 동작에 대해서 고려할 필요가 있는 경우에는 매우 유용하나, 그렇지 않을때는 약간의 손해가 될 수 있다. unwind 처리를 위해서 추가적인 로직이 들어가다보니 바이너리 사이즈가 좀 커지기 때문이다.<br />
+그런거에 민감하면 abort 모드로 사용하면 된다.<br />
+cargo.toml에 이런걸 추가한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>release]</span></span>
+<span class="giallo-l"><span>panic</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;abort&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>dev]</span></span>
+<span class="giallo-l"><span>panic</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;abort&quot;</span></span></code></pre>
+<p><img src="/images/img_5e1402e38935ebfc.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="catch-unwindro-paenig-jabgi">catch_unwind로 패닉 잡기</h2>
+<p>패닉을 잡아서 예외처리를 할 수도 있다.<br />
+패닉으로 try-catch를 하는건 권장되는 사항은 아니나, 종종 시스템의 안정성을 위해 사용해야할 경우도 있다.</p>
+<p>일단, 이 기능은 unwind 기능을 사용할 때만 사용이 가능하다. abort 모드에서는 패닉이 바로 프로세스를 날려버리기 때문에 뭐 잡을 틈도 없기 때문이다.</p>
+<p>사용법은 대략 이렇다.<br />
+패닉이 발생 가능한 영역을 클로저로 묶어서 함수에 던져주면 된다.</p>
+<p><img src="/images/img_f4cbcafbfb243f60.png" alt="" />
+그럼 실패 결과에 따라서 Result로 말아다가 던져주는데</p>
+<p>패닉이 뜨면 이렇게 날라온다.</p>
+<p><img src="/images/img_39ecf707d30fca58.png" alt="" />
+적절히 받아서 처리하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="unwindsafe">UnwindSafe</h2>
+<p>근데 만약 이런 Foo 타입을 정의해서 catch_unwind에 넘겨보면,</p>
+<p><img src="/images/img_e6912e5958c5193d.png" alt="" /></p>
+<p><img src="/images/img_c34234ab328950e1.png" alt="" />
+오류가 발생한다. UnwindSafe가 발생했다고 한다.</p>
+<p>이 UnwindSafe란 트레잇은 해당 타입이 패닉 환경에서도 안전하다는 것을 증명하는 특수한 마커 타입이다.<br />
+원래는 대부분의 타입에 자동 구현되는 트레잇인데, Any나 RefCell, &amp;mut T 같은 타입에 대해서는 적용이 되지 않는 모양이다.</p>
+<p>나도 아직은 완전히 잘 이해되지는 않는데, 이런것 때문에 존재한다고 한다.</p>
+<ol>
+<li>
+<p>스레드 패닉이 발생하면 데이터 구조가 일시적으로 유효하지 않은 상태가 될 수 있다.</p>
+</li>
+<li>
+<p>이런 깨진 불변성(broken invariant)은 나중에야 관찰될 수 있다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>이런것 때문에 논리적 불변성이 깨져서 뭔지는 모르겠지만 버그가 발생할 수 있단다.<br />
+그래서 UnwindSafe라는 걸 통해서 안전성을 제한하는데, 이게 없다고 해서 unsafe한건 또 아니라나 뭐라나... 그냥 권고사항 정도지 그렇게 큰 위험은 아닌거같다. 뭐이리 애매하게 만들었는지<br />
+이거 관련해서는 개선 방안이 제시되고 있고, 계속해서 개발중인 부분이 많은 것 같다.</p>
+<p>아무튼 이 문제를 해결하려면 UnwindSafe 트레잇을 대상 타입에 적용해주면 된다.</p>
+<p><img src="/images/img_0b7a9219d8f9745d.png" alt="" />
+그럼 동작은 잘 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="seuredeueseoyi-paenig">스레드에서의 패닉</h2>
+<p>메인스레드에서 발생한 패닉은 프로그램을 통째로 터뜨리지만, 서브스레드에서 발생한 패닉은 큰 문제가 되지는 않는다.<br />
+그래서 이렇게 패닉을 던져도</p>
+<p><img src="/images/img_988259320e329003.png" alt="" /></p>
+<p><img src="/images/img_61ae219247237909.png" alt="" />
+메인스레드는 그대로 동작한다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="paenig-garocaegi">패닉 가로채기</h2>
+<p>패닉 발생을 가로채서 패닉 메세지를 커스텀하는 것도 가능하다.<br />
+이건 abort, unwind 둘다 사용가능하다.</p>
+<p>이런식으로 set_hook 깔고 표준 출력을 내보내면</p>
+<p><img src="/images/img_33a443475762bfdd.png" alt="" /></p>
+<p><img src="/images/img_eb789c7122c52187.png" alt="" />
+그게 패닉 메세지가 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajog-paenig-naebudongjag-ggabogi">(사족) 패닉 내부동작 까보기</h2>
+<p>이건 사족이다. 궁금하지 않다면 재낀다.<br />
+별 의미는 없고, 좀 궁금해서 까보던걸 대충 모아둔 것이다.</p>
+<p>패닉 매크로를 까보면</p>
+<p><img src="/images/img_f070288e6e361173.png" alt="" />
+빌트인 동작이라 뭐가 없다고만 한다.</p>
+<p>그래서 패닉 발생시에 던지는 머신코드를 추적해보면</p>
+<p><img src="/images/img_33c45bba4468adc2.png" alt="" />
+begin_panic_handler라는 녀석이 호출되는걸 확인할 수 있다.</p>
+<p><a rel="external" href="https://github.com/rust-lang/rust/blob/master/library/std/src/panicking.rs#L593">https://github.com/rust-lang/rust/blob/master/library/std/src/panicking.rs#L593</a></p>
+<p><img src="/images/img_1836fbc0b5b4a916.png" alt="" /></p>
+<p><img src="/images/img_20e56569121effc1.png" alt="" />
+그리고 저건 rust_panic_with_hook이란 함수에 처리를 위임하는데</p>
+<br>
+<p><img src="/images/img_0c396f3f2f5c01fb.png" alt="" />
+이건 panic_count::increase에 넘어는 값에 따라서 abort를 때릴지 말지를 결정한다.</p>
+<p>저 panic_count는 cfg 매크로를 통해 컴파일타임 분기를 타게 구성되어있다.</p>
+<p><img src="/images/img_cde90a30cfd6f177.png" alt="" />
+이건 아마 abort 플래그가 활성화되었을때</p>
+<br>
+<p><img src="/images/img_a5159597815f5e74.png" alt="" /></p>
+<p><img src="/images/img_8b99ce76aee671b8.png" alt="" />
+이건 unwind가 활성화되었을 때의 mod인거같다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/book/ch09-01-unrecoverable-errors-with-panic.html">https://doc.rust-lang.org/book/ch09-01-unrecoverable-errors-with-panic.html</a><br />
+<a rel="external" href="https://rustc-dev-guide.rust-lang.org/panic-implementation.html">https://rustc-dev-guide.rust-lang.org/panic-implementation.html</a><br />
+<a rel="external" href="https://doc.rust-lang.org/cargo/reference/profiles.html#panic">https://doc.rust-lang.org/cargo/reference/profiles.html#panic</a><br />
+<a rel="external" href="https://github.com/rust-lang/rust/blob/master/library/std/src/panicking.rs#L593">https://github.com/rust-lang/rust/blob/master/library/std/src/panicking.rs#L593</a><br />
+<a rel="external" href="https://doc.rust-lang.org/rust-by-example/error/abort_unwind.html">https://doc.rust-lang.org/rust-by-example/error/abort_unwind.html</a><br />
+<a rel="external" href="https://doc.rust-lang.org/std/panic/trait.UnwindSafe.html">https://doc.rust-lang.org/std/panic/trait.UnwindSafe.html</a><br />
+<a rel="external" href="https://github.com/rust-lang/rfcs/blob/master/text/1236-stabilize-catch-panic.md">https://github.com/rust-lang/rfcs/blob/master/text/1236-stabilize-catch-panic.md</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223302343599/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] race detector<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223302872721/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] cargo watch<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

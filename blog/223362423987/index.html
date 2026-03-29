@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] memory arena | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223362423987/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] memory arena">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223362423987/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-02-23T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223362423987/">[Go] memory arena</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-02-23T00:00:00+00:00"><time datetime="2024-02-23T00:00:00+00:00">2024.02.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="368 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223362423987" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223232328524">https://blog.naver.com/sssang97/223232328524</a></p>
+<p>이래나 저래나 Go는 GC 기반의 언어이고, 메모리의 할당과 해제가 성능상의 병목이 될 때도 분명히 존재한다.<br />
+그럴때 GC 부담을 줄이는 방법은 여러가지 접근법이 있지만, 가장 확실한건 아무래도 할당과 해제 자체를 자주 하지 않도록 유도하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="naejang-memory-arena">내장 Memory Arena</h2>
+<p>그걸 위한 대표적인 기능 중 하나가 바로 memory arena라는 것이다.<br />
+Go 1.20부터 experimental 모듈로 추가되었다.</p>
+<p>이건 작은 크기의 데이터 조각들을 부담없이 빠르게 할당하고 한번에 반환할 수 있도록 하는 것을 목적으로 한다.</p>
+<p><img src="/images/img_be9f8fb0cde5df0f.png" alt="" />
+사용 패턴 자체가 한번에 몰아서 확 쌓았다가 나중에 몰아서 정리해도 되는 경우에 적합하다.<br />
+그대신 일이 끝나면 수동으로 정리를 해줘야 한다. 그렇지 않으면 누수 문제가 생긴다.</p>
+<p>사용법은 대략 이렇다.<br />
+arena라는 이름의 모듈로 import할 수 있고</p>
+<p><img src="/images/img_af12217bfcb58c6d.png" alt="" /></p>
+<p><img src="/images/img_6d77c316c5051a3f.png" alt="" />
+실행할 때도 명시적으로 활성화를 해줘야 한다.</p>
+<p>사용방법은 그다지 어렵지 않다.<br />
+먼저 전역 힙 공간을 생성해줘야 한다.</p>
+<p><img src="/images/img_154f5ca5080e8f2d.png" alt="" />
+저게 일종의 짬통이 되는 셈이다.<br />
+사용이 다 끝나면 Free 함수로 할당한 객체들을 전부 날려준다.</p>
+<p>그리고 객체를 할당할때는 New 함수를 통해서 수행할 수 있다.</p>
+<p><img src="/images/img_9beeafacce03b7e2.png" alt="" /></p>
+<p><img src="/images/img_bf3278c4245f5f52.png" alt="" />
+각자 할당된 공간에 대한 포인터를 반환하고, 이를 통해 값을 수정하거나 조회할 수 있다.</p>
+<p>그리고 위의 Free 함수가 실행되면 한번에 싸그리 정리되는 셈이다.<br />
+Free 함수가 실행된 이후에는 저 포인터 핸들들을 사용하면 안된다.</p>
+<p>아래는 전체 예제 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;arena&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// arena 전역공간 생성</span></span>
+<span class="giallo-l"><span>	mem</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> arena</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewArena</span><span>()</span></span>
+<span class="giallo-l"><span>	defer mem</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Free</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 할당</span></span>
+<span class="giallo-l"><span>	number</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> arena</span><span style="color: #94E2D5;">.</span><span>New[int](mem)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	*</span><span>number</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 4444</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #94E2D5;">*</span><span>number)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 슬라이스 할당</span></span>
+<span class="giallo-l"><span>	slice</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> arena</span><span style="color: #94E2D5;">.</span><span>MakeSlice[string](mem</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 100</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 200</span><span>)</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #89B4FA;font-style: italic;">len</span><span>(slice)</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> cap</span><span>(slice))</span></span>
+<span class="giallo-l"><span>	slice[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;Hello&quot;</span></span>
+<span class="giallo-l"><span>	slice[</span><span style="color: #FAB387;">1</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;World&quot;</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(slice[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #9399B2;">,</span><span> slice[</span><span style="color: #FAB387;">1</span><span>])</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_8fc38d9eec154616.png" alt="" />
+잘 동작한다.</p>
+<p>다만 현재 arena 구현은 문제가 많아서 제거되거나 변경될 가능성이 많다고 한다. 상세한 내용은 이슈를 참고한다.<br />
+<a rel="external" href="https://github.com/golang/go/issues/51317">https://github.com/golang/go/issues/51317</a><br />
+적어도 근시일에 이 기능이 안정화될 일은 없는거같다.</p>
+<br>
+<br>
+<br>
+<h2 id="daean-jigjeob-guhyeonhagi">대안: 직접 구현하기</h2>
+<p>범용성을 약간 포기한다면 아레나를 직접 구현하는 것도 어렵지는 않다.</p>
+<p>할당해제를 막기 위해서는 root 객체가 그 객체의 포인터를 들고만 있어도 되는데, any 포인터든 뭘로든 데이터를 들고 있게끔 만들면 되기 때문이다.</p>
+<p>혹은 모든 변수들을 하나의 구조체에 다 정의해놓고 상위 컨텍스트에서 생성한 다음에 포인터로 공유하는 식으로 사용해도 거의 동등한 동작을 기대할 수도 있을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="daean-sync-pool">대안: sync.Pool</h2>
+<p>사용 형태가 조금 달라서 대안이라고 하긴 어렵지만, 비슷한 동작방식을 가진 기능으로 sync.Pool이 있다.</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223304134705">https://blog.naver.com/sssang97/223304134705</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://uptrace.dev/blog/golang-memory-arena.html">https://uptrace.dev/blog/golang-memory-arena.html</a><br />
+<a rel="external" href="https://github.com/golang/go/issues/51317">https://github.com/golang/go/issues/51317</a><br />
+<a rel="external" href="https://pyroscope.io/blog/go-1-20-memory-arenas/">https://pyroscope.io/blog/go-1-20-memory-arenas/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223362413706/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] GUI: iced<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223360117870/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] TUI: ratatui<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

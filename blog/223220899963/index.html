@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] WASM 빌드하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223220899963/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] WASM 빌드하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223220899963/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-09-25T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223220899963/">[Go] WASM 빌드하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-09-25T00:00:00+00:00"><time datetime="2023-09-25T00:00:00+00:00">2023.09.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="246 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223220899963" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>go는 wasm을 그럭저럭 지원하는 편이다.<br />
+성능이 특출나거나 지원 수준이 엄청 좋은건 아닌데, 브라우저에서 구현하기 난감한 것들을 대행할때 가끔은 쓸만할 것이다.</p>
+<p>외부 종속성이 따로 필요하진 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="js-bondeu-gajyeoogi">js 본드 가져오기</h2>
+<p>wasm의 한계상, 독립적으로는 사용이 불가능하고 js를 거쳐서만 사용이 가능하다.<br />
+아래와 같은 특수한 경로에 준비되어있는 wasm 본드 코드가 있다. 그걸 복사해서 가져온다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cp</span><span style="color: #89B4FA;font-style: italic;"> $</span><span>(go env GOROOT)</span><span style="color: #94E2D5;">/</span><span>misc</span><span style="color: #94E2D5;">/</span><span>wasm</span><span style="color: #94E2D5;">/</span><span>wasm_exec</span><span style="color: #94E2D5;">.</span><span>js</span><span style="color: #94E2D5;"> .</span></span></code></pre>
+<p><img src="/images/img_13475fd19850557c.png" alt="" />
+내용은 이런데, 굳이 볼 필요는 없다. 고칠일도 없고</p>
+<br>
+<br>
+<br>
+<h2 id="go-kodeu-jagseonghagi">Go 코드 작성하기</h2>
+<p>이제 wasm을 생성할 코드를 작성해보겠다.<br />
+간단하게 덧셈 함수만 하나 추가해서 돌려보려 한다.</p>
+<p><img src="/images/img_d66bdf23ce6f08a8.png" alt="" />
+우선 syscall/js라는 기본 패키지를 import한다.<br />
+이건 특정 타겟에서만 사용할 수 있는 특수 패키지다. 빨간줄은 그래서 뜨는거다.</p>
+<p>그리고 js에서 사용할 덧셈 함수를 하나 만들어줬다.</p>
+<p><img src="/images/img_f3015c0af16e289d.png" alt="" />
+js에 내보낼 함수들은 기본적으로 이러한 함수 시그너처를 가져야 한다.<br />
+첫번째 인자는 함수 자체의 this 컨텍스트고, 나머지가 매개변수다.<br />
+여기서는 Int로 변환한다음에 덧셈을 수행하고, 반환해주도록 했다.</p>
+<p>그리고 저 함수를 명시적으로 js 전역 상태에 추가해줘야 한다.</p>
+<p><img src="/images/img_257a3749220ffc71.png" alt="" /></p>
+<p>main 함수만 추가해주면 끝이다.</p>
+<p><img src="/images/img_377196ae9f575b94.png" alt="" />
+여기서 초기화 관련 로직들을 할당할 수도 있고, 함수 등록도 여기서 한다.<br />
+그리고 이 main 함수는 종료되지 않아야 하기 때문에 채널로 블락을 걸어준다.</p>
+<p>main이 끝나면 여기서 구현한 함수를 사용할 수가 없더라. IPC 스타일인거같다.</p>
+<p>전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// main.go</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;syscall/js&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//export add</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> add</span><span>(</span><span style="color: #F38BA8;">this</span><span> js</span><span style="color: #94E2D5;">.</span><span>Value</span><span style="color: #9399B2;">,</span><span> args []js</span><span style="color: #94E2D5;">.</span><span>Value) any</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	result</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> args[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Int</span><span>()</span><span style="color: #94E2D5;"> +</span><span> args[</span><span style="color: #FAB387;">1</span><span>]</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Int</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> js</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ValueOf</span><span>(result)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> registerCallbacks</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	js</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Global</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Set</span><span>(</span><span style="color: #A6E3A1;">&quot;add&quot;</span><span style="color: #9399B2;">,</span><span> js</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">FuncOf</span><span>(add))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	waiter</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(chan struct</span><span style="color: #9399B2;">{},</span><span style="color: #FAB387;"> 0</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	println</span><span>(</span><span style="color: #A6E3A1;">&quot;Hello, WASM!&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;WASM Go Initialized&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	registerCallbacks</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	&lt;-</span><span>waiter</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="htmlgwa-sayonghaebogi">html과 사용해보기</h2>
+<p>우선 wasm 빌드를 한다.<br />
+이런식으로 옵션을 주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>GOOS</span><span style="color: #94E2D5;">=</span><span>js GOARCH</span><span style="color: #94E2D5;">=</span><span>wasm go build</span><span style="color: #94E2D5;"> -</span><span>o static</span><span style="color: #94E2D5;">/</span><span>main</span><span style="color: #94E2D5;">.</span><span>wasm cmd</span><span style="color: #94E2D5;">/</span><span>main</span><span style="color: #94E2D5;">.</span><span>go</span></span></code></pre>
+<p>결과물들을 한곳에 몰아넣고</p>
+<p><img src="/images/img_65fc5ec6bbf73b87.png" alt="" /></p>
+<p>간단한 정적서버 하나 만들고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> express</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;express&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> path</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;path&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> app</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> express</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> port</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 8000</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> root</span><span style="color: #94E2D5;"> =</span><span> path</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>(__dirname</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;static&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>app</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(</span><span style="color: #A6E3A1;">&quot;*&quot;</span><span style="color: #9399B2;">, (</span><span style="color: #EBA0AC;font-style: italic;">req</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> res</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> filePath</span><span style="color: #94E2D5;"> =</span><span> path</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>(root</span><span style="color: #9399B2;">,</span><span> req</span><span style="color: #94E2D5;">.</span><span>url)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>  res</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">sendFile</span><span>(filePath</span><span style="color: #9399B2;">, (</span><span style="color: #EBA0AC;font-style: italic;">err</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (err)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>      res</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">status</span><span>(</span><span style="color: #FAB387;">404</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">send</span><span>(</span><span style="color: #A6E3A1;">&quot;Not Found&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>app</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">listen</span><span>(port</span><span style="color: #9399B2;">, ()</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">`Server running at http://localhost:</span><span style="color: #9399B2;">${</span><span>port</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">/`</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>브라우저 코드는 이래 짰다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">&lt;!--</span><span> index</span><span style="color: #94E2D5;">.</span><span>html</span><span style="color: #94E2D5;"> --&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;!</span><span>DOCTYPE html</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">html</span><span style="color: #F9E2AF;"> lang</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;en&quot;</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">head</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  &lt;</span><span style="color: #89B4FA;">meta</span><span style="color: #F9E2AF;"> charset</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;UTF-8&quot;</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  &lt;</span><span style="color: #89B4FA;">title</span><span style="color: #94E2D5;">&gt;</span><span>Go+Wasm</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">title</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  &lt;</span><span style="color: #89B4FA;">script</span><span style="color: #F9E2AF;"> src</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;wasm_exec.js&quot;</span><span style="color: #94E2D5;">&gt;&lt;/</span><span style="color: #89B4FA;">script</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  &lt;</span><span style="color: #89B4FA;">script</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span>    const go = new Go();</span></span>
+<span class="giallo-l"><span>    WebAssembly.instantiateStreaming(fetch(&quot;main.wasm&quot;), go.importObject)</span></span>
+<span class="giallo-l"><span>            .then((wasmModule) =&gt; </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">              // 웹 어셈블리 로딩</span></span>
+<span class="giallo-l"><span>              go</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">run</span><span>(wasmModule</span><span style="color: #94E2D5;">.</span><span>instance);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">              // 웹 어셈블리에서 제공하는 add 함수 호출</span></span>
+<span class="giallo-l"><span>              console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(wasmModule</span><span style="color: #94E2D5;">.</span><span>instance</span><span style="color: #94E2D5;">.</span><span>exports);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span>);</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  &lt;/</span><span style="color: #89B4FA;">script</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">head</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">body</span><span style="color: #94E2D5;">&gt;&lt;/</span><span style="color: #89B4FA;">body</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">html</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p>js 본드 import한 다음에 저런 식으로 초기화를 해주면 된다.</p>
+<p>그리고 실행해보면</p>
+<p><img src="/images/img_efe997ea703bf45a.png" alt="" /></p>
+<p>이런식으로 갖다쓸 수 있을 것이다.</p>
+<p><img src="/images/img_520a64595218e8cb.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://golangbot.com/webassembly-using-go/">https://golangbot.com/webassembly-using-go/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223220650483/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>gopring v0.3.3<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223219812336/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Async Rust is a Bad Language.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

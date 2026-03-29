@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>내부망에서 TLS(HTTPS) 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224028492955/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="내부망에서 TLS(HTTPS) 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224028492955/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-10-01T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224028492955/">내부망에서 TLS(HTTPS) 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-10-01T00:00:00+00:00"><time datetime="2025-10-01T00:00:00+00:00">2025.10.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="312 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224028492955" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>사실 내부망에서만 쓰는 시스템들이라면 HTTPS를 구성할 당위성은 잘 없다.<br />
+HTTPS 자체가 중간 네트워크 레이어에서 탈취되는 것을 방어하고자 하는 것인데, 내부망이면 그럴 염려가 거의 없기 때문이다.</p>
+<p>그럼에도 불구하고 HTTPS가 필요한 경우는 제법 있을 수 있다. 특정 플러그인이나 부가기능들이 HTTPS를 필수 조건으로 요구하기 때문이다.<br />
+예를 들어, WebRTC만 해도 HTTPS가 아니면 동작을 안한다.</p>
+<p>그런 경우에 내부망용 TLS를 구성하는 방법을 정리해본다.</p>
+<br>
+<p><img src="/images/img_f29294ecc799d33f.png" alt="" /></p>
+<p><img src="/images/img_71f9fdee1da45210.png" alt="" />
+HAProxy 프록시로 라우팅된 내부 백오피스가 있다고 가정한다. 여기에 달 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="injeungseo-mandeulgi-openssl">인증서 만들기 (OpenSSL)</h2>
+<p>그럼 인증서를 만들어보자. 특정 IP에 대해서만 동작하도록 만들 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #F5C2E7;font-style: italic;">#!/bin/bash</span></span>
+<span class="giallo-l"><span># filepath</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>scripts</span><span style="color: #94E2D5;">/</span><span>create</span><span style="color: #94E2D5;">-</span><span>ssl</span><span style="color: #94E2D5;">-</span><span>cert</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 개인키 생성</span></span>
+<span class="giallo-l"><span>openssl genrsa</span><span style="color: #94E2D5;"> -</span><span>out server</span><span style="color: #94E2D5;">.</span><span>key</span><span style="color: #FAB387;"> 2048</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># CSR</span><span style="color: #89B4FA;font-style: italic;"> 생성</span><span> (Certificate Signing Request)</span></span>
+<span class="giallo-l"><span>openssl req</span><span style="color: #94E2D5;"> -</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #94E2D5;"> -</span><span>key server</span><span style="color: #94E2D5;">.</span><span>key</span><span style="color: #94E2D5;"> -</span><span>out server</span><span style="color: #94E2D5;">.</span><span>csr</span><span style="color: #94E2D5;"> -</span><span>config</span><span style="color: #94E2D5;"> &lt;</span><span>(</span></span>
+<span class="giallo-l"><span>cat</span><span style="color: #94E2D5;"> &lt;&lt;</span><span>EOF</span></span>
+<span class="giallo-l"><span>[req]</span></span>
+<span class="giallo-l"><span>default_bits</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2048</span></span>
+<span class="giallo-l"><span>prompt</span><span style="color: #94E2D5;"> =</span><span> no</span></span>
+<span class="giallo-l"><span>default_md</span><span style="color: #94E2D5;"> =</span><span> sha256</span></span>
+<span class="giallo-l"><span>distinguished_name</span><span style="color: #94E2D5;"> =</span><span> dn</span></span>
+<span class="giallo-l"><span>req_extensions</span><span style="color: #94E2D5;"> =</span><span> v3_req</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[dn]</span></span>
+<span class="giallo-l"><span>C</span><span style="color: #94E2D5;">=</span><span>KR</span></span>
+<span class="giallo-l"><span>ST</span><span style="color: #94E2D5;">=</span><span>Seoul</span></span>
+<span class="giallo-l"><span>L</span><span style="color: #94E2D5;">=</span><span>Seoul</span></span>
+<span class="giallo-l"><span>O</span><span style="color: #94E2D5;">=</span><span>Self</span></span>
+<span class="giallo-l"><span>OU</span><span style="color: #94E2D5;">=</span><span>IT Department</span></span>
+<span class="giallo-l"><span>CN</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">192.168</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.68</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[v3_req]</span></span>
+<span class="giallo-l"><span>subjectAltName</span><span style="color: #94E2D5;"> =</span><span> @alt_names</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[alt_names]</span></span>
+<span class="giallo-l"><span>IP</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 192.168</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.68</span></span>
+<span class="giallo-l"><span>IP</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">2</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 127.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.1</span></span>
+<span class="giallo-l"><span>EOF</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Self</span><span style="color: #94E2D5;">-</span><span>Signed 인증서</span><span style="color: #89B4FA;font-style: italic;"> 생성</span><span> (10년 유효)</span></span>
+<span class="giallo-l"><span>openssl x509</span><span style="color: #94E2D5;"> -</span><span>req</span><span style="color: #94E2D5;"> -</span><span>days</span><span style="color: #FAB387;"> 3650</span><span style="color: #94E2D5;"> -</span><span style="color: #CBA6F7;">in</span><span> server</span><span style="color: #94E2D5;">.</span><span>csr</span><span style="color: #94E2D5;"> -</span><span>signkey server</span><span style="color: #94E2D5;">.</span><span>key</span><span style="color: #94E2D5;"> -</span><span>out server</span><span style="color: #94E2D5;">.</span><span>crt</span><span style="color: #94E2D5;"> -</span><span>extensions v3_req</span><span style="color: #94E2D5;"> -</span><span>extfile</span><span style="color: #94E2D5;"> &lt;</span><span>(</span></span>
+<span class="giallo-l"><span>cat</span><span style="color: #94E2D5;"> &lt;&lt;</span><span>EOF</span></span>
+<span class="giallo-l"><span>[v3_req]</span></span>
+<span class="giallo-l"><span>subjectAltName</span><span style="color: #94E2D5;"> =</span><span> @alt_names</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[alt_names]</span></span>
+<span class="giallo-l"><span>IP</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 192.168</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.68</span></span>
+<span class="giallo-l"><span>IP</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">2</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 127.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.1</span></span>
+<span class="giallo-l"><span>EOF</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># HAProxy용 통합 인증서 생성</span></span>
+<span class="giallo-l"><span>cat server</span><span style="color: #94E2D5;">.</span><span>crt server</span><span style="color: #94E2D5;">.</span><span>key</span><span style="color: #94E2D5;"> &gt;</span><span> server</span><span style="color: #94E2D5;">.</span><span>pem</span></span></code></pre>
+<p>192.168.0.68만 본인 IP로 바꾸면 된다.</p>
+<p>그러면 이렇게 파일이 만들어질 것인데</p>
+<p><img src="/images/img_603e1b2be284ac91.png" alt="" />
+우리가 여기서 쓸 것은 crt와 pem이다. pem키가 비밀키고 crt가 공개키다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mv</span><span style="color: #94E2D5;"> ./</span><span>server</span><span style="color: #94E2D5;">.</span><span>pem</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>ssl</span><span style="color: #94E2D5;">/</span><span>certs</span><span style="color: #94E2D5;">/</span><span>server</span><span style="color: #94E2D5;">.</span><span>pem</span></span></code></pre>
+<p><img src="/images/img_aab880a3c55ef12f.png" alt="" />
+적당히 pem키만 경로 적절히 바꿔주자.</p>
+<br>
+<br>
+<br>
+<h2 id="https-riseuneo-guseong-haproxy">HTTPS 리스너 구성 (HAProxy)</h2>
+<p>이건 서버측에서 할 작업이다.<br />
+HAProxy의 경우에는 단순하게 쉽게 처리할 수 있다.</p>
+<p><img src="/images/img_1c098850e91a3b91.png" alt="" />
+방금 만든 pem키를 달고 기존 http 서버로 라우팅되게 하면 된다.</p>
+<p>그러고 재시작해주면</p>
+<p><img src="/images/img_306f1c64cbd35e85.png" alt="" />
+동작...은 하는데</p>
+<br>
+<p><img src="/images/img_8c744fe1eb4129ee.png" alt="" />
+HTTPS로서는 기능하지 않을 것이다. 이러면 사실 HTTP로 동작한 것이다.<br />
+공개키 인증서가 제대로 제공되지 않기 때문이다.</p>
+<p>각 클라이언트마다 상기한 crt 공개키 파일을 다운받아서 인증서로 등록해줘야 한다.<br />
+이건 OS 수준에서 할 수도 있고, 브라우저 수준에서도 할 수 있는데, OS에서 설정하면 보통 브라우저 등 하위시스템에도 자동으로 상속된다.</p>
+<br>
+<br>
+<br>
+<h2 id="injeungseo-seoljeong-linux-ubuntu">인증서 설정: Linux (Ubuntu)</h2>
+<p>우분투의 경우에는 다음 명령으로 인증서를 설정할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #F5C2E7;font-style: italic;">#!/bin/bash</span></span>
+<span class="giallo-l"><span># Ubuntu</span><span style="color: #94E2D5;">/</span><span>Debian용 CA 인증서 설치 스크립트</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>set</span><span style="color: #94E2D5;"> -</span><span>e</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;🐧 Ubuntu/Debian에 Acloset CA 인증서 설치 중...&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">if</span><span> [</span><span style="color: #94E2D5;"> ! -</span><span>f</span><span style="color: #A6E3A1;"> &quot;server.crt&quot;</span><span> ]</span><span style="color: #9399B2;">;</span><span> then</span></span>
+<span class="giallo-l"><span>    echo</span><span style="color: #A6E3A1;"> &quot;❌ acloset-ca.crt 파일이 없습니다.&quot;</span></span>
+<span class="giallo-l"><span>    exit</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>fi</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># </span><span style="color: #FAB387;">1.</span><span> CA 인증서를 시스템 CA 디렉토리에 복사</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;1️⃣ CA 인증서를 시스템에 복사...&quot;</span></span>
+<span class="giallo-l"><span>sudo cp server</span><span style="color: #94E2D5;">.</span><span>crt</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>local</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>ca</span><span style="color: #94E2D5;">-</span><span>certificates</span><span style="color: #94E2D5;">/</span><span>server</span><span style="color: #94E2D5;">.</span><span>crt</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># </span><span style="color: #FAB387;">2.</span><span> CA 인증서 업데이트</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;2️⃣ CA 인증서 데이터베이스 업데이트...&quot;</span></span>
+<span class="giallo-l"><span>sudo update</span><span style="color: #94E2D5;">-</span><span>ca</span><span style="color: #94E2D5;">-</span><span>certificates</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># </span><span style="color: #FAB387;">3.</span><span> 설치 확인</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;3️⃣ CA 인증서 설치 확인...&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">if</span><span> [</span><span style="color: #94E2D5;"> -</span><span>f</span><span style="color: #A6E3A1;"> &quot;/usr/local/share/ca-certificates/server.crt&quot;</span><span> ]</span><span style="color: #9399B2;">;</span><span> then</span></span>
+<span class="giallo-l"><span>    echo</span><span style="color: #A6E3A1;"> &quot;✅ CA 인증서가 성공적으로 설치되었습니다.&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">else</span></span>
+<span class="giallo-l"><span>    echo</span><span style="color: #A6E3A1;"> &quot;❌ CA 인증서 설치에 실패했습니다.&quot;</span></span>
+<span class="giallo-l"><span>    exit</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>fi</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;&quot;</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;🎉 Ubuntu/Debian CA 인증서 설치 완료!&quot;</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;==========================================&quot;</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;✅ 이제 curl이나 브라우저로 HTTPS 접속이 가능합니다&quot;</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;📝 브라우저를 재시작하세요&quot;</span></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;==========================================&quot;</span></span></code></pre>
+<p><img src="/images/img_9b8a94f837aca88a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="injeungseo-seoljeong-macos">인증서 설정: MacOS</h2>
+<p>MacOS는 다음 명령들을 사용해서 인증서를 등록할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 시스템 키체인에 CA 인증서</span><span style="color: #89B4FA;font-style: italic;"> 추가</span><span> (관리자 권한 필요)</span></span>
+<span class="giallo-l"><span>sudo security add</span><span style="color: #94E2D5;">-</span><span>trusted</span><span style="color: #94E2D5;">-</span><span>cert</span><span style="color: #94E2D5;"> -</span><span>d</span><span style="color: #94E2D5;"> -</span><span>r trustRoot</span><span style="color: #94E2D5;"> -</span><span>k</span><span style="color: #94E2D5;"> /</span><span>Library</span><span style="color: #94E2D5;">/</span><span>Keychains</span><span style="color: #94E2D5;">/</span><span>System</span><span style="color: #94E2D5;">.</span><span>keychain server</span><span style="color: #94E2D5;">.</span><span>crt</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 현재 사용자 키체인에도</span><span style="color: #89B4FA;font-style: italic;"> 추가</span><span> (선택사항)</span></span>
+<span class="giallo-l"><span>security add</span><span style="color: #94E2D5;">-</span><span>trusted</span><span style="color: #94E2D5;">-</span><span>cert</span><span style="color: #94E2D5;"> -</span><span>d</span><span style="color: #94E2D5;"> -</span><span>r trustRoot</span><span style="color: #94E2D5;"> -</span><span>k</span><span style="color: #94E2D5;"> ~/</span><span>Library</span><span style="color: #94E2D5;">/</span><span>Keychains</span><span style="color: #94E2D5;">/</span><span>login</span><span style="color: #94E2D5;">.</span><span>keychain server</span><span style="color: #94E2D5;">.</span><span>crt</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;macOS CA 인증서 설치 완료!&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 설치 확인</span></span>
+<span class="giallo-l"><span>security find</span><span style="color: #94E2D5;">-</span><span>certificate</span><span style="color: #94E2D5;"> -</span><span>c</span><span style="color: #A6E3A1;"> &quot;192.168.0.68&quot;</span><span style="color: #94E2D5;"> /</span><span>Library</span><span style="color: #94E2D5;">/</span><span>Keychains</span><span style="color: #94E2D5;">/</span><span>System</span><span style="color: #94E2D5;">.</span><span>keychain</span></span></code></pre>
+<p><img src="/images/img_720f8b779fbfe565.png" alt="" /></p>
+<p><img src="/images/img_8b75425aec56df88.png" alt="" />
+그래서 이렇게 뜨면 잘 등록된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="injeungseo-seoljeong-windows">인증서 설정: Windows</h2>
+<p>Powershell을 관리자 권한으로 실행한 뒤에 다음 스크립트를 실행하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># Windows PowerShell</span><span style="color: #89B4FA;font-style: italic;"> 스크립트</span><span> (관리자 권한 필요)</span></span>
+<span class="giallo-l"><span># Windows에서 CA 인증서 설치</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;🪟 Windows에 CA 인증서 설치 중...&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Green</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 관리자 권한 확인</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">if</span><span> (</span><span style="color: #94E2D5;">-</span><span style="color: #89B4FA;font-style: italic;">NOT</span><span> ([Security</span><span style="color: #94E2D5;">.</span><span>Principal</span><span style="color: #94E2D5;">.</span><span>WindowsPrincipal] [Security</span><span style="color: #94E2D5;">.</span><span>Principal</span><span style="color: #94E2D5;">.</span><span>WindowsIdentity]::</span><span style="color: #89B4FA;font-style: italic;">GetCurrent</span><span>())</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">IsInRole</span><span>([Security</span><span style="color: #94E2D5;">.</span><span>Principal</span><span style="color: #94E2D5;">.</span><span>WindowsBuiltInRole]</span><span style="color: #A6E3A1;"> &quot;Administrator&quot;</span><span>))</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;❌ 이 스크립트는 관리자 권한으로 실행해야 합니다!&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Red</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;PowerShell을 관리자 권한으로 다시 실행하세요.&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Yellow</span></span>
+<span class="giallo-l"><span>    exit</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># CA 인증서 파일 확인</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">if</span><span> (</span><span style="color: #94E2D5;">-</span><span style="color: #89B4FA;font-style: italic;">not</span><span> (Test</span><span style="color: #94E2D5;">-</span><span>Path</span><span style="color: #A6E3A1;"> &quot;server.crt&quot;</span><span>))</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;❌ server.crt 파일이 없습니다.&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Red</span></span>
+<span class="giallo-l"><span>    exit</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    # </span><span style="color: #FAB387;">1.</span><span> CA 인증서를 시스템 신뢰할 수 있는 루트 인증 기관에 추가</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;1️⃣ CA 인증서를 시스템에 추가 중...&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Cyan</span></span>
+<span class="giallo-l"><span>    Import</span><span style="color: #94E2D5;">-</span><span>Certificate</span><span style="color: #94E2D5;"> -</span><span>FilePath</span><span style="color: #A6E3A1;"> &quot;server.crt&quot;</span><span style="color: #94E2D5;"> -</span><span>CertStoreLocation Cert</span><span style="color: #9399B2;">:</span><span>\LocalMachine\Root</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    # </span><span style="color: #FAB387;">2.</span><span> 현재 사용자용으로도</span><span style="color: #89B4FA;font-style: italic;"> 추가</span><span> (선택사항)</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;2️⃣ 현재 사용자용 CA 인증서 추가 중...&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Cyan</span></span>
+<span class="giallo-l"><span>    Import</span><span style="color: #94E2D5;">-</span><span>Certificate</span><span style="color: #94E2D5;"> -</span><span>FilePath</span><span style="color: #A6E3A1;"> &quot;server.crt&quot;</span><span style="color: #94E2D5;"> -</span><span>CertStoreLocation Cert</span><span style="color: #9399B2;">:</span><span>\CurrentUser\Root</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    # </span><span style="color: #FAB387;">3.</span><span> 설치 확인</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;3️⃣ CA 인증서 설치 확인 중...&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Cyan</span></span>
+<span class="giallo-l"><span>    $cert</span><span style="color: #94E2D5;"> =</span><span> Get</span><span style="color: #94E2D5;">-</span><span>ChildItem</span><span style="color: #94E2D5;"> -</span><span>Path Cert</span><span style="color: #9399B2;">:</span><span>\LocalMachine\Root</span><span style="color: #94E2D5;"> |</span><span> Where</span><span style="color: #94E2D5;">-</span><span>Object</span><span style="color: #9399B2;"> {</span><span>$_</span><span style="color: #94E2D5;">.</span><span>Subject</span><span style="color: #94E2D5;"> -</span><span>like</span><span style="color: #A6E3A1;"> &quot;*Internal Root CA*&quot;</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> ($cert)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;✅ CA 인증서가 성공적으로 설치되었습니다!&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Green</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;❌ CA 인증서 설치 확인에 실패했습니다.&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Red</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;&quot;</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;🎉 Windows CA 인증서 설치 완료!&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Green</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;==========================================&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor White</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;✅ 이제 브라우저로 HTTPS 접속이 가능합니다&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Green</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;📝 모든 브라우저를 재시작하세요&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Yellow</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;==========================================&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor White</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span style="color: #CBA6F7;"> catch</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host</span><span style="color: #A6E3A1;"> &quot;❌ CA 인증서 설치 중 오류가 발생했습니다:&quot;</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Red</span></span>
+<span class="giallo-l"><span>    Write</span><span style="color: #94E2D5;">-</span><span>Host $_</span><span style="color: #94E2D5;">.</span><span>Exception</span><span style="color: #94E2D5;">.</span><span>Message</span><span style="color: #94E2D5;"> -</span><span>ForegroundColor Red</span></span>
+<span class="giallo-l"><span>    exit</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<br>
+<h2 id="injeungseo-seoljeong-keuromyi-gyeongu">인증서 설정: 크롬의 경우</h2>
+<p>브라우저 수준에서도 설정을 할 수는 있다.<br />
+chrome://settings/certificates로 들어가서</p>
+<p><img src="/images/img_37905f9e6e126577.png" alt="" /></p>
+<p><img src="/images/img_4ad6774d0de2e29e.png" alt="" /></p>
+<p><img src="/images/img_55ea07ee039ef674.png" alt="" />
+crt 파일을 등록해주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="ggeut">끝</h2>
+<p>아무튼 인증서가 잘 등록되었다면, 이제부터는 오류 없이 https로 접속이 될 것이다.</p>
+<p><img src="/images/img_5e66803fc510f5e1.png" alt="" />
+성공이다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224027795599/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] Internal: 데이터 저장 구조<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224026443777/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Concurrency] Lock: Mutex와 RWLock의 원리<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>로드밸런서와 웹 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223700820162/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="로드밸런서와 웹">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223700820162/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-12-21T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223700820162/">로드밸런서와 웹</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-12-21T00:00:00+00:00"><time datetime="2024-12-21T00:00:00+00:00">2024.12.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="816 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223700820162" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>여기서는 로드밸런서의 기본적인 구조와, 사용사례를 간단히 정리해본다.</p>
+<br>
+<br>
+<h2 id="1-buha-bunsan">1. 부하 분산</h2>
+<p>로드밸런서는 이름처럼, 부하 분산(Load Balancing)을 위해서 생겨난 시스템이다.</p>
+<p>만약 서비스의 사용량이 늘어서 서버가 감당하지 못하게 된다면 어떻게 해야할 것 같은가?</p>
+<p>단순하게 생각하면 그냥 서버 스펙을 올리는 것만으로 해결을 할 수도 있을 것이다. 단순 서버 업그레이드를 scale-up이라고 부른다.</p>
+<p>하지만 서버 스펙을 올리는 데는 한계가 있고 교체도 쉬운 작업이 아니다.<br />
+2배 비싼 서버를 사더라도 성능이 2개 증가하는게 아니고, 서버 스펙에는 상한선이 존재한다. 게다가 서버 교체는 필연적으로 다운타임을 수반한다.</p>
+<p>이런 구조는 당연히 서비스에 크나큰 차질을 줄 수 있는 부분이다.<br />
+그래서 생긴 것이 부하 분산 매커니즘이다.</p>
+<p>기본 원리는 대단한 것이 아니다.<br />
+여러개의 서버를 병렬로 띄우고, 몸빵을 해주는 "로드밸런서"라는 것을 앞에 두는 것이다.</p>
+<p><img src="/images/img_3594d3d18de896be.png" alt="" />
+로드밸런서는 많은 일을 하지 않기 때문에 단일 머신으로도 아주 높은 처리량을 가질 수 있다.<br />
+요청이 들어오면 딱 개별 서버들에 일감 분배해주고, 응답이 돌아오면 다시 전달해주는 그 정도만 해주기 때문이다.<br />
+서버 사용량이 친다 싶으면, 그냥 서버를 하나 더 띄워서 로드밸런서에 연결만 하면 된다. 이런 서버의 병렬 확장을 scale-out라고 부른다.</p>
+<p>이런 병렬 구조는 사용량 확장에만 장점이 있는 것이 아니고, 가용성 확보에도 유리하다. 서버가 하나 터져도 다른 서버가 일하면 되기 때문이다.</p>
+<p>이외에도 다양한 관리상의 장점이나, 무중단 배포 등의 장점이 존재한다.</p>
+<br>
+<br>
+<br>
+<h2 id="2-network-level-rodeubaelreonseo-l4">2. Network Level 로드밸런서 (L4)</h2>
+<p><img src="/images/img_0b168ae56e2f3841.png" alt="" />
+<a rel="external" href="https://levelup.gitconnected.com/l4-vs-l7-load-balancing-d2012e271f56">https://levelup.gitconnected.com/l4-vs-l7-load-balancing-d2012e271f56</a><br />
+이게 약간 초기 형태의 로드밸런서라고 할 수 있다. 이건 요즘 기준에서 보자면 아주 낮은 수준에서의 부하 분산을 처리하는 시스템이다.</p>
+<p>TCP, UDP 같은 기반 통신 프로토콜 수준에서 라우팅을 수행하는게 특징이다.</p>
+<br>
+<h4 id="jangjeom">장점</h4>
+<ol>
+<li>낮은 패킷 레벨에서 동작하는거라 꽤 가볍고 빠르다.</li>
+<li>제공 플랫폼에 따라서 고정 IP 등의 옵션을 제공하기도 한다. (AWS NLB)</li>
+</ol>
+<br>
+<h4 id="danjeom">단점</h4>
+<ol>
+<li>일반적인 웹 환경에서 필요로 하는, TLS, 보안 기능, DoS 방지, 모니터링 등의 다양한 기능을 제공하지 못한다.</li>
+</ol>
+<br>
+<h4 id="awseseo">AWS에서</h4>
+<p>AWS에는 L4 로드밸런서로 Network Loadbalancer(NLB)라는 서비스를 제공한다.<br />
+일반적인 웹서버 서빙 용도로는 잘 사용하지 않고, LB 자체에 고유 IP가 필요하다거나, 내부 접근용 private LB가 필요하다거나 하는 한정적인 상황에 보조적으로 사용된다.</p>
+<br>
+<br>
+<br>
+<h2 id="3-application-rodeubaelreonseo-l7">3. Application 로드밸런서 (L7)</h2>
+<p>요즘 로드밸런서라고 하면 보통 다 이걸 가리킨다.<br />
+애플리케이션, HTTP/HTTPS 수준의 완성된 웹 수준 라우팅을 제공하는 시스템을 말한다.</p>
+<br>
+<h4 id="jangjeom-1">장점</h4>
+<ol>
+<li>웹서버 관리에 필요한 다양한 기능들이 사전에 제공된다. (보안, TLS 등)</li>
+</ol>
+<br>
+<h4 id="danjeom-1">단점</h4>
+<ol>
+<li>HTTP handshake, TLS를 포함해서 처리하는 것이 꽤 많기 때문에, L4 로드밸런서에 비하면 로드밸런서에 몰리는 부하가 조금 더 큰 편이다.</li>
+<li>속도 자체도 비교적 느리다.</li>
+</ol>
+<br>
+<h4 id="awseseo-1">AWS에서</h4>
+<p>AWS에서는 Application Loadbalancer(ALB)라는 이름으로 제공된다. 특별한 이유가 없다면 서버를 구축할때 기본 옵션이 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="4-mujungdan-baepo">4. 무중단 배포</h2>
+<p>로드밸런서는 단순 부하분산에만 목적이 있는 것이 아니라, 배포를 안전하게 하기 위한 수단으로서도 존재한다.<br />
+자세한 것은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223418573577">https://blog.naver.com/sssang97/223418573577</a></p>
+<br>
+<br>
+<br>
+<h2 id="5-rodeubaelreonseo-guhyeonce">5. 로드밸런서 구현체</h2>
+<p>직접 오픈소스 가져다가 로드밸런서를 구축하고 싶다면 몇가지 선택지가 있다.</p>
+<ol>
+<li>
+<p>nginx</p>
+</li>
+<li>
+<p>haproxy</p>
+</li>
+<li>
+<p>envoy</p>
+</li>
+</ol>
+<br>
+<p>기본적으로 가장 많이 사용되는게 nginx고, haproxy가 전통의 강자 같은 포지션이다.</p>
+<p>AWS/GCP 같은 클라우드를 쓴다면 클라우드에서 제공하는 관리형 로드밸런서를 쓰는 편이 좋다.<br />
+로드밸런서는 가용성과 확장성이 중요한데, 그걸 직접 비용 효율적으로 관리하는건 거의 불가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="6-http1wa-http2-tls">6. HTTP1와 HTTP2(TLS)</h2>
+<p>HTTP2는 HTTP1에 비하면 연결 관련 효율성이 꽤 뛰어난 것이 특징이다.<br />
+그러면 로드밸런서 환경에서는 HTTP2 구성을 하려면 어떻게 해야할까? HTTP2의 특이한 점 중 하나는 TLS 설정이 필수라는 것이다.</p>
+<p>일반적으로 웹 서버는 다음과 같은 계층 구조를 가질텐데</p>
+<p><img src="/images/img_b0e388c4c4cb4590.png" alt="" /></p>
+<p>여기서 가장 간편하게 HTTP2를 제공하는 방법은 Client&lt;&gt;LB에만 HTTP2를 구성되게 하고, LB&lt;&gt;Server 통신은 그냥 HTTP1로 통신하게 하는 것이다.</p>
+<p><img src="/images/img_4112a8c34784ad81.png" alt="" />
+이게 클래식한 기본 구성이다.<br />
+심지어 AWS에서는 2020년까지는 이런 구성만 가능했다.</p>
+<p>이러면 클라이언트&lt;&gt;LB 수준에서는 멀티플렉싱 등이 효율적으로 동작한다는 장점이 있지만, HTTP/2 Push 같은 강력한 기능을 활용할 수 없다는 단점이 있다.<br />
+그리고 (내부망을 신뢰할 수 없다면) LB&lt;&gt;서버 사이에 뭔가가 탈취될 수 있다는 불안에 갇힐 수도 있다.</p>
+<p>아무튼 여기서 뭔가를 더 원한다면 LB&lt;&gt;서버 사이에도 HTTP2를 구성해서 End2End로 HTTP2 통신이 이어지게 하곤 한다.</p>
+<p><img src="/images/img_77d93f7837bcfd39.png" alt="" />
+이러면 물론 손이 가는 부분이 늘어나고 단점도 있다.</p>
+<p><strong>단점</strong></p>
+<ol>
+<li>LB만 TLS 같은 인증 책임을 갖는게 아니라, 서버들도 인증서 들고서 책임을 갖고 있어야 한다. 관리지점이 분산된다.</li>
+<li>TLS 같은 인증, 보안 관련 처리는 공짜가 아니다. 결국 CPU 리소스도 추가로 먹고 그러는 거다.</li>
+</ol>
+<p><strong>장점</strong></p>
+<ol>
+<li>HTTP2의 기능과 성능 이점을 최대한으로 활용할 수 있다.</li>
+<li>최대한의 보안 구조를 내세울 수 있다.</li>
+</ol>
+<p>여기에는 딱히 정답이라 할건 없고, 선택의 여지가 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://serverfault.com/questions/68753/does-each-server-behind-a-load-balancer-need-their-own-ssl-certificate">https://serverfault.com/questions/68753/does-each-server-behind-a-load-balancer-need-their-own-ssl-certificate</a><br />
+<a rel="external" href="https://wtarreau.blogspot.com/2006/11/making-applications-scalable-with-load.html">https://wtarreau.blogspot.com/2006/11/making-applications-scalable-with-load.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/36049597/does-http-2-need-to-be-implemented-end-to-end-to-be-useful">https://stackoverflow.com/questions/36049597/does-http-2-need-to-be-implemented-end-to-end-to-be-useful</a><br />
+<a rel="external" href="https://serverfault.com/questions/836568/terminate-http-2-on-aws-alb">https://serverfault.com/questions/836568/terminate-http-2-on-aws-alb</a><br />
+<a rel="external" href="https://levelup.gitconnected.com/l4-vs-l7-load-balancing-d2012e271f56">https://levelup.gitconnected.com/l4-vs-l7-load-balancing-d2012e271f56</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223705401331/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>rupring v0.13.0<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223697117528/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] SQS - 비용 최적화: 롱 폴링<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

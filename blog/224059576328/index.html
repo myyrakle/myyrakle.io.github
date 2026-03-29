@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Java] Class의 Alignment | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224059576328/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Java] Class의 Alignment">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224059576328/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-10-31T00:00:00+00:00">
+    <meta property="article:tag" content="Java">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224059576328/">[Java] Class의 Alignment</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-10-31T00:00:00+00:00"><time datetime="2025-10-31T00:00:00+00:00">2025.10.31</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="386 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/java/">Java</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224059576328" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>C/C++, Rust 등 저수준제어를 표방하는 언어에서는 Alignment라는 것이 제법 중요한 주제다.<br />
+구조체의 필드들이 어떻게 배치되는지에 따라서 실제 성능이 달라지기도 하고, ABI에 영향을 미치기도 하기 때문이다.</p>
+<p>Java에서는 이런걸 고려할 일이 많진 않지만, 최적화에 관심이 많다면 알아둬서 나쁠 것은 없다.<br />
+JVM도 최적화를 위해 Alignment를 내부적으로 조정하기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-alignment-dongjag">기본 Alignment 동작</h2>
+<p>자, 이렇게 클래스가 하나 있다고 해보자.</p>
+<p><img src="/images/img_b07da05e6a2c3f14.png" alt="" />
+이건 실제 메모리에 올라갈 때 어떻게 올라갈까?</p>
+<p>일단 String은 class니까 8바이트, int는 4바이트, bool은 1바이트다.<br />
+그러면 저걸 그대로 붙여서 13바이트로 올릴까?</p>
+<p>아니다. 설정에 따라 달라질 수는 있지만, 실제로는 3바이트 정도가 더 붙는다.</p>
+<p><img src="/images/img_88eacddb36f0c190.png" alt="" />
+내부적으로 JVM은 클래스의 값들을 8바이트 단위로 채워서 관리하기 때문이다.</p>
+<p>openjdk의 레이아웃 모듈을 쓰면 실제로 생성되는 클래스 정보를 까볼 수도 있다.</p>
+<p><img src="/images/img_8256dbbc3f5ca1b5.png" alt="" /></p>
+<p><img src="/images/img_4763fd3c82708a2d.png" alt="" />
+그럼 이렇게 나온다. 바이트 3칸을 넣는다는 것은 확실히 볼 수 있다. 패딩 갭이라고 쓰여있는게 패딩이다.<br />
+그리고 순서를 제멋대로 바꿀 수 있다. 실제 구조체 필드와 다르게 name 필드가 맨 뒤로 밀려난 것을 볼 수 있다.</p>
+<p>이건 CPU 수준의 캐시 최적화와 밀접한 연관이 있다.</p>
+<p>현대의 64비트 CPU들은 값을 다룰때 8바이트 단위로 다루는 것이 가장 최적의 성능을 낸다.<br />
+만약 패딩을 채우지 않고 어정쩡하게 잘랐다면, 한번에 읽어서 처리할만한 것도 분리된채로 별도 load를 해야할 수도 있기 때문이다.</p>
+<p>그리고 필드를 제멋대로 뒤섞는 것도 패딩 크기가 컴팩트하게 잘 들어가는지를 고려해서 넣는다.</p>
+<p><img src="/images/img_2c7d0f83c9ddeddf.png" alt="" />
+그래서 이렇게 못생긴 패딩 구조의 클래스를 정의해도</p>
+<br>
+<p><img src="/images/img_6d890d13a40bda10.png" alt="" />
+적당히 딱딱 들어맞게 맞춰준다.</p>
+<br>
+<br>
+<br>
+<h2 id="paeding-keugi-jojeol">패딩 크기 조절</h2>
+<p>jvm의 기본 패딩 크기는 8이고, 굳이 바꿀 이유도 잘 없지만, 바꾸는 것은 가능하다.<br />
+코드 수준에서는 제어할 수 없고, 실행할때 ObjectAlignmentInBytes라는 플래그를 주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">-</span><span>XX</span><span style="color: #9399B2;">:</span><span>ObjectAlignmentInBytes</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">16</span></span></code></pre>
+<p>그리고 이 클래스를 넣어서 조사해보면</p>
+<p><img src="/images/img_5ead5cb303c7dcf7.png" alt="" /></p>
+<p><img src="/images/img_8e3a877eaee1d307.png" alt="" />
+이번에는 패딩을 15바이트나 넣는 기괴한 짓을 했다.<br />
+헤더 바이트 12 + 데이터 5바이트 하니까 16 + 1바이트가 남아서 채워버린 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="alignment-haeje">Alignment 해제</h2>
+<p>Alignment를 비활성화하는 권장되는 방법은 없다.</p>
+<p>정 필요하다면 byte 배열에 원하는 순서대로 값을 억지로 구겨넣거나 해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="c-ffiwa-alignment">C FFI와 Alignment</h2>
+<p>그럼에도 불구하고, Alignment가 자바스럽게 되지 않아야하는 사용사례는 존재한다.<br />
+대표적인 경우가 C/C++와의 상호 운용성, 라이브러리를 갖다 쓸 때다.</p>
+<p>당연히 C는 본인만의 Alignment 규칙을 갖고 있고, 이건 자바와 호환되지 않을 확률이 매우 높다.<br />
+그래서 FFI용 Struct를 사용할 때는 C의 Alignment Rule를 따르는 식으로 동작하게 된다.</p>
+<p><img src="/images/img_87eb706f43b15101.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/44468639/memory-alignment-of-java-classes">https://stackoverflow.com/questions/44468639/memory-alignment-of-java-classes</a><br />
+<a rel="external" href="https://www.baeldung.com/java-memory-layout">https://www.baeldung.com/java-memory-layout</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224059530130/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 유용한 기본 매크로 소개<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224060027348/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Qdrant] 성능 최적화, 팁<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

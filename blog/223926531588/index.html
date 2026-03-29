@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Publication: WAL 기반 복제&#x2F;CDC | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223926531588/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Publication: WAL 기반 복제/CDC">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223926531588/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-07-08T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223926531588/">[PostgreSQL] Publication: WAL 기반 복제&#x2F;CDC</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-07-08T00:00:00+00:00"><time datetime="2025-07-08T00:00:00+00:00">2025.07.08</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="535 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223926531588" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Publication은 PostgreSQL에서 자체적으로 제공하는 데이터 복제용 기능이다.<br />
+WAL을 그대로 스트리밍할 수 있게 해주며, Replica 구성을 위한 복제나 CDC 기능 등에 활용할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="jehan">제한</h2>
+<p>DML, INSERT/UPDATE/DELETE에 대해서만 유효하게 동작한다. DDL 등에 대해서는 반응할 수 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="publication-mandeulgi">Publication 만들기</h2>
+<p>복제 경로를 뚫으려면 먼져 publication이라는 일종의 채널을 만들어야 한다.<br />
+다음과 같이 만들 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE PUBLICATION 이름 FOR ALL TABLES</span><span style="color: #94E2D5;"> --</span><span> 모든 테이블</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE PUBLICATION 이름 FOR ONLY TABLE 테이블</span><span style="color: #9399B2;">,</span><span> 테이블2</span><span style="color: #94E2D5;"> --</span><span> 특정 테이블</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE PUBLICATION 이름 FOR TABLE ONLY 테이블</span><span style="color: #89B4FA;font-style: italic;"> WITH</span><span> (publish</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;update&#39;</span><span>)</span><span style="color: #9399B2;">;</span><span style="color: #94E2D5;"> --</span><span> 특정 테이블의 update 연산만</span></span></code></pre>
+<p>예를 들어 global_state라는 테이블에 대해 update/insert 기록을 조회하고 싶다면, 이런 식으로 만들 수 있다.</p>
+<p><img src="/images/img_b4598f1756f692f5.png" alt="" /></p>
+<p>publication 목록은 이걸로 조회할 수 있고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span><span> FROM pg_publication order by oid desc</span></span></code></pre>
+<p><img src="/images/img_209e190acb09e00b.png" alt="" /></p>
+<p>publication에 속한 테이블 목록은 이걸로 조회할 수 있다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span><span> FROM pg_publication_tables where pubname</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;pub 이름&#39;</span></span></code></pre>
+<p><img src="/images/img_60be1cad90353171.png" alt="" /></p>
+<p><img src="/images/img_22eec9752b05ed46.png" alt="" /></p>
+<p>삭제는 반대로 DROP 명령을 통해서 처리할 수 있다.</p>
+<p><img src="/images/img_9230604f4f4cdf02.png" alt="" /></p>
+<p>생성 이후에 테이블을 추가하거나 제거하고 싶다면, ALTER PUBLICATION을 사용할 수 있다.</p>
+<p><img src="/images/img_c71ca4cd76784f4a.png" alt="" />
+ADD TABLE이나 DROP TABLE을 사용하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="slot-mandeulgi">Slot 만들기</h2>
+<p>변경내역을 조회하려면 슬롯이란걸 또 만들어야 한다.<br />
+슬롯을 기반으로 해서 일종의 페이지네이션 조회를 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #89B4FA;font-style: italic;"> pg_create_logical_replication_slot</span><span>(슬롯이름</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;출력 포맷&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>출력 포맷은 응답이 어떤 형태로 나올지를 정의한다.<br />
+pgoutput이 가장 일반적인 선택이고, 바이너리 형태로 응답을 반환한다. pgoutput을 쓸 경우에는 단순한 SQL 인터페이스로는 조회를 할 수 없다.</p>
+<br>
+<p><img src="/images/img_75441a6cd73a79bd.png" alt="" />
+이렇게 만들고 나면</p>
+<p>만들어진 slot은 다음 쿼리로 조회할 수 있고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>select</span><span style="color: #94E2D5;"> *</span><span> from pg_replication_slots</span></span></code></pre>
+<p><img src="/images/img_440fcc10f8003cbe.png" alt="" /></p>
+<p>슬롯을 지우고싶다면 이렇게 지울 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #89B4FA;font-style: italic;"> pg_drop_replication_slot</span><span>(</span><span style="color: #A6E3A1;">&#39;슬롯이름&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_afe757e014e31ed3.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="byeongyeong-deiteo-gudoghagi">변경 데이터 구독하기</h2>
+<p>변경 데이터 구독은 pg_logical_slot_peek_binary_changes 혹은 pg_logical_slot_get_binary_changes을 사용해서 처리할 수 있다.<br />
+peek은 데이터를 조회만 하고, get은 조회 후 소비까지 한다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span></span>
+<span class="giallo-l"><span>FROM</span><span style="color: #89B4FA;font-style: italic;"> pg_logical_slot_peek_binary_changes</span><span>(</span><span style="color: #A6E3A1;">&#39;슬롯이름&#39;</span><span style="color: #9399B2;">,</span><span> NULL</span><span style="color: #9399B2;">,</span><span> NULL</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;proto_version&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;1&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;publication_names&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;publication_이름&#39;</span><span>)</span></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span></span>
+<span class="giallo-l"><span>FROM</span><span style="color: #89B4FA;font-style: italic;"> pg_logical_slot_peek_binary_changes</span><span>(</span><span style="color: #A6E3A1;">&#39;슬롯이름&#39;</span><span style="color: #9399B2;">,</span><span> NULL</span><span style="color: #9399B2;">,</span><span> NULL</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;proto_version&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;1&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;publication_names&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;publication_이름&#39;</span><span>)</span></span></code></pre>
+<p><img src="/images/img_3505cda87fd54311.png" alt="" />
+그럼 이런식으로 조회가 되는데, 문제는 저 데이터가 바이너리 인코딩이라서 해석하려면 디코딩을 해야 한다는 것이다. 이건 SQL 내에서 처리하긴 좀 까다로울 수 있고, 프로그램으로 해결해야 한다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="consumer-kodeu-jagseong-go">Consumer 코드 작성 (Go)</h2>
+<p>예시 코드는 다음 위치에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/go_example/blob/master/database/postgresql/publication.go">https://github.com/myyrakle/go_example/blob/master/database/postgresql/publication.go</a></p>
+<p><img src="/images/img_635068a83d4696fd.png" alt="" /></p>
+<p>그리고 테이블에서 값을 변경해보고</p>
+<p><img src="/images/img_6ce39234bd6739e0.png" alt="" /></p>
+<p>Consumer를 실행해보면</p>
+<p><img src="/images/img_3bdebe936b45835d.png" alt="" />
+이런 식으로 찍힐 것이다.<br />
+참고로, 저렇게 조회되는 메세지 중에는 쓸모없는 transaction/rollback 등이 섞여있다.<br />
+그래서 실제 메세지는 몇만개 남짓인데 실제 변경에 대한 이벤트는 하나인 것이다. 이건 그냥 적당히 알아서 거르는수밖에 없다.</p>
+<p>그리고 peek는 읽기전용이라서 읽더라도 소모가 되지 않고 계속 노출이 된다.</p>
+<p><img src="/images/img_0a174ad0b4eb03ff.png" alt="" />
+get 버전을 사용한다면 읽기 이후에 소모해서</p>
+<br>
+<p><img src="/images/img_7f7f585376456121.png" alt="" />
+다시 조회하면 그 이후의 데이터만 조회가 될 것이다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="sudong-seulros-wici-jojeol">수동 슬롯 위치 조절</h2>
+<p>peek는 슬롯 위치를 이동하지 않고 데이터를 꺼내오고, get은 위치를 이동시키면서 꺼내온다고 했다.</p>
+<p>근데 그러면 데이터 가공을 완료한 뒤에 위치를 이동시키려면 어떻게 할까?<br />
+get을 썼는데, 오류가 나면 그대로 데이터가 증발하는 셈이고, peek를 쓰면 위치가 이동되지 않는다.</p>
+<p>그럴때는 pg_replication_slot_advance라는 함수를 쓸 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">pg_replication_slot_advance</span><span>(</span><span style="color: #A6E3A1;">&#39;슬롯이름&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;커서(lsn)&#39;</span><span>)</span></span></code></pre>
+<p><img src="/images/img_78b7e307bf93a6de.png" alt="" />
+만약 저기서 6번째까지 다 처리했다고 하면</p>
+<br>
+<p><img src="/images/img_6f3cc3f4cc71afce.png" alt="" />
+이렇게 슬롯 위치를 이동시킬 수 있다.</p>
+<br>
+<p><img src="/images/img_4a882b01ab97fb2d.png" alt="" />
+그러면 이후에 조회할 때는 그 로그부터 조회가 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="munje-wal-manryo">문제: WAL 만료</h2>
+<p>슬롯을 오래 쓰다보면 WAL이 날라가서 읽기가 불가능한 상태가 될 수 있다.</p>
+<p><img src="/images/img_fd1f8befcb2c991c.png" alt="" /></p>
+<p><img src="/images/img_c39982ce3a0fb9c0.png" alt="" />
+이 상태에서 내가 알기로 슬롯을 살리는건 불가능하다.<br />
+아마 삭제 후에 다시 만들어야 할 것이다.</p>
+<p>이걸 좀 덜 날라가게 만들려면, postgres에서 wal 보존 관련된 옵션을 조절해야 한다.</p>
+<p><img src="/images/img_c53a41597b68cce3.png" alt="" /></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.postgresql.org/docs/9.4/catalog-pg-replication-slots.html">https://www.postgresql.org/docs/9.4/catalog-pg-replication-slots.html</a><br />
+<a rel="external" href="https://blog.ex-em.com/1809">https://blog.ex-em.com/1809</a><br />
+<a rel="external" href="https://postgresql.kr/docs/12/logicaldecoding-example.html">https://postgresql.kr/docs/12/logicaldecoding-example.html</a><br />
+<a rel="external" href="https://blog.ex-em.com/1817">https://blog.ex-em.com/1817</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223926254595/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] Engine: ReplacingMergeTree<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223925136156/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 장기 실행 쿼리 확인 &amp; 중단<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

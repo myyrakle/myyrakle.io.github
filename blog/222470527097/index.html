@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Sentry로 에러 로깅 자동화하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222470527097/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Sentry로 에러 로깅 자동화하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222470527097/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2021-08-15T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222470527097/">Sentry로 에러 로깅 자동화하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-08-15T00:00:00+00:00"><time datetime="2021-08-15T00:00:00+00:00">2021.08.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="558 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222470527097" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>앱이든 서버든, 서비스를 구현해서 사용하다보면 오류를 추적해서 해결해야 할 일이 매우 잦다.</p>
+<p>문제를 해결하려면 당연히 로그를 남겨야 하고,,, 단순한 정보성 로그와 오류 로그 등을 잘 구분해서 관리해줘야 하고, 은근히 신경쓸만한 부분이 많다.</p>
+<p>센트리는 이런걸 편리하게 처리할 수 있게 도와주는 친구다.</p>
+<p>센트리는 직접 구축할 수도 있고 관리형 서비스를 쓸 수도 있는데, 관리형도 제한적이지만 무료 플랜으로 사용이 가능하다. 무료 플랜은 한달에 10000개까지의 이벤트를 사용할 수 있게 해준다.<br />
+<a rel="external" href="https://sentry.io/welcome/">https://sentry.io/welcome/</a><br />
+들어가서 회원가입과 로그인을 잘 해보자.</p>
+<p>그리고 최초로 들어가거나, 프로젝트 탭에서 생성 버튼을 누르면</p>
+<p><img src="/images/img_f5eb097247c7b09c.png" alt="" />
+사용중인 시스템 종류를 고를 수 있다.<br />
+언어, 시스템마다 오류 스택을 표현하는 방식이 달라서 구분해놓은 것 같다.<br />
+여기서 사용중인걸로 원하는 만큼 만들어서 사용하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="express-node-js-eseo-sayonghagi">Express(Node.js)에서 사용하기</h2>
+<p>Express를 골라서 프로젝트를 생성한다.</p>
+<p><img src="/images/img_2606d488508c2f12.png" alt="" /></p>
+<p>그럼 어떻게 세팅하면 된다고 친절하게 다 알려준다.</p>
+<p><img src="/images/img_afdee5581157b7d0.png" alt="" />
+저거 따라서 쳐주면 되고,</p>
+<p>모듈도 이렇게 2개 깔아주면 된다.</p>
+<p><img src="/images/img_0bdb952e136b3dbd.png" alt="" /></p>
+<p>그럼 이렇게 오류가 발생할때마다</p>
+<p><img src="/images/img_a8c63707a9e39114.png" alt="" />
+자동으로 로그를 기록해준다.</p>
+<p>그럼 해당 프로젝트 목록의 이슈 탭에서 오류를 확인할 수 있다.</p>
+<p><img src="/images/img_795dbf9524dee02e.png" alt="" /></p>
+<p>저기로 들어가면 오류에 대한 상세 정보를 볼 수 있다.</p>
+<p><img src="/images/img_278d38a3a1637bf6.png" alt="" /></p>
+<p>오류가 난 소스도 추적을 해주고</p>
+<p><img src="/images/img_511c0b4308bf80be.png" alt="" /></p>
+<p>요청 정보나 기타 등등, 쓸만한 정보들은 대충 다 수집해준다,</p>
+<p><img src="/images/img_c3727a657de54564.png" alt="" /></p>
+<p>그런데 저 방식대로라면 예외가 폭발하는 것에만 대응이 되지, 예외를 직접 잡아서 처리할 경우에는 동작하지 않을 것이다.<br />
+그래서 보통은 예외처리를 하면서 그 예외를 던져주는 식으로 사용하게 될 것이다.</p>
+<p>이런 식으로만 하면 된다.</p>
+<p><img src="/images/img_502389a1181c8415.png" alt="" /></p>
+<p>그럼 잘 기록될 것이다.</p>
+<p><img src="/images/img_af8fbde4b551c1c6.png" alt="" /></p>
+<p>그리고 그냥 임의로 메세지를 보내서 단순 로그를 쌓는 용도로도 활용할 수 있겠다,</p>
+<p><img src="/images/img_13b0e13ed4c5359c.png" alt="" /></p>
+<p>그럼 비슷하게 잘 보여줄 것이다.</p>
+<p><img src="/images/img_33897838cab0f061.png" alt="" /></p>
+<p>React나 React Native의 경우에도 초기 설정만 잘 따라하고 나머지는 동일한 원리로 사용하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="rusteseo-sayonghagi-with-actix">Rust에서 사용하기 (with Actix)</h2>
+<p>러스트에서 사용하는 것도 그렇게 어렵지 않다.<br />
+종속성에 sentry 크레잇을 추가하고</p>
+<p><img src="/images/img_0d668ebd48a7eaf8.png" alt="" /></p>
+<p>공식문서에서 시키는대로 초기화를 한번 시켜주면 된다.</p>
+<p><img src="/images/img_8dc52f6d2146ddeb.png" alt="" /></p>
+<p>그러면 panic이 발생할때마다 그걸 감지해서 자동으로</p>
+<p><img src="/images/img_86b38831ac2cd78e.png" alt="" />
+로그를 찍어준다.</p>
+<p>들어가면 패닉 메세지와 패닉이 발생한 스택트레이스 등을 확인할 수 있을 것이다.</p>
+<p><img src="/images/img_93cfd7f680d15306.png" alt="" /></p>
+<p>그리고 에러를 예외처리와 함께 기록하고 싶다면 다음과 같이 capture_error로 에러 객체를 넣어주면 된다.</p>
+<p><img src="/images/img_3285ae47b5d83eaa.png" alt="" /></p>
+<p>그냥 메세지를 보내고 싶다면 capture_message로 메세지를 넣어주면 된다.</p>
+<p><img src="/images/img_0a6b93b2e416acfd.png" alt="" /></p>
+<p><img src="/images/img_be9d3879bcec268a.png" alt="" /></p>
+<p>참으로 기분좋게도 sentry에서 actix-web까지 지원을 하더라.<br />
+sentry_actix 크레이트를 받아서 wrap으로 그 객체만 넣어주면 된다.</p>
+<p><img src="/images/img_25f4873f9fdf0967.png" alt="" /></p>
+<p>그럼 이제 웹 관련 요청 정보까지 알아서 기록을 해줄 것이다.</p>
+<p><img src="/images/img_0901cbf283a2b4b5.png" alt="" /></p>
+<p>대충 이런식으로 쓰면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="jangjeom1-jungbogsabib-gwanri">장점1: 중복삽입 관리</h2>
+<p>로그를 무작정 때려넣기만 한다면 로그가 온통 뒤섞여서 뭐가 뭔지 구분이 안될 것이다.</p>
+<p>센트리는 똑똑하게도 거의 동일한 형태의 오류면 같은 오류라고 판단해서 하나의 오류로 묶어버린다.</p>
+<p><img src="/images/img_b93761ea0014770e.png" alt="" />
+이러면 같은 오류가 10번이나 발생했다는 뜻이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jangjeom2-oryu-haegyeol-gwanri">장점2: 오류 해결 관리</h2>
+<p>오류 로그마다 해결 여부를 체크해서 관리하거나 무시하게 할 수도 있다.</p>
+<p><img src="/images/img_740e50f5cb93a3b3.png" alt="" /></p>
+<p>그리고 오류에 대해 메세지를 남기고, 적극적으로 소통을 하며 히스토리를 남길 수도 있다.</p>
+<p><img src="/images/img_98828345042c08b3.png" alt="" /></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://engineering.linecorp.com/ko/blog/log-collection-system-sentry-on-premise/">https://engineering.linecorp.com/ko/blog/log-collection-system-sentry-on-premise/</a><br />
+<a rel="external" href="https://medium.com/aha-official/%EC%95%84%ED%95%98-rest-api-%EC%84%9C%EB%B2%84-%EA%B0%9C%EB%B0%9C-14-3819ec9e90e9">https://medium.com/aha-official/%EC%95%84%ED%95%98-rest-api-%EC%84%9C%EB%B2%84-%EA%B0%9C%EB%B0%9C-14-3819ec9e90e9</a><br />
+<a rel="external" href="https://docs.sentry.io/platforms/rust/">https://docs.sentry.io/platforms/rust/</a><br />
+<a rel="external" href="https://docs.sentry.io/platforms/rust/guides/actix-web/">https://docs.sentry.io/platforms/rust/guides/actix-web/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222489322908/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Redis로 API 캐싱하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222462346909/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] ElastiCache: Redis<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

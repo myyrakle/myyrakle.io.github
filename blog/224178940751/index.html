@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana] Loki를 통한 로깅 환경 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224178940751/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana] Loki를 통한 로깅 환경 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224178940751/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-02-10T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224178940751/">[Grafana] Loki를 통한 로깅 환경 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-10T00:00:00+00:00"><time datetime="2026-02-10T00:00:00+00:00">2026.02.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="399 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224178940751" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Loki는 Grafana 스택에서 가장 권장되는 로깅용 시스템이고, 실제로도 아주 잘 통합된다.<br />
+근데 기본값 세팅만으로 알아서 잘 설정되고 그런건 아니라서, 추가 조정이 좀 필요하다.</p>
+<p>Loki 자체를 구성하거나 데이터를 밀어넣는 것은 다루지 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteo-soseu-cuga">데이터 소스 추가</h2>
+<p>가장 먼저 해야할 것은 소스를 추가하는 것이다.<br />
+"Grafana" 서버를 기준으로 Loki에 접근할 수 있는 엔드포인트를 넣어줘야 한다.</p>
+<p><img src="/images/img_b76926ba3ac5992e.png" alt="" />
+내 경우에는 같은 쿠버 클러스터에 있어서 쿠버용 내부 DNS 값을 넣었다.</p>
+<br>
+<br>
+<br>
+<h2 id="loki-daesibodeu-guseong">Loki 대시보드 구성</h2>
+<p>대시보드를 추가하고, Logs 타입의 Panel을 추가한다. 이게 Loki과 가장 잘 맞는 Panel이다.</p>
+<p><img src="/images/img_73b6523d600c6358.png" alt="" /></p>
+<p>소스는 당연히 방금 만든 Loki로 넣고</p>
+<p><img src="/images/img_93d090f89b3a0e79.png" alt="" /></p>
+<p>필터 걸고 적당히 날려보면 된다.</p>
+<p><img src="/images/img_d99752420f8faa8b.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="sangdan-pilteo-guseong">상단 필터 구성</h2>
+<p>로그를 보려면, 당연히 특정 조건, 특정 시스템의 로그만 보는 경우가 대부분이다.<br />
+이건 Variable을 통해서 처리할 수 있다.</p>
+<p><img src="/images/img_b145581888037a30.png" alt="" />
+내 경우에는 특정 앱의 로그만 보기 위한 app_name 변수와, 그 내에서의 검색을 위한 search_text 변수를 정의했다.</p>
+<br>
+<p><img src="/images/img_d6e5adcb8ef1f8a7.png" alt="" />
+app_name은 쿼리 타입으로 만든다.<br />
+쿼리 타입은 Label 타입을 values로 하면, 해당 필드에 존재하는 값을 자동으로 리스트업해준다.</p>
+<br>
+<p><img src="/images/img_2f855cad2d176b52.png" alt="" />
+텍스트 검색용 변수는 TextBox로 만들면 된다.</p>
+<br>
+<p><img src="/images/img_ffec4c30c135ff41.png" alt="" />
+그러면 방금 2개의 변수가 상단에 뜰 것이다.</p>
+<p>방금 정의한 이름을 통해서, Loki 쿼리 표현식에 주입을 시킬 수 있다.<br />
+이런 식으로 작성하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span><span>app</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;$app_name&quot;</span><span style="color: #9399B2;">}</span><span style="color: #94E2D5;"> |~</span><span style="color: #A6E3A1;"> &quot;$search_text&quot;</span></span></code></pre>
+<p><img src="/images/img_02aa2d9317a0608e.png" alt="" />
+app 이름으로 필터하고, search_text로 포함 검색을 수행하는 쿼리다.</p>
+<br>
+<p><img src="/images/img_8a7dddee4485d4ea.png" alt="" />
+그러면 앱을 고를때마다 해당 앱의 로그를 가져오고</p>
+<br>
+<p><img src="/images/img_46408df612afe632.png" alt="" />
+텍스트를 입력하면 해당 텍스트가 포함된 로그만 보여줄 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="muhanseukeurol">무한스크롤</h2>
+<p>Log Panel의 기본값에서는 스크롤 기능이 비활성화되어있다.<br />
+그러니까 한칸만 보고 밑으로 더 내릴 수가 없는 것이다.</p>
+<p><img src="/images/img_2e7e832ccd3ca5fe.png" alt="" />
+스크롤을 켜려면 저 무한스크롤 플래그를 열어주면 된다.</p>
+<br>
+<p><img src="/images/img_58b8aba96d193513.png" alt="" />
+그럼 이렇게 load More 버튼이 활성화될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="saideu-jeeopan">사이드 제어판</h2>
+<p>소소한 부가기능 중 하나다.</p>
+<p><img src="/images/img_04260db331a5f5fb.png" alt="" />
+Panel의 플래그를 켜면</p>
+<br>
+<p><img src="/images/img_0bbd6c54fc119723.png" alt="" /></p>
+<p><img src="/images/img_77a2d1dc7225807b.png" alt="" />
+바로 오른편에 이런 제어창이 생긴다.</p>
+<p>Scroll to bottom은 바로 맨 밑으로 이동하고, Scroll to top은 맨 위로 이동한다.</p>
+<br>
+<p><img src="/images/img_5edfb2838a0fe373.png" alt="" />
+검색창은 현재 컨텍스트에서 검색을 처리해주며</p>
+<br>
+<p><img src="/images/img_21b94424e485cd24.png" alt="" />
+Filter Level은 로그레벨을 필터링해준다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="jeongryeol">정렬</h2>
+<p>Loki - Log Panel의 기본 조회 형식을 최신 데이터를 먼저, 최신을 맨 위에 보여주는 내림차순 정렬이다.</p>
+<p><img src="/images/img_95c674e892c80467.png" alt="" />
+하지만 경우에 따라서는 오름차순으로 데이터를 가져와서 보고 싶을 수도 있다.</p>
+<p>안타깝게도, Grafana에서 이러한 기능 지원은 제한적이다.<br />
+변수와 쿼리를 통해서 처리할 수는 없고, Panel 수준의 고정값인 Order를 통해서만 처리할 수 있다.</p>
+<p><img src="/images/img_95d4d929f083d506.png" alt="" />
+이건 Panel 내의 고정값이므로 당연히 상단 필터로 만들 수는 없다. 별도의 Panel로 만들어야 한다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224178033104/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] ArgoCD Notification으로 Slack에 배포 알림 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224176666438/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] Prometheus: AlertManager로 Slack 경보 구성<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

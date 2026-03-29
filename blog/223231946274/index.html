@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>블룸 필터 (Bloom Filter) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223231946274/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="블룸 필터 (Bloom Filter)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223231946274/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-10-09T00:00:00+00:00">
+    <meta property="article:tag" content="자료구조&#x2F;알고리즘">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223231946274/">블룸 필터 (Bloom Filter)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-09T00:00:00+00:00"><time datetime="2023-10-09T00:00:00+00:00">2023.10.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="542 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/jaryogujo-algorijeum/">자료구조&#x2F;알고리즘</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223231946274" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>블룸필터는 해시테이블의 특이한 변종이라 할 수 있는 자료구조다.<br />
+1970년에 Burton Howard Bloom에 의해 처음 고안되었다. 그래서 블룸 필터다.</p>
+<p>이건 데이터 집합에 특정 값이 존재하는지 여부만 확인할 수 있는 아주 단순한 기능만을 가진다.<br />
+게다가 그 확인도 부분적으로 실패 가능성이 있기 때문에 특수한 경우에만 사용된다.</p>
+<br>
+<br>
+<br>
+<h2 id="gujowa-weonri">구조와 원리</h2>
+<br>
+<p><img src="/images/img_0957dd979f4bcc0a.png" alt="" />
+블룸필터도 일반적인 해시테이블과 같이 테이블의 형태로 구현이 된다.<br />
+다만 값은 0 or 1, boolean이다.</p>
+<p>특이한 점은, 여러개의 해시함수를 쓴다는 것이다.<br />
+여기서는 해시함수를 3개 쓴다고 가정하겠다.</p>
+<p>만약 값을 하나 필터에 넣는다면, 해시함수 3개를 돌려서 해시값 3개에 해당하는 테이블 인덱스에 값 1을 할당한다.<br />
+여기서 해시 충돌은 고려하지 않는다. 다른 값이 새로 들어와서 기존에 1로 할당되어있는 테이블 인덱스에 또 1을 쓰더라도 신경쓰지 않는다.</p>
+<p><img src="/images/img_8d544068e721a862.jpg" alt="" />
+red와 blue가 같은 인덱스를 점유해도 신경쓰지 않음</p>
+<p>특정 값의 존재여부를 확인할 때는, 마찬가지로 해시함수 3개를 돌려서 그 해시값 3개가 테이블에 다 존재하는지 확인한다.<br />
+3개가 전부 있다면 존재한다고 판단하고, 0-2개라면 없다고 판단한다.</p>
+<p>여기서 유의할 점은, "존재한다"고 나온 것은 틀릴 수 있다는 것이다. 다른 값에서 해시 충돌이 잔뜩 발생해서 있는 것처럼 보일 수 있으니까!<br />
+이를 false positive라고 한다.<br />
+그리고 해시 함수가 많을수록 실패 확률은 떨어진다.</p>
+<p>반대로 "존재하지 않는다"고 나온 것은 정확하다. 해시 충돌이고 자시고 없으면 진짜 없는 것이기 때문이다.</p>
+<p>그리고 값을 넣는건 되는데 빼는게 안된다. 해시충돌을 신경쓰지 않기 때문에 막 빼버렸다간 다른 값까지 빼버리는 결과가 날 수 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jangdanjeom">장단점</h2>
+<p>이 알고리즘의 가장 큰 장점은 매우 가볍고 빠르다는 것이다.</p>
+<p>해시테이블은 그 특성상 해시 충돌로 인해 최악 O(N)의 성능 저하가 발생할 수 있는 반면에, 블룸필터는 O(k)가 보장된다. 여기서 k는 해시함수의 개수다. 거의 상수시간인 셈이다.</p>
+<p>게다가 단편적인 boolean list라서 메모리도 적게 먹고 구현도 간단하다.</p>
+<p>하지만 여러모로 범용성이 떨어지는게 단점이다. 추가만 가능하고 삭제가 불가능하며, 결과가 항상 정확하지도 않다.</p>
+<p>그래서 뭔가 대량의 데이터셋에서 빠르게 비존재를 확인할 때, 혹은 존재를 확인하되 가끔 틀려도 괜찮을 때 사용하곤 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongceo">사용처</h2>
+<p>사용례는 생각보다 다양하다.</p>
+<p>URL 필터링 등에도 곧잘 사용되는데, 대표적으로 크롬 브라우저에서 악성 URL을 판단할 때 사용한다고 한다.</p>
+<p>빅데이터를 다룰 때도 응용된다.<br />
+빅데이터 DB 시스템인 GCP BigTable이나 Apache Hbase, Cassandra, 그리고 PostgreSQL에서는 블룸필터 매커니즘을 활용해 존재하지 않는 row나 column 등을 빠르게 식별, 무시해서 disk I/O를 최적화하는 기법을 사용한다.</p>
+<p>low level로 내려가서 네트워크 수준에서도 블룸필터가 자주 사용된다.<br />
+패킷을 전달할때, 무거운 라우팅 테이블을 일일히 확인하는 대신에 블룸필터를 띄워서 빠르게 존재여부를 확인해서 전달하는 식이다.</p>
+<p>블록체인에서도 꽤 많이 쓰더라.<br />
+이더리움에서 로그를 빨리 찾기 위해서 블룸필터를 쓰고, 비트코인도 지갑 동기화 속도를 늘리기 위해서 블룸필터를 썼다고 한다. 그게 취약점이 되긴 했지만.</p>
+<p>이외에도 사용사례는 꽤 많은 편이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://ko.m.wikipedia.org/wiki/%EB%B8%94%EB%A3%B8_%ED%95%84%ED%84%B0">https://ko.m.wikipedia.org/wiki/%EB%B8%94%EB%A3%B8_%ED%95%84%ED%84%B0</a><br />
+<a rel="external" href="https://velog.io/@chlvlftn22/%EB%B8%94%EB%A3%B8%ED%95%84%ED%84%B0">https://velog.io/@chlvlftn22/%EB%B8%94%EB%A3%B8%ED%95%84%ED%84%B0</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/54280508/can-bloom-filters-in-bigtable-be-used-to-filter-based-only-on-row-id">https://stackoverflow.com/questions/54280508/can-bloom-filters-in-bigtable-be-used-to-filter-based-only-on-row-id</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/4282375/what-is-the-advantage-to-using-bloom-filters">https://stackoverflow.com/questions/4282375/what-is-the-advantage-to-using-bloom-filters</a><br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/Bloom_filter">https://en.m.wikipedia.org/wiki/Bloom_filter</a><br />
+<a rel="external" href="https://systemdesign.one/bloom-filters-explained/">https://systemdesign.one/bloom-filters-explained/</a></p>
+<br>
+<br>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223231562515/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] debug: dlv<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223232079649/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] Concurrency: 고루틴 누수 방지하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

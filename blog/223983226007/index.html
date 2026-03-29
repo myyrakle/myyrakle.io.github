@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ECS: Service Connect | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223983226007/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ECS: Service Connect">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223983226007/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-08-25T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223983226007/">[AWS] ECS: Service Connect</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-25T00:00:00+00:00"><time datetime="2025-08-25T00:00:00+00:00">2025.08.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="576 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223983226007" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>ECS Connect는 ECS에서 제공되는 특수한 확장 기능 중 하나다.<br />
+ECS 서비스들끼리 내부통신을 맺어줄 수 있게 해주는 편리하고 유용한 기능이다.</p>
+<p>내부적으로는 AWS Cloud Map 기반으로 동작한다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>내부 구조로 사용하는 Cloud Map 자체는 유료지만, ECS Connect 사용사례에 있어서는 거의 완전 무료다.</p>
+<p>추가 비용이 발생할 여지는 거의 없으나, 컨테이너마다 몰래 연결을 위한 프록시를 띄우기 때문에 약간의 컴퓨팅 리소스 소모는 생길 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongceo">사용처</h2>
+<p>이걸 언제 써야할까? 한번 예시를 들어보겠다.</p>
+<p><img src="/images/img_467788503de63225.png" alt="" />
+흔한 ECS의 사용 패턴은 대부분 이럴 것이다.<br />
+ECS 서비스에 로드밸런서 물리고, 로드밸런서를 통해서 요청을 받도록 구성한다.</p>
+<p>근데, 여기서 서비스 간에 통신을 하게 된다면 어떻게 해야할까?</p>
+<p><img src="/images/img_bd6b2d2c54266fa9.png" alt="" />
+일반적으로는 로드밸런서를 통해서, 서로가 아무 연관 없는 3자인 것처럼 쓸 수도 있을 것이다.</p>
+<p>하지만 이런 구조는 비용/성능/보안적으로 문제가 될 수도 있다. 특히나, 통신이 빈번하게 발생하는 경우에는 불필요한 트래픽 요금이 과다청구될 수도 있다.<br />
+외부통신은 VPC 내의 내부통신보다 훨씬 비싸기 때문이다.</p>
+<br>
+<p><img src="/images/img_55a35b7532291179.png" alt="" />
+ECS Connect는 이렇게 직접 상호간의 통신을 맺어주는 역할을 해준다.<br />
+이러면 당연히 VPC 내부통신을 하기 때문에 비용적으로도, 성능적으로도 이득이 생긴다.</p>
+<p>로드밸런서를 직접적으로 거치친 않지만, ALB와 Target Group Health Check 구성을 제대로 했다면, 헬스체크 기반으로 잘 살아있는 서버에 대해서만 라우팅을 알아서 잘 해준다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayonghaebogi">사용해보기</h2>
+<p>한번 설정하면서 그 사용 구조를 살펴보자.</p>
+<p>먼저, 서버 역할을 할 ECS 서비스에 들어가서 "서버"로서의 역할을 할 수 있도록 구성해줘야 한다.</p>
+<p><img src="/images/img_b16f4eb5b70af960.png" alt="" />
+서비스 탭에서 네트워크 구성 탭을 보면 이런게 있는데</p>
+<br>
+<p><img src="/images/img_e11fe70dd23090c9.png" alt="" />
+"클라이언트 및 서버"로 선택하고</p>
+<br>
+<p><img src="/images/img_162e410cc6763330.png" alt="" />
+네임스페이스를 기반으로 잘 생성해주면 된다.<br />
+이 "네임스페이스"라는 공유 영역을 기준으로 서로간에 자유롭게 통신을 할 수 있게 되는 것이다.</p>
+<br>
+<p><img src="/images/img_1c2f3d1332eccdeb.png" alt="" />
+열어줄 포트도 여기서 지정한다. 해당 개별 태스크들이 80 포트로 리스닝을 한다면 80 포트로 열어주면 된다.</p>
+<br>
+<p><img src="/images/img_93a323679780e94c.png" alt="" />
+그렇게 생성하면, 이렇게 엔드포인트가 생성된다.<br />
+저 엔트포인트는 저 네임스페이스에 속한 서비스들이 전부 자유롭게 사용할 수 있는 내부 엔드포인트가 된다.<br />
+밖에서는 접근이 불가능하다.</p>
+<br>
+<p><img src="/images/img_db637aca71c4c0c2.png" alt="" />
+설정을 완료하면, ECS가 해당 설정을 반영해서 자동으로 서비스를 재시작한다.</p>
+<p>이제 서버는 준비가 됐다.</p>
+<p>이번에는 클라이언트 역할을 할 친구에게 가보자.<br />
+서버와 꼭 같은 클러스터에 있지 않아도 된다. 같은 VPC 안에만 있으면 된다.<br />
+다른 VPC 간에도 어떻게 할 수는 있는데, 피어링 걸고 이것저것 건드릴게 많아진다.</p>
+<br>
+<p><img src="/images/img_82c92658abe172e5.png" alt="" />
+일단, 이제 클라이언트는 방금 만들어진 내부 엔드포인트를 통해서 접근을 하면 된다.</p>
+<p>그리고 마찬가지로 service connect를 활성화하면 되는데</p>
+<p><img src="/images/img_cfbf2e6876a02e6a.png" alt="" /></p>
+<p><img src="/images/img_882b54c9f94dfcaf.png" alt="" />
+나중에 서버 역할도 할 여지가 있다면 클라이언트 겸 서버로 띄워도 된다.</p>
+<p>이렇게 하고 찌르게 하면 끝이다.</p>
+<br>
+<br>
+<br>
+<h2 id="juyisahang-taimaus">주의사항: 타임아웃</h2>
+<p>여기에는 꽤 공들여 만든 함정이 하나 있다.</p>
+<p>이 Connect를 활성화할때 서버 모드도 활성화한다면, 그 Agent 구성이 전체 네트워크 구성을 덮어씌워버린다는 것이다. 그래서 내부통신을 하지 않고 외부통신으로 인입될 때도 Connect Agent를 통해서 들어온다.</p>
+<p><img src="/images/img_c76b4b8254cf83f1.png" alt="" />
+근데 문제는 Connect Agent 자체에도 타임아웃 설정이 있다는 것이다.<br />
+무턱대고 이걸 활성화하면 기존 API들에 대해서도 일괄적으로 15초 제한이 생기는 셈이다.</p>
+<p>그런 상황을 원하지 않는다면 타임아웃을 넉넉하게 설정한 채로 활성화해야 한다.</p>
+<p>이걸 왜 이따위로 만든건지 모르겠다... 타임아웃을 없는 채로 만들 수는 없는건가?</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect-concepts-deploy.html#service-connect-concepts-proxy">https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-connect-concepts-deploy.html#service-connect-concepts-proxy</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonECS/latest/developerguide/service-connect.html">https://docs.aws.amazon.com/ko_kr/AmazonECS/latest/developerguide/service-connect.html</a><br />
+<a rel="external" href="https://repost.aws/questions/QUpDdKAKH7Q4SadXuudBFK7w/ecs-service-connect-health-check">https://repost.aws/questions/QUpDdKAKH7Q4SadXuudBFK7w/ecs-service-connect-health-check</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/70405903/ecs-service-discovery-from-other-service-outside-vpc">https://stackoverflow.com/questions/70405903/ecs-service-discovery-from-other-service-outside-vpc</a><br />
+<a rel="external" href="https://repost.aws/questions/QU5cJgi78kTfKOAC4TVZ0JVQ/ecs-service-connect-504-timeout">https://repost.aws/questions/QU5cJgi78kTfKOAC4TVZ0JVQ/ecs-service-connect-504-timeout</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223982028537/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Database] 최종 일관성 (Eventual consistency)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223978974431/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] bloom index<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

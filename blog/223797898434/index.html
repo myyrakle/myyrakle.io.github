@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>링 버퍼 (Ring Buffer) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223797898434/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="링 버퍼 (Ring Buffer)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223797898434/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-03-16T00:00:00+00:00">
+    <meta property="article:tag" content="자료구조&#x2F;알고리즘">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223797898434/">링 버퍼 (Ring Buffer)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-03-16T00:00:00+00:00"><time datetime="2025-03-16T00:00:00+00:00">2025.03.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="360 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/jaryogujo-algorijeum/">자료구조&#x2F;알고리즘</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223797898434" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_f244f5c3851bf5ee.png" alt="" />
+https://chronicle.software/ring-buffer/<br />
+링 버퍼는 FIFO queue 처리를 위한 자료구조 중 하나다. circular buffer라고도 부른다.</p>
+<p>기본 자료구조 개론에서는 잘 다뤄지지 않는데, 응용의 폭이 꽤 넓어서 알아두면 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-weonri">기본 원리</h2>
+<p>이건 배열을 기반으로 동작한다.<br />
+고정된 크기의 정적 배열인지, 크기가 늘어나는 동적 배열인지는 구현 선택에 따라 다르다.</p>
+<p><img src="/images/img_8d57b6a36b375c3f.png" alt="" />
+구성요소는 간단한 편이다.<br />
+배열 한줄과, 앞을 가리키는 start 인덱스, 끝을 가리키는 end 인덱스로 구성된다.</p>
+<p>기본 동작 원리도 간단한 편이다.</p>
+<ol>
+<li>데이터를 꺼낼 때는 start 인덱스 위치에서 요소를 꺼내고 start를 증가시킨다.</li>
+<li>데이터를 집어넣을 때는 end 오른쪽에 요소를 집어넣고 end를 증가시킨다.</li>
+</ol>
+<p>그럼 start가 오른쪽 끝을 넘으면 어떻게 될까?</p>
+<p><img src="/images/img_8145f579fed49b6d.png" alt="" />
+사실 그래도 문제는 없다.<br />
+배열 자체는 직선이지만 논리적으로는 원형이기 때문에, 끝 인덱스 다음을 0번째 인덱스로 간주하면 되는 것이다.<br />
+그래서 이렇게 end가 start 왼쪽에 있을 수도 있다.<br />
+https://eteo.tistory.com/m/359</p>
+<p>근데, 데이터가 꽉 찬 상태에서 요소를 집어넣으면 어떻게 할까?</p>
+<ol>
+<li>기본적인 구현에서는 가장 오래된, start 위치의 데이터를 지우고 밀어넣는 경우가 많다.<br />
+스트리밍이나 로그 agent처럼 데이터의 부분적인 유실이 크게 중요하지 않은 경우에는 이 방법이 충분히 효율적이다.</li>
+<li>그게 아니라면 배열 크기를 늘리고 데이터를 옮겨야 한다. 후술할 dynamic ring buffer가 이런 원리다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="jangjeomgwa-danjeom">장점과 단점</h2>
+<p>배열의 뛰어난 성능에 기반해서 queue 기능을 구현할 수 있다.<br />
+queue를 구현하는 다른 방식인 linked list나 chunked array에 비해서 삽입, 삭제, 접근 속도가 훨씬 뛰어나다.</p>
+<p>대신, (기본 구현의 경우) 데이터 유실 가능성이 있고, (dynamic 구현의 경우) 확장과 축소의 관리가 linked list에 비해 유연하지 못하다는 단점이 있다.<br />
+ring buffer를 동적으로 구현하는 것도 가능하지만, ring buffer가 최적으로 작동하는 시나리오는 최대 크기가 정해져있는 경우다.</p>
+<br>
+<br>
+<br>
+<h2 id="dynamic-ring-buffer">Dynamic Ring Buffer</h2>
+<p>ring buffer의 이상적인 사용사례는 크기가 고정되어있는 경우지만, 응용프로그램에서는 그런 한계점을 두고서는 써먹기가 어려울 수도 있다.</p>
+<p>그래서 일부 응용 구현에서는 사용량에 따라서 자동으로 배열이 확장되거나 축소되는 형태로 변형이 되기도 한다.</p>
+<p>dynamic ring buffer를 구현하는 방법은 잘 일반화되어있지는 않지만, 그로 인해 발생하는 단점은 대충 이런 것들이 있을 수 있다.</p>
+<ol>
+<li>
+<p>크기가 늘거나 줄어들때마다, 배열을 새로 만들고 옮겨야 한다. 적지 않은 비용이고, 동시성 처리에도 불리한 지점이다. 그래서 리사이징을 돌리는 주기를 잘 선택해야 한다.</p>
+</li>
+<li>
+<p>사용량이 급격이 늘어났다가 줄어들 경우에 메모리 누수가 발생할 수 있다. 크기를 사용량에 맞춰 항상 compact하게 유지하는 것은 거의 불가하다.</p>
+</li>
+</ol>
+<p>대표적인 dynamic Ring Buffer 구현체로는 Rust의 기본 자료구조 VecDeque가 있다.<br />
+Java의 ArrayDeque도 Ring buffer 기반의 구현체로 알려져있다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223797630907/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Prometheus] PromQL<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223795331329/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Grafana Tempo] 쿼리 최적화<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] tonic을 통한 gRPC 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222574697149/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] tonic을 통한 gRPC 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222574697149/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2021-11-21T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222574697149/">[Rust] tonic을 통한 gRPC 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-11-21T00:00:00+00:00"><time datetime="2021-11-21T00:00:00+00:00">2021.11.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="510 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222574697149" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_0ecb016139bb7b8a.png" alt="" /></p>
+<p><img src="/images/img_8d2a7b442fbaad6e.png" alt="" />
+tonic은 gRPC의 rust 구현체다.</p>
+<p>grpc는 구글에서 만든 고성능의 통신 프로토콜로, 기존에 주로 사용하던 웹 프로토콜인 HTTP와 대비된다.<br />
+HTTP이 텍스트 기반으로 구성된 것과 다르게 바이너리 형식으로 데이터를 주고받아 훨씬 효율적이란 특징이 있다.</p>
+<p>grpc의 주요 사용처는 마이크로 서비스 아키텍처(MSA)에서 시스템들 사이의 징검다리를 놔주는 것이다.<br />
+브라우저 통신에도 사용할 수는 있지만 브라우저 지원 수준에 따라 사용이 불가능할 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="peurojegteu-saengseong-mic-seoljeong">프로젝트 생성 및 설정</h2>
+<p>우선 cargo 커맨드로 서버와 클라이언트 프로젝트를 하나씩 만들어준다.</p>
+<p><img src="/images/img_ec8d629794b0f0f1.png" alt="" /></p>
+<p>그리고 종속성은 다음과 같이 tonic과 tokio, tonic_build, prost 정도가 필요하다.<br />
+받는 쪽, 보내는 쪽 둘다.</p>
+<p><img src="/images/img_d586005c578428d9.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[dependencies]</span></span>
+<span class="giallo-l"><span>tonic</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.6.1&quot;</span></span>
+<span class="giallo-l"><span>prost</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.9&quot;</span></span>
+<span class="giallo-l"><span>tokio</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span>version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1.0&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;rt-multi-thread&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;time&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;fs&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;macros&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;net&quot;</span><span>]</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[build</span><span style="color: #94E2D5;">-</span><span>dependencies]</span></span>
+<span class="giallo-l"><span>tonic</span><span style="color: #94E2D5;">-</span><span>build</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.6&quot;</span></span></code></pre>
+<p>tokio는 rust 환경에서 가장 널리 사용되는 비동기 런타임이고, tonic도 tokio를 기반으로 구성되어있기 때문에 필요하다.<br />
+tonic_build와 prost는 proto 파일 분석에 사용된다.</p>
+<br>
+<br>
+<br>
+<h2 id="proto-jeongyi">proto 정의</h2>
+<p>grpc에서 가장 큰 축을 차지하는 것 중 하나가 프로토콜의 정의다.<br />
+grpc는 다른 언어로 구성되어있는 시스템 간에도 원활하게 소통이 가능한 것을 지향하기 때문에, 프로토콜 정의도 하나로 못박아뒀다. 한번만 짜면 공유해서 사용할 수 있게끔 말이다.</p>
+<p>자세한 것은 별도 포스트나<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222574263116">https://blog.naver.com/sssang97/222574263116</a><br />
+다른 자료들을 참고하길 바란다.</p>
+<p>내 경우엔 아래와 같이 프로토파일을 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>syntax</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;proto3&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> tutorial</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 서비스 정의</span></span>
+<span class="giallo-l"><span>service Foo</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">  // 함수 정의</span></span>
+<span class="giallo-l"><span>  rpc</span><span style="color: #89B4FA;font-style: italic;"> Add</span><span> (AddRequest)</span><span style="color: #89B4FA;font-style: italic;"> returns</span><span> (AddReply)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 요청 파라미터 정보</span></span>
+<span class="giallo-l"><span>message AddRequest</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  int32 lhs</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>  int32 rhs</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 응답 파라미터 정보</span></span>
+<span class="giallo-l"><span>message AddReply</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  int32 result</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>Foo라는 간단한 서비스 하나에 정수 덧셈을 처리해주는 단순한 함수 하나만 넣어뒀다.</p>
+<p>저걸 아래와 같은 식으로 각각의 프로젝트 폴더에 배치한다.</p>
+<p><img src="/images/img_6e45ee8058e18291.png" alt="" /></p>
+<p>그리고 프로젝트 루트 경로에 build.rs라는 파일을 둬서, 다음과 같이 정의한 proto 파일을 컴파일할 수 있도록 한다.</p>
+<p><img src="/images/img_b52c6639ed86723f.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    tonic_build</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">compile_protos</span><span>(</span><span style="color: #A6E3A1;">&quot;proto/test.proto&quot;</span><span>)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>그럼 tonic_build가 proto 파일을 분석해서 rust에서 사용할 수 있는 형태로 자동으로 제공해줄 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="seobeo-guseong">서버 구성</h2>
+<p>규격은 만들어놨으니 서버를 먼저 구성해보자.</p>
+<p>가장 먼저 해야할건 proto를 include하는 것이다.<br />
+그건 다음과 같이 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pub mod tutorial</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    tonic</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">include_proto</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;tutorial&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이러면 현재 tonic_build를 통해 빌드된 프로토 파일 중에서 tutorial이라는 이름의 패키지를 가져와준다.<br />
+방금 우리가 위에서 정의한 저것 말이다.</p>
+<p>그럼 우린 다음의 형태로, tonic_build가 자동 생성해준 proto 정의들을 가져다 쓸 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:foo_server</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Foo</span><span style="color: #9399B2;">,</span><span> FooServer</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AddReply</span><span style="color: #9399B2;">,</span><span> AddRequest</span><span style="color: #9399B2;">};</span></span></code></pre>
+<p>foo_server라는 모듈명은 서비스 정의 "Foo"를 스네이크 케이스로 바꿔서 + server를 바꿔준 형태로 생성된 것이고, 그 안에는 서비스를 트레잇으로 만들어준 Foo, 그리고 그걸 올리기 위한 FooServer가 들어있다.</p>
+<p>AddReply, AddRequest는 위에서 정의한 응답과 요청 형식이다. 구조체로 제공된다.</p>
+<p>자, 그럼 저걸 기반으로 서버 로직을 구현해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Default)]</span></span>
+<span class="giallo-l"><span>pub struct TestServer</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tonic::async_trait]</span></span>
+<span class="giallo-l"><span>impl Foo for TestServer</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    async fn</span><span style="color: #89B4FA;font-style: italic;"> add</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self</span><span style="color: #9399B2;">,</span><span> request: Request</span><span style="color: #94E2D5;">&lt;</span><span>AddRequest</span><span style="color: #94E2D5;">&gt;</span><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>Response</span><span style="color: #94E2D5;">&lt;</span><span>AddReply</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span><span> Status</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;Got a request from {:?}&quot;</span><span style="color: #9399B2;">,</span><span> request.remote_addr());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let request</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into_inner</span><span>();</span></span>
+<span class="giallo-l"><span>        let lhs</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">.</span><span>lhs;</span></span>
+<span class="giallo-l"><span>        let rhs</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">.</span><span>rhs;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let result</span><span style="color: #94E2D5;"> =</span><span> lhs</span><span style="color: #94E2D5;"> +</span><span> rhs;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;덧셈 처리: {} + {} = {}&quot;</span><span style="color: #9399B2;">,</span><span> lhs</span><span style="color: #9399B2;">,</span><span> rhs</span><span style="color: #9399B2;">,</span><span> result);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let reply</span><span style="color: #94E2D5;"> =</span><span> AddReply</span><span style="color: #9399B2;"> {</span><span> result</span><span style="color: #94E2D5;">:</span><span> result</span><span style="color: #9399B2;"> }</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Response</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">reply</span><span style="color: #9399B2;">))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>먼저 Foo 인터페이스를 구현할 TestServer 구조체를 만들고, 그 안의 함수를 구현했다.<br />
+그렇게 특별할 것은 없다.<br />
+요청을 받아서, 그 값을 기반으로 덧셈을 처리, 응답을 보내주도록 했다.</p>
+<p>그리고 main 함수를 다음과 같이 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let addr</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;[::1]:50051&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">parse</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>(); </span><span style="color: #9399B2;font-style: italic;">// 서버를 열 주소:포트</span></span>
+<span class="giallo-l"><span>    let test_server</span><span style="color: #94E2D5;"> =</span><span> TestServer::</span><span style="color: #89B4FA;font-style: italic;">default</span><span>(); </span><span style="color: #9399B2;font-style: italic;">// 서버 생성</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!(</span><span style="color: #A6E3A1;">&quot;Test Server listening on {}&quot;</span><span style="color: #9399B2;">,</span><span> addr);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    Server</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">builder</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">add_service</span><span>(FooServer::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(test_server))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">serve</span><span>(addr)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>tonic은 tokio 기반의 시스템이라 항상 #[tokio::main]으로 엔트리포인트를 감싸줘야 한다.<br />
+서버 객체를 생성하고, 그걸 열어줄 주소를 정의하고, Server 빌더를 통해 넣어주면 된다.</p>
+<p>여기서는 서버를 하나만 넣었지만 원하는만큼 더 넣을 수도 있다.</p>
+<p>전체 소스는 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pub mod tutorial</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    tonic</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">include_proto</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;tutorial&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use tonic</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>transport</span><span style="color: #94E2D5;">:</span><span>:Server</span><span style="color: #9399B2;">,</span><span> Request</span><span style="color: #9399B2;">,</span><span> Response</span><span style="color: #9399B2;">,</span><span> Status</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:foo_server</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Foo</span><span style="color: #9399B2;">,</span><span> FooServer</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AddReply</span><span style="color: #9399B2;">,</span><span> AddRequest</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Default)]</span></span>
+<span class="giallo-l"><span>pub struct TestServer</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tonic::async_trait]</span></span>
+<span class="giallo-l"><span>impl Foo for TestServer</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    async fn</span><span style="color: #89B4FA;font-style: italic;"> add</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self</span><span style="color: #9399B2;">,</span><span> request: Request</span><span style="color: #94E2D5;">&lt;</span><span>AddRequest</span><span style="color: #94E2D5;">&gt;</span><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>Response</span><span style="color: #94E2D5;">&lt;</span><span>AddReply</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span><span> Status</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;Got a request from {:?}&quot;</span><span style="color: #9399B2;">,</span><span> request.remote_addr());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let request</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into_inner</span><span>();</span></span>
+<span class="giallo-l"><span>        let lhs</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">.</span><span>lhs;</span></span>
+<span class="giallo-l"><span>        let rhs</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">.</span><span>rhs;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let result</span><span style="color: #94E2D5;"> =</span><span> lhs</span><span style="color: #94E2D5;"> +</span><span> rhs;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;덧셈 처리: {} + {} = {}&quot;</span><span style="color: #9399B2;">,</span><span> lhs</span><span style="color: #9399B2;">,</span><span> rhs</span><span style="color: #9399B2;">,</span><span> result);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let reply</span><span style="color: #94E2D5;"> =</span><span> AddReply</span><span style="color: #9399B2;"> {</span><span> result</span><span style="color: #94E2D5;">:</span><span> result</span><span style="color: #9399B2;"> }</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Response</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">reply</span><span style="color: #9399B2;">))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let addr</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;[::1]:50051&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">parse</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span>    let test_server</span><span style="color: #94E2D5;"> =</span><span> TestServer::</span><span style="color: #89B4FA;font-style: italic;">default</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!(</span><span style="color: #A6E3A1;">&quot;Test Server listening on {}&quot;</span><span style="color: #9399B2;">,</span><span> addr);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    Server</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">builder</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">add_service</span><span>(FooServer::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(test_server))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">serve</span><span>(addr)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>정상적으로 잘 설정됐다면, 다음과 같이 실행이 될 것이다.</p>
+<p><img src="/images/img_6b7dc7d7d10d9c33.png" alt="" /></p>
+<p>이제 클라이언트로 가보자.</p>
+<br>
+<br>
+<br>
+<h2 id="keulraieonteu-guseong">클라이언트 구성</h2>
+<p>클라이언트는 비교적 더 간단하다.</p>
+<p>동일하게 proto를 include하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pub mod tutorial</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    tonic</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">include_proto</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;tutorial&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>다음과 같은 형태로 요청을 보낼 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:foo_client</span><span style="color: #9399B2;">:</span><span>:FooClient</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AddReply</span><span style="color: #9399B2;">,</span><span> AddRequest</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut client</span><span style="color: #94E2D5;"> =</span><span> FooClient::</span><span style="color: #89B4FA;font-style: italic;">connect</span><span>(</span><span style="color: #A6E3A1;">&quot;http://[::1]:50051&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let request</span><span style="color: #94E2D5;"> =</span><span> tonic</span><span style="color: #94E2D5;">:</span><span>:Request::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(AddRequest</span><span style="color: #9399B2;"> {</span><span> lhs</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span><span> rhs</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 20</span><span style="color: #9399B2;"> }</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let response</span><span style="color: #94E2D5;">:</span><span> tonic::Response</span><span style="color: #94E2D5;">&lt;</span><span>AddReply</span><span style="color: #94E2D5;">&gt; =</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add</span><span>(request)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;RESPONSE={:?}&quot;</span><span style="color: #9399B2;">,</span><span> response</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into_inner</span><span>());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>FooClient::connect로 요청을 보낼 주소를 지정해서 클라이언트 커넥션을 만들고, add 함수를 호출해서 응답을 받아온다.</p>
+<p>전체 소스는 이렇다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pub mod tutorial</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    tonic</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">include_proto</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;tutorial&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:foo_client</span><span style="color: #9399B2;">:</span><span>:FooClient</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use tutorial</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AddReply</span><span style="color: #9399B2;">,</span><span> AddRequest</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut client</span><span style="color: #94E2D5;"> =</span><span> FooClient::</span><span style="color: #89B4FA;font-style: italic;">connect</span><span>(</span><span style="color: #A6E3A1;">&quot;http://[::1]:50051&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let request</span><span style="color: #94E2D5;"> =</span><span> tonic</span><span style="color: #94E2D5;">:</span><span>:Request::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(AddRequest</span><span style="color: #9399B2;"> {</span><span> lhs</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span><span> rhs</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 20</span><span style="color: #9399B2;"> }</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let response</span><span style="color: #94E2D5;">:</span><span> tonic::Response</span><span style="color: #94E2D5;">&lt;</span><span>AddReply</span><span style="color: #94E2D5;">&gt; =</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add</span><span>(request)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;RESPONSE={:?}&quot;</span><span style="color: #9399B2;">,</span><span> response</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into_inner</span><span>());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>그럼 클라이언트에서 이런 식으로 값을 받아올 수 있고</p>
+<p><img src="/images/img_bbe332b01ad9cdff.png" alt="" /></p>
+<p>서버에서는 요청을 잘 받아서 쏴줄 것이다.</p>
+<p><img src="/images/img_026060dd292d4906.png" alt="" /></p>
+<p>그렇다.</p>
+<br>
+<p>예제 프로젝트 코드<br />
+<a rel="external" href="https://github.com/myyrakle/Rust-Example/tree/main/src/thirdparty/tonic">https://github.com/myyrakle/Rust-Example/tree/main/src/thirdparty/tonic</a></p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.rs/tonic/0.6.1/tonic/">https://docs.rs/tonic/0.6.1/tonic/</a><br />
+<a rel="external" href="https://developers.google.com/protocol-buffers/docs/proto3">https://developers.google.com/protocol-buffers/docs/proto3</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222574263116/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[gRPC] proto (protocol buffer) 문법<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222567479583/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Lambda Edge<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

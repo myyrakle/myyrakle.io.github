@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>HTTP 톺아보기 with Rust | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223116073073/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="HTTP 톺아보기 with Rust">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223116073073/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-05-31T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223116073073/">HTTP 톺아보기 with Rust</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-31T00:00:00+00:00"><time datetime="2023-05-31T00:00:00+00:00">2023.05.31</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="633 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223116073073" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_5e7329684e66cfb6.png" alt="" />
+HTTP는 TCP 프로토콜 위에 작성된 텍스트 기반의 프로토콜이다.</p>
+<p>소위 "웹"이라고 하는 것들은 전부 HTTP로 작성된 서버를 말한다.<br />
+그래서 모든 웹사이트는 HTTP로 작성된다.</p>
+<br>
+<br>
+<br>
+<h2 id="beojeon-hiseutori">버전 히스토리</h2>
+<br>
+<br>
+<h4 id="http-1-1">HTTP 1.1</h4>
+<p>1999년에 처음 나왔다.<br />
+진정한 HTTP의 역사는 1.1부터 시작한다고 보면 된다.<br />
+대부분의 웹 환경은 다 HTTP 1.1을 지원하고, 사용하는데다, 대부분의 라이브러리나 프레임워크에서도 이게 기본값이다.</p>
+<p>그냥 브라우저 켜서 어디 들어가면 다 HTTP 1.1로 동작한다.</p>
+<br>
+<br>
+<h4 id="http-2">HTTP 2</h4>
+<p>2015년에 나왔다.<br />
+HTTP 1.1은 단순하고 잘 동작했지만 단점이 꽤 많았는데, 성능적인 측면에서 개선을 많이 가한 게 버전 2다.<br />
+gRPC 프로토콜이 HTTP 2 위에서 동작한다.</p>
+<p><strong>1. Multiplexed Stream</strong></p>
+<p><img src="/images/img_97b10ef0146d7bc9.png" alt="" />
+예를 들어, 1.1은 리소스를 차례대로만 로드했기 때문에 한 리소스가 느려지면 다른 리소스들도 가져오지 못하는 비효율적인 동작이 있었는데, HTTP2에서는 동시 획득이 가능한 multiplexed stream 기능이 추가됐다.<br />
+위 그림과 같다.</p>
+<p><strong>2. 헤더 압축</strong><br />
+동일한 Header 전송 반복으로 인한 성능 낭비를 막기 위해 헤더를 압축해서 전송하는 HPACK 기법이 추가됐다.</p>
+<p><strong>3. 서버 푸시</strong><br />
+HTTP 2는 클라이언트가 서버에게 일방적으로 보내는게 아니라, 서버가 클라이언트에게 보내는 것도 가능하다.<br />
+요청할 것이라고 예상되는 정적 리소스 데이터를 요청하기 전에 미리 보내주는 거라서, 캐시의 개념에 가깝다.</p>
+<br>
+<br>
+<h4 id="http-3-quic">HTTP 3 (quic)</h4>
+<p>2022년에 발표됐다.<br />
+대격변이 일어난 버전이다.</p>
+<p>여기서는 TCP를 버리고 UDP 소켓을 기반으로 재구현을 했다! TCP에 불필요한 레거시한 구성요소들이 너무 많아서 그걸 덜어내는 것이 주 목적이었다.</p>
+<p>아직 에코시스템이 충분히 갖춰져있지는 않다는 것이 큰 단점이다.</p>
+<p>전반적으로 성능이 더 빠른데다, HTTP2 대비 패킷 손실에 대한 처리가 더 좋아졌다.</p>
+<p><strong>IP 변경</strong><br />
+IP가 바뀌어도 연결이 유지되는 기능이 추가됐다.</p>
+<p><strong>TLS</strong><br />
+TLS(SSL)가 기본으로 들어간다. 게다가 핸드셰이크와 동시에 처리되기 때문에 훨씬 빨라진다.</p>
+<p><strong>Zero RTT(Round Trip Time)</strong><br />
+HTTP에는 왕복 시간(RTT)이라는 개념이 있었다.<br />
+핸드셰이크를 위해서 불필요한 네트워크 지연시간이 많이 발생했었는데, HTTP3에서는 이미 연결된 서버에서는 핸드셰이크를 하지 않는다. 물론 최초 연결시에는 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="jangdanjeom">장단점</h2>
+<p>요청&lt;-&gt;응답의 구조가 명확하게 분리되어있고, 캐시, 인코딩 등 여러가지 필요한 기능들이 전부 다 완비된데다, 텍스트 기반의 프로토콜이라 사용이나 분석이 매우 쉽다는 장점이 있다.<br />
+게다가 모든 프로그래밍 언어에서 완벽한 구현체들을 제공하고 있다는 점에서 MSA에서의 RPC에도 가장 강력한 장점을 갖고 있다. 이건 gRPC도 따라오지 못하는 부분이다.</p>
+<p>대신 통짜 텍스트로만 데이터를 처리하다보니, 무거운 데이터를 실어나를때는 조금 느릴 수도 있다는 단점이 있다. 그게 걸리면 gRPC를 쓰면 된다.</p>
+<p>아주 많은 곳에 사용되고 있고, 앞으로도 더욱 그럴 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ggabogi">까보기</h2>
+<p>TCP 소켓을 기반으로 HTTP 1.1를 직접 구현해보면서 그 구조를 이해해보는 시간을 갖도록 하겠다.<br />
+사실 골치아프고 복잡한건 이미 TCP 레이어에서 다 처리해주기 때문에, 생각보다 그리 복잡하거나 어려운건 별로 없다.</p>
+<p>만약 다음과 같이 API를 호출한다면</p>
+<p><img src="/images/img_d3c70f105bc401b2.png" alt="" /></p>
+<p>다음과 같은 형태로 TCP 데이터를 주고받는다.<br />
+아래는 wireshark의 tcp stream으로 조회한 내용이다.</p>
+<p><img src="/images/img_93566d0278eaef09.png" alt="" />
+뻘건색이 요청이고, 퍼런색이 응답 데이터다.<br />
+그냥 저걸 주고받고 파싱하는 것만 구현해주면 된다..</p>
+<br>
+<br>
+<br>
+<h2 id="server-yoceong-badabogi">Server: 요청 받아보기</h2>
+<p>먼저 서버 껍데기부터 만들어보겠다.<br />
+우선 TCP 요청을 받아서, 그 요청에 딸린 패킷 데이터를 한번 까보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:io</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AsyncReadExt</span><span style="color: #9399B2;">,</span><span> AsyncWriteExt</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:TcpListener</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let listener</span><span style="color: #94E2D5;"> =</span><span> TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:8888&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    loop</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        let</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">mut socket</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> _</span><span style="color: #9399B2;">)</span><span> = listener.</span><span style="color: #89B4FA;font-style: italic;">accept</span><span style="color: #9399B2;">()</span><span>.await?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        tokio</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            let mut read_buffer</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #FAB387;">0</span><span>; </span><span style="color: #FAB387;">1024</span><span>];</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> n</span><span style="color: #94E2D5;"> =</span><span> match socket</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>mut read_buffer)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                    // socket closed</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">n</span><span style="color: #9399B2;">)</span><span> if n == 0 </span><span style="color: #CBA6F7;">=&gt;</span><span style="color: #F9E2AF;font-style: italic;"> return</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">n</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #F9E2AF;font-style: italic;"> n</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">e</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                        eprintln!</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #A6E3A1;font-style: italic;">failed to read from socket; err = {:?}</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> e</span><span style="color: #9399B2;">);</span></span>
+<span class="giallo-l"><span style="font-style: italic;">                        return</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> text</span><span style="color: #94E2D5;"> =</span><span> String::</span><span style="color: #89B4FA;font-style: italic;">from_utf8</span><span>(Vec::</span><span style="color: #89B4FA;font-style: italic;">from</span><span>(read_buffer))</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Client Says: {:?}&quot;</span><span style="color: #9399B2;">,</span><span> text)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                // 대답하기...</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> write_buffer</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #FAB387;">0</span><span>; </span><span style="color: #FAB387;">1024</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                if let</span><span> Err(e) </span><span style="color: #94E2D5;">=</span><span> socket</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">write_all</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>write_buffer[</span><span style="color: #FAB387;">0.</span><span style="color: #94E2D5;">.</span><span>n])</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                    eprintln!(</span><span style="color: #A6E3A1;">&quot;failed to write to socket; err = {:?}&quot;</span><span style="color: #9399B2;">,</span><span> e);</span></span>
+<span class="giallo-l"><span>                    return;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>실행하고</p>
+<p>브라우저로 찔러보면</p>
+<p><img src="/images/img_45150b910273978e.png" alt="" />
+접속은 되지 않더라도, 브라우저에서 쏘아보낸 요청 데이터는 읽어볼 수 있을 것이다.</p>
+<br>
+<p><img src="/images/img_7445cd0d47506e9d.png" alt="" />
+그럼 대략 이런식으로 데이터가 날라온다.<br />
+저기 들어있는게 다 요청 headers들이다.<br />
+텍스트 기반이라 알아보기는 참 쉽다.</p>
+<p>서버에서는 저걸 그대로 파싱해서 사용하면 되는 것이다.</p>
+<p><img src="/images/img_873a5dcab0587f28.png" alt="" />
+이런식으로다가</p>
+<br>
+<br>
+<br>
+<h2 id="server-eungdab-bonaegi">Server: 응답 보내기</h2>
+<p>이번에는 응답까지 구성해서 브라우저에서도 정상 동작이 되게끔 만들어보겠다.</p>
+<p>방법은 그리 어렵지 않다.<br />
+응답 텍스트의 포맷은 아래와 같은 형태인데</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>응답 상태</span></span>
+<span class="giallo-l"><span>응답 헤더1</span></span>
+<span class="giallo-l"><span>응답 헤더2</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span>응답 헤더N</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>응답 본문</span></span></code></pre>
+<p>저대로 딱 구성해서 보내주면 된다.</p>
+<p>필수 헤더는 Content-Length 정도다.</p>
+<p><img src="/images/img_103989d2419feb6b.png" alt="" />
+저래갖고 다시 실행해보면</p>
+<br>
+<p><img src="/images/img_5104aa56d4e364dc.png" alt="" />
+이제 될 것이다.</p>
+<p>전체 코드</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:io</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AsyncReadExt</span><span style="color: #9399B2;">,</span><span> AsyncWriteExt</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:TcpListener</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let listener</span><span style="color: #94E2D5;"> =</span><span> TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:8888&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    loop</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        let</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">mut socket</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> _</span><span style="color: #9399B2;">)</span><span> = listener.</span><span style="color: #89B4FA;font-style: italic;">accept</span><span style="color: #9399B2;">()</span><span>.await?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        tokio</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            let mut read_buffer</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #FAB387;">0</span><span>; </span><span style="color: #FAB387;">1024</span><span>];</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> n</span><span style="color: #94E2D5;"> =</span><span> match socket</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>mut read_buffer)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                    // socket closed</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">n</span><span style="color: #9399B2;">)</span><span> if n == 0 </span><span style="color: #CBA6F7;">=&gt;</span><span style="color: #F9E2AF;font-style: italic;"> return</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">n</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #F9E2AF;font-style: italic;"> n</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">e</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                        eprintln!</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #A6E3A1;font-style: italic;">failed to read from socket; err = {:?}</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> e</span><span style="color: #9399B2;">);</span></span>
+<span class="giallo-l"><span style="font-style: italic;">                        return</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                };</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;read {} bytes&quot;</span><span style="color: #9399B2;">,</span><span> n)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> text</span><span style="color: #94E2D5;"> =</span><span> String::</span><span style="color: #89B4FA;font-style: italic;">from_utf8</span><span>(Vec::</span><span style="color: #89B4FA;font-style: italic;">from</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>read_buffer[</span><span style="color: #FAB387;">0.</span><span style="color: #94E2D5;">.</span><span>n]))</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Client Says: {:?}&quot;</span><span style="color: #9399B2;">,</span><span> text)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> mut method </span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &quot;NONE&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> mut uri </span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> mut host </span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                for line</span><span style="color: #CBA6F7;"> in</span><span> text</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">split</span><span>(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F5C2E7;">\r\n</span><span style="color: #A6E3A1;">&quot;</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                    match line</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                        line</span><span style="color: #CBA6F7;"> if</span><span> line</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">starts_with</span><span>(</span><span style="color: #A6E3A1;">&quot;GET&quot;</span><span>)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                            method</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;GET&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                            uri</span><span style="color: #94E2D5;"> =</span><span> line</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">split</span><span>(</span><span style="color: #A6E3A1;">&quot; &quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">nth</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span>                        line</span><span style="color: #CBA6F7;"> if</span><span> line</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">starts_with</span><span>(</span><span style="color: #A6E3A1;">&quot;POST&quot;</span><span>)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                            method</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;POST&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                            uri</span><span style="color: #94E2D5;"> =</span><span> line</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">split</span><span>(</span><span style="color: #A6E3A1;">&quot; &quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">nth</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span>                        line</span><span style="color: #CBA6F7;"> if</span><span> line</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">starts_with</span><span>(</span><span style="color: #A6E3A1;">&quot;Host&quot;</span><span>)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                            host</span><span style="color: #94E2D5;"> =</span><span> line</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">split</span><span>(</span><span style="color: #A6E3A1;">&quot; &quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">nth</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span style="color: #EBA0AC;font-style: italic;">                        _</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;{method} {host}{uri}&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                // 대답하기...</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> response_headers</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span>                    vec</span><span style="color: #94E2D5;">!</span><span>[</span><span style="color: #A6E3A1;">&quot;HTTP/1.1 200 OK&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Content-Length: 11&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Hello World&quot;</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> response_messages</span><span style="color: #94E2D5;"> =</span><span> response_headers</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F5C2E7;">\r\n</span><span style="color: #A6E3A1;">&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;{response_messages}&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                if let</span><span> Err(e) </span><span style="color: #94E2D5;">=</span><span> socket</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">write_all</span><span>(response_messages</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_bytes</span><span>())</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                    eprintln!(</span><span style="color: #A6E3A1;">&quot;failed to write to socket; err = {:?}&quot;</span><span style="color: #9399B2;">,</span><span> e);</span></span>
+<span class="giallo-l"><span>                    return;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre><br>
+<br>
+<br>
+<br>
+<h2 id="client-guhyeonhaebogi">Client 구현해보기</h2>
+<p>이번에는 client를 직접 구현해서 원래 있던</p>
+<p><img src="/images/img_6b59833dc3659339.png" alt="" />
+이 서버에 요청을 날려보겠다.<br />
+내가 만든게 아니라 express로 구현된 서버다.</p>
+<p>Client도 TCP 위에서 구현하는거라면 쉽다.<br />
+아래의 형태로 요청 데이터를 말아서 tcp로 쏘고, 다시 응답을 받아오면 그만이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>METHOD 경로 HTTP버전</span></span>
+<span class="giallo-l"><span>요청 헤더1</span></span>
+<span class="giallo-l"><span>요청 헤더2</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span>요청 헤더N</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>요청 바디</span></span></code></pre><br>
+<p><img src="/images/img_e2b238cb7a5cd60b.png" alt="" />
+이렇게 말이다.</p>
+<p>그럼 잘 돌아갈 것이다.</p>
+<p><img src="/images/img_6f4f8d454843df78.png" alt="" /></p>
+<p>전체 코드</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    io</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>AsyncReadExt</span><span style="color: #9399B2;">,</span><span> AsyncWriteExt</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span>    net</span><span style="color: #94E2D5;">:</span><span>:TcpStream</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut client</span><span style="color: #94E2D5;"> =</span><span> TcpStream::</span><span style="color: #89B4FA;font-style: italic;">connect</span><span>(</span><span style="color: #A6E3A1;">&quot;localhost:8110&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let messages</span><span style="color: #94E2D5;"> =</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;GET / HTTP/1.1&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;Host: localhost:8110&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;Connection: keep-alive&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    ];</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    client</span></span>
+<span class="giallo-l"><span>        .write_all(messages.join(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F5C2E7;">\r\n</span><span style="color: #A6E3A1;">&quot;</span><span>).as_bytes())</span></span>
+<span class="giallo-l"><span>        .await</span></span>
+<span class="giallo-l"><span>        .unwrap();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut buffer = [0; 1024];</span></span>
+<span class="giallo-l"><span>    client.read(&amp;mut buffer).await.unwrap();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!(</span><span style="color: #A6E3A1;">&quot;{}&quot;</span><span style="color: #9399B2;">,</span><span> String</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_utf8_lossy</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>buffer));</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a href="/images/img_54995dc40dba2d9a.jpg">https://developer.mozilla.org/ko/docs/Web/HTTP/Messages</a><br />
+<a rel="external" href="https://doc.rust-lang.org/book/ch20-01-single-threaded.html">https://doc.rust-lang.org/book/ch20-01-single-threaded.html</a><br />
+<a rel="external" href="https://www.cloudflare.com/ko-kr/learning/performance/http2-vs-http1.1/">https://www.cloudflare.com/ko-kr/learning/performance/http2-vs-http1.1/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223118127186/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.70.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223115732041/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[분산 시스템] CAP<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

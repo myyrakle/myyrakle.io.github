@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] volatile 키워드 (Java, C#) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223588464643/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] volatile 키워드 (Java, C#)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223588464643/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-09-19T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223588464643/">[Concurrency] volatile 키워드 (Java, C#)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-09-19T00:00:00+00:00"><time datetime="2024-09-19T00:00:00+00:00">2024.09.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="455 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223588464643" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>volatile은 Java, C# 등에서 동시성 코드를 작성할 때 사용되는 주요 키워드 중 하나다.</p>
+<p>C/C++에도 volatile 키워드가 있지만, 용도나 원리가 달라서 주요 동시성 구현 수단으로 사용되지 않는다는 것을 유의한다. 혼동하지 않아야 한다.</p>
+<p>그리고 꽤 많은 사람들이 착각하는게 있는데, 이건 직접적으로 스레드세이프를 제공하는게 아니라 스레드세이프를 구현할 수 있는 조건 중 하나를 제공하는 것이다.</p>
+<p>여기서는 Java를 기준으로 volatile이 동작하는 원리와 스레드 간 동기화를 구현하는 방법을 다뤄본다.</p>
+<br>
+<br>
+<br>
+<h2 id="ige-jeonghwaghi-mueosinga">이게 정확히 무엇인가?</h2>
+<p>사실 이건 스레드와 직접적인 연관이 있는 요소는 아니다.<br />
+해당 변수의 값을 읽을때 항상 "메모리(RAM)"에서 읽어오고, 순서대로 연산하도록 강제하는 키워드다.</p>
+<p>volatile 키워드를 사용하지 않으면, 컴파일러는 변수를 읽을때 캐시에서 읽어올 수 있는 형태로 코드를 생성한다.</p>
+<p><img src="/images/img_4f315dfeb6a8d285.png" alt="" />
+https://nesoy.github.io/articles/2018-06/Java-volatile<br />
+그 이유는 당연히 빠르기 때문이다.</p>
+<p>이게 스레드 간 동기화를 망치는 주범 중 하나다.<br />
+값을 변경하더라도 그게 캐시에 반영되는 딜레이 때문에 다른 스레드에서 잘못된 옛 값을 읽을 수 있기 때문이다.<br />
+volatile은 이러한 최적화를 제거한다.</p>
+<p>게다가 컴파일러는 최적화 과정 중에 Reordering이라는 과정을 수행하곤 한다.<br />
+코드에서 작성한 연산 순서를 멋대로 뒤집을 수 있다는 것이다.</p>
+<p><img src="/images/img_fe205f8d4491d055.jpg" alt="" />
+https://hyojun.tistory.com/entry/LeetCode-143-Reorder-List-Java<br />
+이거도 성능 최적화를 위해서 수행되는데, 싱글스레드에서는 문제없지만 멀티스레드 환경에서는 잘못된 연산 결과를 초래할 수 있다.</p>
+<p>그래서 volatile은 이런 reordering이 발생하지 않도록 방지한다.</p>
+<br>
+<br>
+<br>
+<h2 id="yongdo">용도</h2>
+<p>아무튼 위에서 언급한 최적화들을 방지하기 때문에, volatile로 선언된 변수는 멀티스레드 공유와 관련해서 보장을 좀 가질 수 있다.</p>
+<p>항상 최신의 값을 읽어오게 하기 때문에 모든 스레드가 최신 값을 실시간으로 참조하게 할 수 있다는 것이다.</p>
+<p>그래서 volatile 변수는 하나의 스레드가 write를 하고, N개의 스레드가 read를 하는 상황에서는 안전하게 사용할 수 있다.<br />
+하지만 동시에 여러개의 thread가 write를 시도할 수 있는 상황에 대해서는 대응하지 못함을 유의한다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-gajja-lock-mandeuleobogi">예제: 가짜 Lock 만들어보기</h2>
+<p>직접 코드를 작성해서 volatile이 어떻게 동작하는지 알아보겠다.<br />
+아래는 아무런 동기화 수단도 없이 Lock을 구현한 간단한 클래스다.</p>
+<p><img src="/images/img_9ea2640e33f4c703.png" alt="" />
+그냥 lock boolean 값 하나 가져다가 기다리고 들어가고 하는 간단한 코드만 작성해놨다.</p>
+<br>
+<p><img src="/images/img_872220238e880896.png" alt="" />
+그리고 저걸 가져다가 동기화 비스무리하게 하면서 공유 변수에 접근하려 하면</p>
+<br>
+<p><img src="/images/img_5595cb1a37c7d92a.png" alt="" />
+매우 높은 확률로 데드락에 걸려서 프로그램이 중단될 것이다.<br />
+위에 언급했던 이유들로 인해서 스레드 캐시가 남고, 순서가 꼬이기 때문이다.</p>
+<p>이제 volatile로 바꿔보자.</p>
+<p><img src="/images/img_7e685f55653d8459.png" alt="" /></p>
+<p><img src="/images/img_335c753149ffc032.png" alt="" />
+그러면 이제 수정사항이 다른 스레드에서의 접근에서도 바로 반영되기 때문에, 데드락이 발생하는 문제 자체는 해결이 된다.</p>
+<p>다만 이걸로 제대로 된 락을 만들 수는 없기 때문에 크게 의미있는 코드는 아니긴 하다.<br />
+기대값인 50000보다 훨씬 작은 값이 나온건, 여러 스레드가 동시에 write를 하면서 동시 점유를 하기 때문이다.<br />
+위에서 언급했듯이 volatile은 1개의 스레드만이 write를 시도할때 유효하게 사용할 수 있는 기능이다.</p>
+<p>Lock 같은 강력한 동시성을 구현할 때는 사용할 수 없지만, 한 스레드가 작업을 끝낸 뒤에 결과를 다른 스레드에 바로바로 통지할 필요가 있을 때 유용한 기능이다.</p>
+<br>
+<p>예제 코드</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">/*</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;"> * This source file was generated by the Gradle &#39;init&#39; task</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;"> */</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> app</span><span style="color: #94E2D5;">.</span><span>src</span><span style="color: #94E2D5;">.</span><span>main</span><span style="color: #94E2D5;">.</span><span>java</span><span style="color: #94E2D5;">.</span><span>org</span><span style="color: #94E2D5;">.</span><span>example</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> java.util.ArrayList;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>class FakeLock</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    boolean locked = false;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    public void lock() {</span></span>
+<span class="giallo-l"><span>        while (locked) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">            // wait...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>        locked = true;</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    public void unlock() </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        locked = false;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>public class App</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    static int sharedCounter = 0;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    public static void main(String[] args) {</span></span>
+<span class="giallo-l"><span>        FakeLock lock = new FakeLock();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System.out.println(</span><span style="color: #A6E3A1;">&quot;Starting threads...&quot;</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        var threads = new ArrayList&lt;Thread&gt;();</span></span>
+<span class="giallo-l"><span>        for (int i = 0; i &lt; 5; i++) {</span></span>
+<span class="giallo-l"><span>            var thread = new Thread(() -&gt; {</span></span>
+<span class="giallo-l"><span>                for (int j = 0; j &lt; 10000; j++) {</span></span>
+<span class="giallo-l"><span>                    lock.lock();</span></span>
+<span class="giallo-l"><span>                    sharedCounter++;</span></span>
+<span class="giallo-l"><span>                    lock.unlock();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span>            });</span></span>
+<span class="giallo-l"><span>            threads.add(thread);</span></span>
+<span class="giallo-l"><span>            thread.start();</span></span>
+<span class="giallo-l"><span>        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        for (var thread : threads) </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            try {</span></span>
+<span class="giallo-l"><span>                thread.join();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span> catch (InterruptedException e) </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>                e.printStackTrace();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span>        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System.out.println(</span><span style="color: #A6E3A1;">&quot;Counter value: &quot;</span><span> + sharedCounter);</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre><br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/106591/what-is-the-volatile-keyword-useful-for">https://stackoverflow.com/questions/106591/what-is-the-volatile-keyword-useful-for</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223591641545/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>allocator의 종류와 특징<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223588850598/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>메모리 단편화와 GC, non-GC<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

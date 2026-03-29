@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Cloudwatch: EC2 메모리 모니터링하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222978691821/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Cloudwatch: EC2 메모리 모니터링하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222978691821/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-01-09T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222978691821/">[AWS] Cloudwatch: EC2 메모리 모니터링하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-01-09T00:00:00+00:00"><time datetime="2023-01-09T00:00:00+00:00">2023.01.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="445 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222978691821" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_c326d151f1e82252.png" alt="" />
+어느날 특정 EC2 인스턴스가 계속해서 죽는 문제가 발견돼서, EC2 모니터링을 봤는데, CPU 사용량은 터질정도까지 솟은 적이 없었고, 다른 수치들도 마찬가지였다.<br />
+그래서 메모리 폭발로 인해 죽었다고 추정을 했는데... 문제는 EC2 기본 구성으로는 메모리를 확인할 수 없다는 것이었다.</p>
+<p><img src="/images/img_ad6aff41821fc225.png" alt="" />
+기본 메트릭 구성에는 메모리 측정량이 없고, 간편하게 추가할 수도 없다.<br />
+변명으로는 그게 호스트 수준이 아니라 OS 수준에서 제어되는거라 그렇다고는 하는데.. 잘 모르겠다. Azure나 GCP는 잘만 지원하는데 안될 이유가 있나?</p>
+<p>이걸 해결하려면 ec2에 들어가서 cloudwatch 클라이언트를 깔아주고, 로그 데이터를 계속 전송해줘야 한다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="eijeonteu-seolcihagi-amazon-linux">에이전트 설치하기 (Amazon Linux)</h2>
+<p>아마존 리눅스의 경우에는 아래 명령으로 설치할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo yum install amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span></span></code></pre>
+<p><img src="/images/img_f0b53c2e38ae56fc.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="eijeonteu-seolcihagi-debian">에이전트 설치하기 (Debian)</h2>
+<p>그 외의 플랫폼에서는 직접 다운받아서 설치한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>wget https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//amazoncloudwatch-agent.s3.amazonaws.com/debian/amd64/latest/amazon-cloudwatch-agent.deb</span></span>
+<span class="giallo-l"><span>sudo dpkg</span><span style="color: #94E2D5;"> -</span><span>i</span><span style="color: #94E2D5;"> -</span><span>E</span><span style="color: #94E2D5;"> ./</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">.</span><span>deb</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="mabeobsaro-eijeonteu-seoljeong-guseonghagi">마법사로 에이전트 설정 구성하기</h2>
+<p>아래 커맨드로 마법사를 켠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> /</span><span>opt</span><span style="color: #94E2D5;">/</span><span>aws</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">-</span><span>config</span><span style="color: #94E2D5;">-</span><span>wizard</span></span></code></pre>
+<p>그리고 하나하나 답해주면 된다.</p>
+<p><img src="/images/img_7fab16c4a242f391.png" alt="" /></p>
+<p><img src="/images/img_09c118170dcb19b6.png" alt="" /></p>
+<p><img src="/images/img_954f5b49d97f5818.png" alt="" />
+뭐 잡다한게 많은데, 대충 다 기본값으로 해도 무방하다.</p>
+<p>중요한건 이거다.</p>
+<p><img src="/images/img_672756c1ba03b566.png" alt="" />
+어떤 항목들을 보여줄지에 대한 것이다.<br />
+메모리만 보면 된다면 베이직만 써도 되고, 그 이상이 필요하다면 다른걸 쓰면 된다.</p>
+<p>내용은 대충 이렇다.</p>
+<p><img src="/images/img_06f43048a42a1be6.png" alt="" /></p>
+<p><img src="/images/img_ea7c3085e01ca6ac.png" alt="" /></p>
+<p>다 입력해서 이렇게 나가지면 구성은 끝난 것이다.</p>
+<p><img src="/images/img_9c320d59e4d2f4b9.png" alt="" />
+SSM 설정이나 추가 로그같은건 무시하고 지나가자.</p>
+<p>그리고 끝내면 json으로 파일을 만들어줬다고 알려준다.<br />
+저 경로를 잘 보관하고 있자.</p>
+<p>debian의 경우는 파일을 이상한데 깔아서 옮겨줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mv</span><span style="color: #94E2D5;"> /</span><span>opt</span><span style="color: #94E2D5;">/</span><span>aws</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #94E2D5;">.</span><span>json</span><span style="color: #94E2D5;"> /</span><span>opt</span><span style="color: #94E2D5;">/</span><span>aws</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">.</span><span>json</span></span></code></pre>
+<p>대화형이 싫다면 직접 복붙해서 쓰면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;agent&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;metrics_collection_interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 60</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;run_as_user&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;cwagent&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;logs&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;logs_collected&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;files&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;collect_list&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">					{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">						&quot;file_path&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">						&quot;log_group_class&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;STANDARD&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">						&quot;log_group_name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;.&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">						&quot;log_stream_name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;{instance_id}&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">						&quot;retention_in_days&quot;</span><span style="color: #94E2D5;">: -</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">					}</span></span>
+<span class="giallo-l"><span>				]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;metrics&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;aggregation_dimensions&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span>			[</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;InstanceId&quot;</span></span>
+<span class="giallo-l"><span>			]</span></span>
+<span class="giallo-l"><span>		]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;append_dimensions&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;AutoScalingGroupName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;${aws:AutoScalingGroupName}&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;ImageId&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;${aws:ImageId}&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;InstanceId&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;${aws:InstanceId}&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;InstanceType&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;${aws:InstanceType}&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;metrics_collected&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;collectd&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;metrics_aggregation_interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 60</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;disk&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;measurement&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">					&quot;used_percent&quot;</span></span>
+<span class="giallo-l"><span>				]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;metrics_collection_interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 60</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;resources&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">					&quot;*&quot;</span></span>
+<span class="giallo-l"><span>				]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;mem&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;measurement&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">					&quot;mem_used_percent&quot;</span></span>
+<span class="giallo-l"><span>				]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;metrics_collection_interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 60</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;statsd&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;metrics_aggregation_interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 60</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;metrics_collection_interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;service_address&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;:8125&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;traces&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;buffer_size_mb&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;concurrency&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;insecure&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;traces_collected&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">			&quot;xray&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;bind_address&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;127.0.0.1:2000&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">				&quot;tcp_proxy&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">					&quot;bind_address&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;127.0.0.1:2000&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">				}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<br>
+<h2 id="iam-seoljeong">IAM 설정</h2>
+<p>EC2에서 cloudwatch에 접근할 수 있게끔, IAM 역할을 부여해줘야 한다.</p>
+<p>먼저 역할을 만들고</p>
+<p><img src="/images/img_8cb54724a5343f98.png" alt="" /></p>
+<p>CloudWatchAgentServerPolicy 권한을 붙여준다.</p>
+<p><img src="/images/img_c929d43b5ecdab59.png" alt="" /></p>
+<p>이름을 적당히 짓고</p>
+<p><img src="/images/img_c84a83ffad6a3f7f.png" alt="" /></p>
+<p>그걸 ec2에 붙여주자.</p>
+<p><img src="/images/img_835374d15ec34919.png" alt="" /></p>
+<p><img src="/images/img_cc40cdeea911abe3.png" alt="" />
+이러면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="cuga-seting">추가 세팅</h2>
+<p>아래 커맨드로 빈 파일을 하나 만들어준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>collectd</span></span>
+<span class="giallo-l"><span>sudo touch</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>collectd</span><span style="color: #94E2D5;">/</span><span>types</span><span style="color: #94E2D5;">.</span><span>db</span></span></code></pre>
+<p>그리고 cloudwatch에 액세스할 수 있게 aws 키값을 넣어준다.</p>
+<p><img src="/images/img_e9d82d36d2319a2f.png" alt="" /></p>
+<p>그리고 실행하면 끝이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> /</span><span>opt</span><span style="color: #94E2D5;">/</span><span>aws</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>cloudwatch</span><span style="color: #94E2D5;">-</span><span>agent</span><span style="color: #94E2D5;">-</span><span>ctl</span><span style="color: #94E2D5;"> -</span><span>a fetch</span><span style="color: #94E2D5;">-</span><span>config</span><span style="color: #94E2D5;"> -</span><span>m ec2</span><span style="color: #94E2D5;"> -</span><span>s</span><span style="color: #94E2D5;"> -</span><span>c file</span><span style="color: #9399B2;">:</span><span>아까파일경로</span></span></code></pre>
+<p><img src="/images/img_907e11fd2a664074.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="moniteoring-bogi">모니터링 보기</h2>
+<p>모든 지표에 들어가서</p>
+<p><img src="/images/img_4ebd950c1ac74c35.png" alt="" /></p>
+<p>잘 찾아보면 새로 생겨난 지표들이 있을 것이다.</p>
+<p><img src="/images/img_93f908a580849c8f.png" alt="" /></p>
+<p>한번 부하를 줘서 메모리를 늘려보면<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222978681251">https://blog.naver.com/sssang97/222978681251</a></p>
+<p>여기서도 볼 수 있을 것이다.</p>
+<p><img src="/images/img_2a14306674f2ea7e.png" alt="" /></p>
+<p>해당 EC2의 모니터링만 모아보려면 "리소스 상태"로 이동해서</p>
+<p><img src="/images/img_1b202b82ee4f34e3.png" alt="" /></p>
+<p><img src="/images/img_0b7275e948c4ff5a.png" alt="" />
+골라서 들어가서 보면</p>
+<p>좀더 예쁘게 모아볼 수 있다.</p>
+<p><img src="/images/img_028ba214364863f0.png" alt="" />
+EC2 페이지의 모니터링 탭에 보이게 하는 방법은 못찾았다.<br />
+아마도 매번 cloudwatch 콘솔로 들어와서 봐야 하는 것 같다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/42317062/how-to-monitor-ec2-instances-by-memory">https://stackoverflow.com/questions/42317062/how-to-monitor-ec2-instances-by-memory</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/aws/new-cloudwatch-plugin-for-collectd/">https://aws.amazon.com/ko/blogs/aws/new-cloudwatch-plugin-for-collectd/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Install-CloudWatch-Agent.html">https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Install-CloudWatch-Agent.html</a><br />
+<a rel="external" href="https://musketpopeye.xyz/2020/12/11/aws-ec2-cloudwatch-mem/">https://musketpopeye.xyz/2020/12/11/aws-ec2-cloudwatch-mem/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222978681251/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] stress: 부하 테스트 도구<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222978542288/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] tarpaulin: 코드 커버리지<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

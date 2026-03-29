@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Docker] 도커의 원리와 구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223162072850/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Docker] 도커의 원리와 구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223162072850/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-07-21T00:00:00+00:00">
+    <meta property="article:tag" content="Container">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223162072850/">[Docker] 도커의 원리와 구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-07-21T00:00:00+00:00"><time datetime="2023-07-21T00:00:00+00:00">2023.07.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="701 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/container/">Container</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223162072850" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_df59d18a9bb87b5e.png" alt="" />
+요즘은 도커 없이는 개발이란걸 제대로 하기 어려운 지경에 이르렀다. 물론 없이도 할 수는 있지만, 여러모로 효율성과 편의성의 차이가 크다.</p>
+<p>도커가 뭘까?<br />
+별 생각없이 그냥 깔아서 대충 쓰는 사람도 많을테고, "가상머신" 비슷한 것이라고 추상적으로 인지하는 사람도 많을 것이다.</p>
+<p>하지만 피상적인 사용법만을 아는 것과, 내부 구조를 알고 사용하는 것에는 큰 차이가 있다. 트러블슈팅을 할수록 이에 대한 기반지식이 더 요구될 것이다.</p>
+<p>그래서 이번 포스트에서는 도커가 어떤 과정을 거쳐 만들어진 것이고, 어떤 구조를 가지고 있는지 간략하게 골자를 살펴보는 시간을 가져보겠다.</p>
+<p>리눅스에 대한 기본 지식이 있고, 도커를 사용해본 경험이 있다고 가정한다.</p>
+<br>
+<br>
+<br>
+<h2 id="paekijingyi-pilyoseong">패키징의 필요성</h2>
+<p>하나의 컴퓨터에 여러개의 애플리케이션을 띄우는 일은 아주 옛날부터 해왔었다.</p>
+<p>A 서버와 B 서버를 하나의 컴퓨터에 띄워야 한다고 가정해보자.<br />
+둘은 별개의 프로그램이고, 아마 다른 접근권한과 기능을 가질 것이다. 그리고 각자 필요로 하는 하드웨어 자원이 다를 수 있다.<br />
+언어가 다를 수도 있고, 라이브러리의 버전이 다를 수도 있다.</p>
+<p>옛 개발자들은 이런 머리아픈 부분들을 뭉쳐놓고 격리시켜서 사용할 수 있는 방안들을 시도해왔었고, 그 시초격 되는 것이 리눅스의 chroot라는 기능이다.</p>
+<br>
+<br>
+<br>
+<h2 id="chroot">chroot</h2>
+<p>chroot는 루트 경로를 여러개 만들 수 있게 해주는 자잘한 기능 중 하나였다.</p>
+<p>원리는 그리 특별할 것이 없다.</p>
+<p>예를 들어, A라는 리눅스 계정을 만들고, 그 계정에서 사용할 A_home이라는 디렉터리를 만든 다음에 chroot로 지정을 해준다.</p>
+<p>그러고 A 계정으로 로그인한다면 A_home을 루트(/) 경로로 사용하는 채로 접속이 된다.</p>
+<p><img src="/images/img_bea20052e76dec73.png" alt="" />
+https://securityqueens.co.uk/im-in-chroot-jail-get-me-out-of-here/<br />
+A 유저에게는 A_home이 루트경로로 보이고, A_home에서만 작업을 할 수 있도록 유도하는 것이다.</p>
+<p>이건 현재도 php, sftp 같은 환경에서 꽤 많이 사용하고 있는 방법이다.</p>
+<p>하지만 여기에는 문제가 매우 많은데,</p>
+<ol>
+<li>A_home을 탈출할 수 있는 취약점이 매우 크며</li>
+<li>네트워크도 공유되고</li>
+<li>하드웨어 자원 관리가 안된다는 것이다.</li>
+</ol>
+<p>그래서 이 방법은 폐기됐다.<br />
+이 방법의 대안으로 제시된 것이 pivot root다.</p>
+<br>
+<br>
+<br>
+<h2 id="pivot-root-mount-namespace">pivot root (mount namespace)</h2>
+<p>USB를 컴퓨터에 꽂아본적 있는가?<br />
+USB를 꽂으면 "내 컴퓨터"에 "이동식 디스크"라는 영역이 추가되곤 한다.</p>
+<p>이런 저장공간이 연결되는 것을 "마운트"된다고 표현하는데, 리눅스에도 마운트 기능이 존재한다.</p>
+<p>리눅스에서는 가상의 저장공간을 정의해서 "마운트"시켜주는 기능을 제공하는데, 이것을 활용해서 완전하게 격리되게끔 하는 것이다.</p>
+<p>새 컨테이너를 띄우면, 새로운 마운트를 추가하고, 그 마운트 내에서만 알아서 잘 놀도록 하는 것이다.</p>
+<p><img src="/images/img_f57e80762eb48304.png" alt="" />
+https://velog.io/@_gyullbb/1-2.-%EC%BB%A8%ED%85%8C%EC%9D%B4%EB%84%88-%EA%B2%A9%EB%A6%ACpivotroot<br />
+이제 일반적인 격리에 대한 부분은 해소되었다.<br />
+도커는 이걸 통해 저장공간을 격리한다.</p>
+<br>
+<br>
+<br>
+<h2 id="cgroup">cgroup</h2>
+<p>cgroup은 자원 관리에 대한 기능인데, 구글에서 제안해서 리눅스에 포함된 기능이다.</p>
+<p>cgroup은 하나하나가 자원을 얼마나 차지할지를 정의하는 태그 같은 개념인데,<br />
+CPU 10%, CPU 20% 같은 식으로 정의가 가능하다.</p>
+<p><img src="/images/img_a7caba755e0d4621.png" alt="" />
+https://selfish-developer.com/m/entry/Cgroup-Control-Group<br />
+그리고 pivot root로 생성되는 마운트에 적용하면 해당 마운트는 cgroup으로 지정된 리소스 할당량을 사용할 수 있게 된다.</p>
+<p>도커는 이걸 통해 cpu나 메모리의 할당량 등을 관리한다.</p>
+<br>
+<br>
+<br>
+<h2 id="dokeoyi-imiji">도커의 이미지</h2>
+<p>도커는 가상머신과는 거리가 있다고 했었다.</p>
+<p>사실 도커는 진짜 OS를 띄우는게 아니라 "격리된것처럼" 보이는 서브시스템을 호스트가 실행시키는 것이기 때문이다.</p>
+<p>도커가 리눅스에서만 지원되는 이유이기도 하다.<br />
+리눅스 프로그램을 윈도우나 맥이 실행시킬 수는 없으니까...</p>
+<p>그래서 "도커 이미지" 하면 무시무시한 블랙박스처럼 느껴질 수도 있지만, 사실 내부구조는 별게 없다.<br />
+그 마운트된 격리 영역 내에 설치될 "파일들"의 모음일 뿐이다.</p>
+<p>도커 이미지 내에 /bin/sh 파일이 있고, 그걸 도커 컨테이너로 띄운다면, 도커는 마운트된 홈 디렉터리에 /bin/sh 파일을 복사한다. 그게 다다.</p>
+<br>
+<br>
+<br>
+<h2 id="imijiyi-reieo">이미지의 레이어</h2>
+<p>도커의 이미지는 파일의 모음이라 했었다.<br />
+근데 모으는 것도 무식하게 모은다면 디스크 사용량이 미친듯이 폭증할 것이다.</p>
+<p>예를 들어, ubuntu 기반의 nginx 이미지와 rust 이미지가 각각 하나씩 있다면, 기반이 되는 ubuntu 파일 부분은 중복될 것이다.</p>
+<p>이런 파일의 중복을 막기 위해 도커는 여러개의 레이어로 구성된다.<br />
+아무거나 도커 이미지를 pull 받아보면 여러개가 주르륵 다운되는 것을 보았을 것이다. 그게 다 레이어다.</p>
+<p>이미지는 여러개의 Lower 레이어와 하나의 Upper 레이어로 구성될 수 있다.</p>
+<p><img src="/images/img_cee737919b70d306.jpg" alt="" />
+Lower Layer는 이미 Dockerfile이나 commit으로 고정된 상태의 레이어를 말한다. docker pull ubuntu를 한다면, ubuntu는 여러개의 Lower Layer로만 이루어진 채일 것이다.</p>
+<p>Upper Layer는 이미지를 컨테이너로 띄웠을때 실시간으로 변경이 가능한 부분이다. commit을 하면 Lower Layer로서 또 한층 쌓인다.</p>
+<br>
+<br>
+<br>
+<h2 id="neteuweokeu-gasanghwa">네트워크 가상화</h2>
+<p>A 컨테이너 안에서 80 포트를 열고, B 컨테이너 안에서도 80포트를 열었다고 해서 포트 충돌이 난다면 무슨 꼴이겠는가?<br />
+이런건 제대로 격리가 되었다고 할 수 없다.</p>
+<p>그래서 도커는 네트워크 가상화를 통해 각 컨테이너가 독립적인 내부망을 가지도록 구성한다.</p>
+<p><img src="/images/img_1696fdc75e2ad4f2.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@gwak2837/chroot-%EC%8B%A4%EC%8A%B5">https://velog.io/@gwak2837/chroot-%EC%8B%A4%EC%8A%B5</a><br />
+<a rel="external" href="https://youtu.be/lVtgqmjv4BQ">https://youtu.be/lVtgqmjv4BQ</a></p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223162050509/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] crate: sqlx<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223159132153/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] enum ?<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

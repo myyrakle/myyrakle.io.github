@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Java] JVM: Hotspot의 최적화 원리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223573816314/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Java] JVM: Hotspot의 최적화 원리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223573816314/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-09-05T00:00:00+00:00">
+    <meta property="article:tag" content="Java">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223573816314/">[Java] JVM: Hotspot의 최적화 원리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-09-05T00:00:00+00:00"><time datetime="2024-09-05T00:00:00+00:00">2024.09.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="489 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/java/">Java</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223573816314" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_d136f654f9052e40.png" alt="" />
+Java는 인터프리터와 컴파일 방식이 혼합된 하이브리드 구조를 갖춘 언어다.<br />
+바이트코드라는 자체 어셈블리로 "컴파일"하고, 바이트코드를 JVM이라는 인터프리터에 올려서 실행시키는 형태이기 때문이다.</p>
+<p>그런데 자바는 그런 인터프리터 시스템을 갖고 있음에도 상당히 빠른 성능을 낸다.</p>
+<p>그냥 말이 그런게 아니라, 네이티브 바이너리를 뽑는 언어들과 비교해도 성능이 비슷하게 나오거나, 오히려 빠르게 최적화될 때가 있다.<br />
+Java가 동네북처럼 잡는 네이티브 언어로는 Go가 있다.</p>
+<p><img src="/images/img_27330627ae0bd751.jpg" alt="" />
+https://dzone.com/articles/java-vs-go-multiple-users-load-test-1<br />
+이게 어떻게 가능한 걸까?<br />
+자바가 코드를 최적화하는 방법을 간단히 정리해보겠다.</p>
+<br>
+<br>
+<h2 id="vm-gibongujo">VM 기본구조</h2>
+<p>JVM은 그냥 보면 python과 같은 모놀리한 실행기처럼 보일 수도 있지만, 사실 내부적으로는 상당히 복잡한 구조를 갖고 있다.</p>
+<p>구조가 고착화된 JVM 1.8(8)부터는 모두 다음과 같은 아키텍쳐를 따른다.</p>
+<p><img src="/images/img_ff88aaf20bcb5b38.png" alt="" />
+JVM 안에는 C1과 C2라는 컴파일러 구성요소가 존재한다.<br />
+C1은 Client Compiler라고도 부른다. 최적화를 대충하고 빨리 실행시키는 용도다.<br />
+C2는 Server Compiler라고도 부른다. 시간이 걸리더라도 최적화를 열심히 해서 실행시키는 용도다.</p>
+<p>JVM은 상황에 따라서 바이트코드 실행방식을 선택한다.</p>
+<ol>
+<li>최초에는 Python처럼 그냥 머신코드 생성 없이 대충 느리게라도 실행한다.</li>
+<li>계속 돌리다가 빈도수가 애매하게 낮은 메서드는 C1로 빠르게 컴파일해서 머신코드를 실행한다.</li>
+<li>빈도수가 높은 메서드는 C2로 최적화해서 극한의 성능을 내도록 선택을 한다.</li>
+</ol>
+<p>이러한 관점에서의 JVM을 Hotspot VM이라고도 부른다.<br />
+그리고 C1과 C2에서 처리하는 머신코드 생성을 JIT 컴파일이라고 부른다. C1/C2는 JIT 컴파일러다.</p>
+<p>그리고 실행 레벨이 단계적으로 진행되기 때문에 계층형 컴파일(Tiered Compliation)이라고도 부른다.</p>
+<p><img src="/images/img_ecb61ab4cd80a0fd.png" alt="" />
+전체 실행 흐름은 대충 이렇다.</p>
+<br>
+<br>
+<br>
+<h2 id="hotspotyi-jangjeom">Hotspot의 장점</h2>
+<p>충분히 "데워졌다는" 가정 하에서는 매우 빠른 성능을 보장할 수 있다.</p>
+<p>또한 JIT은 실행중에 수집된 프로파일 데이터를 참고해서 최적화하기 때문에, 흔히 말하는 프로필 기반 최적화(Profile Guided Optimization)을 기본으로 수행한다.</p>
+<p>이게 뭐냐면, 실제 실행 기록을 기반으로 해서 더욱 공격적인 최적화를 하는 것이다. 일반적인 컴파일러들은 코드 생성을 좀 범용적이고 보수적으로 하는 면이 있기 때문에, 실제 환경의 특성을 보는 것만으로도 더욱 특수화된 최적화를 할 수 있다.</p>
+<p>PGO는 일반적인 네이티브 언어에서도 할 수는 있지만, 굉장히 번거롭고 시간이 오래 걸리는 과정이라 안쓰는 경우가 더 많다.</p>
+<p>근데 JVM은 PGO를 자동으로 수행하기 때문에 오히려 네이티브 언어들보다 높은 성능을 내기도 하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="hotspotyi-danjeom">Hotspot의 단점</h2>
+<br>
+<h4 id="1-kodeukaesiyi-jeojanggonggan">1. 코드캐시의 저장공간</h4>
+<p>JVM은 JIT 컴파일로 머신코드를 생성해서 사용한다고 했었다.</p>
+<p>그럼 그 머신코드를 어디에 올려놓고 쓸까? 힙이다. 머신코드 저장공간을 Codecache라고 하는데,<br />
+그래서 머신코드가 올라가는 것 자체에도 한계가 있다.<br />
+Codecache가 꽉차면 C1/C2 컴파일러는 동작을 중단하고 파업을 하게 된다.</p>
+<br>
+<br>
+<h2 id="2-neurin-sijag">2. 느린 시작</h2>
+<p>Hotspot VM은 충분히 데워지면 매우 빠른 성능을 낸다고 했었다.<br />
+그 말은 반대로, 충분히 데워지지 않았을 때는 느리다는 말이다.</p>
+<p>성능이 일정하지 않다는 것은 꽤 치명적인 문제다. 배포를 할때마다 성능이 바닥을 치고 처리량이 떨어진다는 말이기 때문이다.</p>
+<p>그래서 데브옵스가 있는 규모의 조직에서는 배포할때마다 데워주는 작업을 또 따로 하는 창조노동을 하기도 한다.</p>
+<p>참조<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/223108219558">https://m.blog.naver.com/sssang97/223108219558</a></p>
+<br>
+<br>
+<br>
+<h2 id="mirae-graalvm">미래: Graalvm</h2>
+<p>오라클 팀은 C2(서버 컴파일러)의 관리에 어려움을 호소하면서 좀 다른 시도를 했는데, 그러면서 어찌어찌 쪼개져 나온 것이 GraalVM이다.</p>
+<p>JVM의 기능도 포함하면서, 진짜 바이너리 컴파일(AOT)도 지원하고, 다른 언어들과의 통합도 지향한다는 잡채같은 녀석이다.</p>
+<p><img src="/images/img_5169cf89b0b0e112.png" alt="" />
+아직까지는 기본 옵션으로 편입되지는 않았는데, 앞으로 어떻게 될지는 모를 일이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://mangkyu.tistory.com/301">https://mangkyu.tistory.com/301</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223572703991/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 참조: Cow<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223572553968/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] cargo-asm<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

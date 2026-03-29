@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Prometheus: AlertManager로 Slack 경보 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224176666438/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Prometheus: AlertManager로 Slack 경보 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224176666438/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-02-09T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224176666438/">[k8s] Prometheus: AlertManager로 Slack 경보 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-09T00:00:00+00:00"><time datetime="2026-02-09T00:00:00+00:00">2026.02.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="473 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224176666438" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>서비스 운영에서 가장 중요한 것중 하나는, 서버에서 장애가 발생했을때 빠르게 알아차리는 것이다.</p>
+<p>Pod가 OOM으로 죽거나, Node에 문제가 생기거나, 리소스 사용량이 급격이 증가한다면, 그걸 빠르게 알아야 장애로 인한 위험을 최소화하고 조치를 할 수 있기 때문이다. 서비스의 품질에 매우 중요한 영향을 끼치는 부분이다.</p>
+<p>AWS 같은 클라우드에서는 Cloudwatch를 비롯한 전용 시스템으로 Alert를 지원하지만, k8s 스택에서는 당연히도 직접 다 구성해줘야 한다.<br />
+여기서는 거의 표준으로 여겨지는 Prometheus의 AlertManager를 쓴다고 가정하겠다.</p>
+<p>AlertManager를는 Prometheus의 세부 스택 중 하나이고, Prometheus 팀에서 관리한다.</p>
+<p>이걸 쓰는 가장 간단한 방법은 kube-prometheus-stack 패키지를 깔아서 설치하는 것이다.<br />
+안에 AlertManager가 내장되어있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224176325746">https://blog.naver.com/sssang97/224176325746</a></p>
+<br>
+<br>
+<br>
+<h2 id="mogpyo">목표</h2>
+<p>대부분의 개발 조직에서는 아마 Slack을 메인 소통 채널로 사용할 것이다.<br />
+따라서 여기서는 서버가 죽거나 node가 offline상태가 된 경우, 혹은 node에 taint가 붙은 경우에 Slack으로 전송할 수 있도록 구성해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="slack-app-junbi">Slack App 준비</h2>
+<p>Slack 서비스에 들어가서 Bot App을 만들고, 그 앱의 토큰과 알림을 전송할 채널의 ID를 준비한다.</p>
+<p>자세한 방법은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223176628812">https://blog.naver.com/sssang97/223176628812</a></p>
+<br>
+<br>
+<br>
+<h2 id="alertmanager-hwangyeongseoljeong-with-helm">AlertManager 환경설정 (with helm)</h2>
+<p>helm으로 설치한 경우가 아니라면 세팅이 좀 불편하다. helm을 쓴다고 가정하겠다.</p>
+<p>먼저 helm으로 설치된 prometheus stack의 이름과 네임스페이스를 알아낸다.</p>
+<p><img src="/images/img_5ac255c8ab5f0046.png" alt="" /></p>
+<p>그리고 다음과 같이 Slack App의 토큰과 전송할 채널 등을 helm values로 정의한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>alertmanager</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  config</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    global</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      slack_api_url</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;https://slack.com/api/chat.postMessage&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    route</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      group_by</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;alertname&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;cluster&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;namespace&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>      group_wait</span><span style="color: #9399B2;">:</span><span> 10s # 첫 알림 대기</span></span>
+<span class="giallo-l"><span>      group_interval</span><span style="color: #9399B2;">:</span><span> 10s # 그룹에 새 알림 추가 대기</span></span>
+<span class="giallo-l"><span>      repeat_interval</span><span style="color: #9399B2;">:</span><span> 12h # 같은 알림 반복 간격</span></span>
+<span class="giallo-l"><span>      receiver</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;slack-critical&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>      routes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        # Critical 알림</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> match</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>            severity</span><span style="color: #9399B2;">:</span><span> critical</span></span>
+<span class="giallo-l"><span>          receiver</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;slack-critical&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">          continue</span><span>: </span><span style="color: #FAB387;">true</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        # Warning 알림</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> match</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>            severity</span><span style="color: #9399B2;">:</span><span> warning</span></span>
+<span class="giallo-l"><span>          receiver</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;slack-warnings&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    receivers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      # Critical</span><span style="color: #89B4FA;font-style: italic;"> 알림</span><span> (즉시)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;slack-critical&quot;</span></span>
+<span class="giallo-l"><span>        slack_configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">          -</span><span> channel</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;채널 ID&quot;</span></span>
+<span class="giallo-l"><span>            title</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;{{ if eq .Status &quot;firing&quot; }}🔴 Critical Alert{{ else }}✅ Resolved: Critical Alert{{ end }}&#39;</span></span>
+<span class="giallo-l"><span>            text</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |-</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              &lt;!</span><span>here</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">              {{</span><span style="color: #CBA6F7;"> if</span><span> eq</span><span style="color: #94E2D5;"> .</span><span>Status</span><span style="color: #A6E3A1;"> &quot;resolved&quot;</span><span style="color: #9399B2;"> }}</span><span style="color: #94E2D5;">*</span><span>Status</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span> RESOLVED</span><span style="color: #9399B2;">{{</span><span> end</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Alert</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>GroupLabels</span><span style="color: #94E2D5;">.</span><span>alertname</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Severity</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>CommonLabels</span><span style="color: #94E2D5;">.</span><span>severity</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Summary</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>CommonAnnotations</span><span style="color: #94E2D5;">.</span><span>summary</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Description</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>CommonAnnotations</span><span style="color: #94E2D5;">.</span><span>description</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>            send_resolved</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>            http_config</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              authorization</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>                credentials</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;SLACK 토큰&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>      # Warning 알림</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;slack-warnings&quot;</span></span>
+<span class="giallo-l"><span>        slack_configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">          -</span><span> channel</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;채널 ID&quot;</span></span>
+<span class="giallo-l"><span>            title</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;{{ if eq .Status &quot;firing&quot; }}⚠️ Warning{{ else }}✅ Resolved: Warning{{ end }}&#39;</span></span>
+<span class="giallo-l"><span>            text</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |-</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">              {{</span><span style="color: #CBA6F7;"> if</span><span> eq</span><span style="color: #94E2D5;"> .</span><span>Status</span><span style="color: #A6E3A1;"> &quot;resolved&quot;</span><span style="color: #9399B2;"> }}</span><span style="color: #94E2D5;">*</span><span>Status</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span> RESOLVED</span><span style="color: #9399B2;">{{</span><span> end</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Alert</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>GroupLabels</span><span style="color: #94E2D5;">.</span><span>alertname</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Namespace</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>CommonLabels</span><span style="color: #94E2D5;">.</span><span>namespace</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Pod</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>CommonLabels</span><span style="color: #94E2D5;">.</span><span>pod</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">              *</span><span>Description</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;"> .</span><span>CommonAnnotations</span><span style="color: #94E2D5;">.</span><span>description</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>            send_resolved</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>            http_config</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              authorization</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>                credentials</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;SLACK 토큰&quot;</span></span></code></pre>
+<p>그리고 저걸 가져다가 helm으로 update를 적용한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>helm upgrade prometheus prometheus</span><span style="color: #94E2D5;">-</span><span>community</span><span style="color: #94E2D5;">/</span><span>kube</span><span style="color: #94E2D5;">-</span><span>prometheus</span><span style="color: #94E2D5;">-</span><span>stack \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>reuse</span><span style="color: #94E2D5;">-</span><span>values \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>f alertmanager</span><span style="color: #94E2D5;">-</span><span>values</span><span style="color: #94E2D5;">.</span><span>yaml \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span style="color: #CBA6F7;">namespace</span><span style="color: #F9E2AF;font-style: italic;"> default</span></span></code></pre>
+<p><img src="/images/img_232eac1604870a77.png" alt="" />
+오류 없이 적용된다면 대충 된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="rule-jeongyi">Rule 정의</h2>
+<p>위에서 helm으로 채널과 인증 정보를 정의했다면, 실제 Alert 동작과 조건을 정의하는 것은 Rule을 통해서 이루어진다. PrometheusRule라는 CRD를 통해서 리소스를 정의할 수 있다.</p>
+<p><img src="/images/img_9ded5e4a6f5bb7b2.png" alt="" /></p>
+<p><img src="/images/img_e39a25acba123406.png" alt="" />
+이런 식으로, 프로메테우스에 기록되는 메트릭 정보를 기반으로 해서 Alert를 날리는 것이다.<br />
+아까 정의했던 severity에 따라서 실제 채널에 전송이 된다.</p>
+<p>예제 코드는 좀 커서 Github을 통해 첨부한다.<br />
+<a rel="external" href="https://github.com/myyrakle/infrastructures/blob/master/k8s/setups/alert-manager/rules-example.yaml">https://github.com/myyrakle/infrastructures/blob/master/k8s/setups/alert-manager/rules-example.yaml</a></p>
+<p>아무튼 잘 작성해서 생성하고</p>
+<p><img src="/images/img_0fa84badac906948.png" alt="" /></p>
+<p><img src="/images/img_95b6bc0a76ceee09.png" alt="" /></p>
+<p>혹시나 모르니 Reload를 한번 해주자. 이게 실시간으로 잘 적용되는건 아니더라.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl exec</span><span style="color: #94E2D5;"> -</span><span>n</span><span style="color: #CBA6F7;"> default</span><span> prometheus</span><span style="color: #94E2D5;">-</span><span>prometheus</span><span style="color: #94E2D5;">-</span><span>kube</span><span style="color: #94E2D5;">-</span><span>prometheus</span><span style="color: #94E2D5;">-</span><span>prometheus</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">0</span><span style="color: #94E2D5;"> -</span><span>c prometheus</span><span style="color: #94E2D5;"> --</span><span> wget</span><span style="color: #94E2D5;"> --</span><span>post</span><span style="color: #94E2D5;">-</span><span>data</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;&quot;</span><span style="color: #94E2D5;"> -</span><span>qO</span><span style="color: #94E2D5;">-</span><span style="color: #A6E3A1;"> &#39;http://localhost:9090/-/reload&#39;</span><span style="color: #FAB387;"> 2</span><span style="color: #94E2D5;">&gt;/</span><span>dev</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">null</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> echo</span><span style="color: #A6E3A1;"> &quot;Reload triggered&quot;</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> sleep</span><span style="color: #FAB387;"> 5</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="alert-silheomhaebogi-oom">Alert 실험해보기 (OOM)</h2>
+<p>이제 Alert가 동작하는지를 확인해보자.<br />
+메모리 먹고 OOM으로 자살하는 Pod를 하나 정의해봤다.</p>
+<p><img src="/images/img_eea0550c48c41ae8.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Pod</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> oom</span><span style="color: #94E2D5;">-</span><span>test</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span></span>
+<span class="giallo-l"><span>  labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #9399B2;">:</span><span> oom</span><span style="color: #94E2D5;">-</span><span>test</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> memory</span><span style="color: #94E2D5;">-</span><span>eater</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> python</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">3.9</span><span style="color: #94E2D5;">-</span><span>slim</span></span>
+<span class="giallo-l"><span>    command</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> python3</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    - -</span><span>c</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    - |</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      import</span><span> time</span></span>
+<span class="giallo-l"><span>      print(</span><span style="color: #A6E3A1;">&quot;Starting memory allocation...&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>      data = []</span></span>
+<span class="giallo-l"><span>      try:</span></span>
+<span class="giallo-l"><span>        while True:</span></span>
+<span class="giallo-l"><span>          # 10MB씩 메모리 할당</span></span>
+<span class="giallo-l"><span>          data.append(</span><span style="color: #A6E3A1;">&#39; &#39;</span><span style="color: #F38BA8;"> *</span><span> (10 </span><span style="color: #F38BA8;">*</span><span> 1024 </span><span style="color: #F38BA8;">*</span><span> 1024))</span></span>
+<span class="giallo-l"><span>          print(f</span><span style="color: #A6E3A1;">&quot;Allocated: {len(data) * 10}MB&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>          time.sleep(0.5)</span></span>
+<span class="giallo-l"><span>      except Exception</span><span style="color: #CBA6F7;"> as</span><span> e:</span></span>
+<span class="giallo-l"><span>        print(f</span><span style="color: #A6E3A1;">&quot;Error: {e}&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>    resources:</span></span>
+<span class="giallo-l"><span>      limits:</span></span>
+<span class="giallo-l"><span>        memory: </span><span style="color: #A6E3A1;">&quot;100Mi&quot;</span><span>  # 100MB 제한</span></span>
+<span class="giallo-l"><span>      requests:</span></span>
+<span class="giallo-l"><span>        memory: </span><span style="color: #A6E3A1;">&quot;50Mi&quot;</span></span>
+<span class="giallo-l"><span>  restartPolicy: Always  # OOM 후 계속 재시작 (CrashLoopBackOff)</span></span></code></pre>
+<p>그리고 실행해보면, 당연히 OOM으로 죽을 것이고</p>
+<p><img src="/images/img_1666a7089163dfc0.png" alt="" /></p>
+<p>Slack 알림도 날라올 것이다.</p>
+<p><img src="/images/img_1932ca13b5d5f8e0.png" alt="" /></p>
+<p>위험이 해소되는 것도 확인해보자.<br />
+OOM이 나지 않도록 변경하고</p>
+<p><img src="/images/img_fa9c09cb2267b9de.png" alt="" /></p>
+<p><img src="/images/img_11d0dcb609478084.png" alt="" />
+재부팅해준다.</p>
+<br>
+<p><img src="/images/img_68c23e6a4f7f7ea6.png" alt="" />
+오류가 없는 상태로 좀 지속이 되면</p>
+<br>
+<p><img src="/images/img_73fd3ed2e9098b79.png" alt="" />
+그때는 이제 resolved 메시지가 날라올 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://prometheus.io/docs/alerting/latest/alertmanager/">https://prometheus.io/docs/alerting/latest/alertmanager/</a><br />
+<a rel="external" href="https://medium.com/@hyukjuner/kubernetes%EC%97%90-%EB%B0%B0%ED%8F%AC%EB%90%9C-prometheus-alertmanager%EC%9D%98-%EA%B5%AC%EC%84%B1-%EC%9D%B4%ED%95%B4-0fda19076ab9">https://medium.com/@hyukjuner/kubernetes%EC%97%90-%EB%B0%B0%ED%8F%AC%EB%90%9C-prometheus-alertmanager%EC%9D%98-%EA%B5%AC%EC%84%B1-%EC%9D%B4%ED%95%B4-0fda19076ab9</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224178940751/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana] Loki를 통한 로깅 환경 구성<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224175706636/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] CoreDNS<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

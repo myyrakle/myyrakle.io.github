@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 성능 최적화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223216318146/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 성능 최적화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223216318146/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-09-20T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223216318146/">[Rust] 성능 최적화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-09-20T00:00:00+00:00"><time datetime="2023-09-20T00:00:00+00:00">2023.09.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="676 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223216318146" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust는 성능과 관계된 매우 많은 옵션들이 제공된다.</p>
+<p>기본적으로 안전성을 보장하기 위해 성능에서 손해를 보는 부분들이 꽤 존재하는데, 이런것 때문에 C/C++에 비해서 좀 느리게 나오기도 한다.</p>
+<p>하지만 옵션을 조절하고 코드를 좀 마개조하면 C/C++과 비슷하거나 더 나은 성능의 코드가 충분히 나올 수 있다.<br />
+그런 방법들에 대해 몇가지 정리를 해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="releasero-bildeuhagi">release로 빌드하기</h2>
+<p>가장 기본적인 최적화 조건이다.<br />
+그냥 실행하면 일부러 빠르게 빌드하려고 대충 최적화를 하는 것도 있고, 디버그 정보를 더 집어넣기 때문에 성능이 영 좋지는 않다. 제 성능을 내게 하려면 항상 release 모드로 빌드를 해야 한다.</p>
+<p>다음과 같이 --release 옵션을 줘서 빌드하면 된다.</p>
+<p><img src="/images/img_f69eb4a5f6a74d30.png" alt="" /></p>
+<p>그럼 4.6초가 나오던게</p>
+<p><img src="/images/img_8653b841e4a0d50b.png" alt="" /></p>
+<p>0.5초밖에 나오지 않는다. 이정도로 성능차가 심하다.</p>
+<p><img src="/images/img_62d24fc3377bb5fa.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="codegen-danwi-juligi">codegen 단위 줄이기</h2>
+<p>rust 컴파일러는 기본적으로 병렬로도 컴파일을 수행한다.<br />
+그래서 각각의 codegen 단위가 따로 노는 경우가 있는데, 이럴때는 각 codegen 단위 내에서는 최적화가 충분히 되지만, 전체적으로는 최적화가 덜될 수가 있다.</p>
+<p>이럴때는 컴파일 단위를 강제로 1로 맞추면, 병렬 컴파일이 꺼지고 하나의 codegen 단위로 컴파일을 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>release]</span></span>
+<span class="giallo-l"><span>codegen</span><span style="color: #94E2D5;">-</span><span>units</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span></code></pre>
+<p>컴파일시간이 길어지는 대신, 약간의 성능 개선과 바이너리 크기 절감 효과가 있다.<br />
+보통은 그 차이가 아주 크지는 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="ringkeu-taim-coejeoghwa-lto">링크 타임 최적화(LTO)</h2>
+<p>링크 타임 최적화는 링크를 할때도 추가적인 최적화를 하는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>release]</span></span>
+<span class="giallo-l"><span>codegen</span><span style="color: #94E2D5;">-</span><span>units</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>lto</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span></code></pre>
+<p>컴파일 타임이 길어지는 대신 약간의 성능 개선과 바이너리 사이즈 절감 효과가 있다.<br />
+성능 개선 정도는 대체로 10% 정도인 것 같다.</p>
+<p>참고로 LTO가 제대로 동작하려면 embed-bitcode 옵션이 true여야 하는데, 기본값이 true라서 따로 건들지는 않아도 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="panic-check-jegeohagi">panic check 제거하기</h2>
+<p>rust의 panic은 기본적으로, try-catch처럼도 사용할 수 있게끔 체크를 이것저것 한다.<br />
+그래서 catch_unwind로 받을 수도 있고 한데.. 진짜 터뜨리기만 해도 충분하다면 abort 모드로 하는게 좋다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>release]</span></span>
+<span class="giallo-l"><span>codegen</span><span style="color: #94E2D5;">-</span><span>units</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>lto</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>panic</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;abort&quot;</span></span></code></pre>
+<p>이러면 panic에 대한 생성 코드가 줄어들어서 아주 약간의 성능 개선과 바이너리 사이즈 절감 효과가 있을 수 있다.<br />
+대체로는 미미한 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="dibeogeu-jeongbo-jegeohagi">디버그 정보 제거하기</h2>
+<p>release 모드로 빌드하면 알아서 디버그 심볼같은걸 다 날려줄 것 같지만, 그렇지는 않다.<br />
+맹글링같은건 안하고, 뭘 좀 남겨놓긴 하는 것 같더라.<br />
+그래서 릴리즈 모드로 빌드해도 프로파일러로 적당히 알아볼 수가 있다. C/C++에서 극단적인 최적화를 돌리면 못알아본다.</p>
+<p>아래와 같이 strip 옵션을 사용하면, 디버그 정보를 다 날려버리게 만들 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>release]</span></span>
+<span class="giallo-l"><span>codegen</span><span style="color: #94E2D5;">-</span><span>units</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>lto</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>panic</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;abort&quot;</span></span>
+<span class="giallo-l"><span>strip</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;debuginfo&quot;</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="cpubyeol-inseuteureogsyeon-sayong">CPU별 인스트럭션 사용</h2>
+<p>당장 내 기기에만 돌면 되고, 다른 비슷한 유형의 기기들과 바이너리가 호환될 필요가 없다면, 이 옵션을 주면 된다.<br />
+그럼 해당 타겟에서 가장 최적의 인스트럭션으로 최적화를 한다. 보통은 더 빠르게 만들어진 "최신" 인스트럭션을 사용하는 것으로 성능 향상의 기회를 얻는 것 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[build]</span></span>
+<span class="giallo-l"><span>rustflags</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;-C&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;target-cpu=native&quot;</span><span>]</span></span></code></pre>
+<p>난 아직 이걸로 눈에 띄는 성능 향상을 경험해본 적은 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="target-feature-deungrog">target-feature 등록</h2>
+<p>SIMD 같은 일부 unstable한 기능을 사용하거나 할 경우에는, 해당 최적화를 위한 feature가 활성화되어있지 않을 수 있다.<br />
+그럴때는 rustflags로 feature를 임의로 켜줘야 한다.</p>
+<p>이런 느낌이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[build]</span></span>
+<span class="giallo-l"><span>rustflags</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;-C&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;target-feature=+sse,+sse2,+sse3,+sse4.1,+sse4.2,+ssse3,+lzcnt,+popcnt,+avx&quot;</span><span>]</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="hamsu-inrainhagi">함수 인라인하기</h2>
+<p>인라이닝 키워드를 꼬박꼬박 넣어주는 것도 괜찮은 습관이 될 수 있다.<br />
+웬만하면 컴파일러가 알아서 잘 해주긴 하겠지만, 애매한 경우에는 하지 않을 수 있다.</p>
+<p>아래는 인라인을 할만한 상황이라면 최대한 인라이닝을 해달라는 요청이 된다. (심지어 함수가 존재하는 crate과, 그걸 사용하는 crate이 다르더라도)</p>
+<p><img src="/images/img_6bb930323dd0d242.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="unchecked-hwalyonghagi-unsafe">unchecked 활용하기 (unsafe)</h2>
+<p>이건 흑마법이다.</p>
+<p>rust에서 배열에 접근하거나 할때는 다 잠재적으로 bound check란걸 하는데, 이게 성능에 좋은건 아니다.<br />
+그래서 확실하게 보장할 수 있으면서, 성능이 중요하다면 unsafe 버전의 unchecked 기능을 사용하는게 방법일 수도 있다.<br />
+<a rel="external" href="https://doc.rust-lang.org/std/primitive.slice.html#method.get_unchecked">https://doc.rust-lang.org/std/primitive.slice.html#method.get_unchecked</a></p>
+<br>
+<br>
+<br>
+<h2 id="camgo-cargo-toml-profile-gibongabs">참고: Cargo.toml profile.* 기본값</h2>
+<p>debug 빌드는</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>dev]</span></span>
+<span class="giallo-l"><span>opt</span><span style="color: #94E2D5;">-</span><span>level</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>debug</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>split</span><span style="color: #94E2D5;">-</span><span>debuginfo</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;...&#39;</span><span>  # Platform</span><span style="color: #94E2D5;">-</span><span>specific</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>debug</span><span style="color: #94E2D5;">-</span><span>assertions</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>overflow</span><span style="color: #94E2D5;">-</span><span>checks</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>lto</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>panic</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;unwind&#39;</span></span>
+<span class="giallo-l"><span>incremental</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>codegen</span><span style="color: #94E2D5;">-</span><span>units</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 256</span></span>
+<span class="giallo-l"><span>rpath</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span></code></pre>
+<p>release 빌드는</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>release]</span></span>
+<span class="giallo-l"><span>opt</span><span style="color: #94E2D5;">-</span><span>level</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>debug</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>split</span><span style="color: #94E2D5;">-</span><span>debuginfo</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;...&#39;</span><span>  # Platform</span><span style="color: #94E2D5;">-</span><span>specific</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>debug</span><span style="color: #94E2D5;">-</span><span>assertions</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>overflow</span><span style="color: #94E2D5;">-</span><span>checks</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>lto</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>panic</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;unwind&#39;</span></span>
+<span class="giallo-l"><span>incremental</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>codegen</span><span style="color: #94E2D5;">-</span><span>units</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 16</span></span>
+<span class="giallo-l"><span>rpath</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="peuropil-giban-coejeoghwa-pgo">프로필 기반 최적화 (PGO)</h2>
+<p>실제로 실행된 프로파일 데이터를 기반으로 한 최적화 기법이다.<br />
+컴파일이 매우 느리고, 데이터를 쌓는 것도 불편하지만, 최적화만큼은 확실하게 된다.</p>
+<p>자바가 성능으로 자랑하는게 다 이런걸로 하는거다.</p>
+<p>참조<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222888877448">https://blog.naver.com/sssang97/222888877448</a></p>
+<br>
+<br>
+<br>
+<h2 id="gwanryeon-poseuteu">관련 포스트</h2>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223142654009">https://blog.naver.com/sssang97/223142654009</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/222817883779">https://blog.naver.com/sssang97/222817883779</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://nnethercote.github.io/perf-book/machine-code.html">https://nnethercote.github.io/perf-book/machine-code.html</a><br />
+<a rel="external" href="https://doc.rust-lang.org/cargo/reference/profiles.html#lto">https://doc.rust-lang.org/cargo/reference/profiles.html#lto</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/73628537/when-to-use-symbol-stripping-in-rust-release-builds">https://stackoverflow.com/questions/73628537/when-to-use-symbol-stripping-in-rust-release-builds</a><br />
+<a rel="external" href="https://doc.rust-lang.org/rustc/codegen-options/index.html">https://doc.rust-lang.org/rustc/codegen-options/index.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/65156743/what-target-features-uses-rustc-by-default">https://stackoverflow.com/questions/65156743/what-target-features-uses-rustc-by-default</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223219812336/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Async Rust is a Bad Language.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223216197553/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>gost v0.4.0<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

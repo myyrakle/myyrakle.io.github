@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Athena: S3 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223170376691/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Athena: S3">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223170376691/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-07-31T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223170376691/">[AWS] Athena: S3</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-07-31T00:00:00+00:00"><time datetime="2023-07-31T00:00:00+00:00">2023.07.31</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="535 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223170376691" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_873265fed62ca5ed.png" alt="" />
+Athena는 S3에 대한 SQL 쿼리 기능을 제공하는 서비스다.</p>
+<p>대형 데이터같은걸 다루다보면 S3 같은 스토리지에 파일을 기록하게 될 일이 꽤 많다.</p>
+<p>근데 S3에 저장하는건 그렇다 쳐도, 꺼내쓰는 것은 상황이나 취향에 따라 여러가지 선택지가 있다.</p>
+<p>대표적으로 AWS의 redshift나 GCP의 bigquery 등이 이런 빅데이터 분석에 최적화된 도구다. 이러한 도구들의 단점은, 아무래도 동기화를 추가로 시켜줘야 하고, 그런데서 발생하는 전송 비용이나 번거로움이 존재한다는 것이다.</p>
+<p>반면 Athena는 별다른 처리 없이 S3에 바로 액세스할 수 있게 해주는 기능을 제공한다.<br />
+Presto, Apache Spark, Aparch Hive 등을 기반으로 동작하며, 페타바이트 단위의 데이터도 처리 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://aws.amazon.com/ko/athena/pricing/?nc=sn&amp;loc=3">https://aws.amazon.com/ko/athena/pricing/?nc=sn&amp;loc=3</a></p>
+<p>순수하게 Athena에서만 발생하는 요금은, 스캔한 데이터의 크기당으로 부과된다.<br />
+테라바이트당 5달러다.</p>
+<p><img src="/images/img_e4b77d0eefedf32a.png" alt="" /></p>
+<p>그리고 S3에서 발생한 요금은 또 그것대로 나간다. 데이터를 읽거나 쓰는데서 다 비용이 부과된다.<br />
+그리고 경우에 따라서는 Lambda 요금도 뜯길 수 있다. 내부적으로 이래저래 쓰나보다.</p>
+<p><img src="/images/img_1142c19fba5c6c26.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="vs-redshift">vs Redshift</h2>
+<p>빅데이터 분석을 위한 기능이라는 점에서는 Redshift와 장르가 비슷하지만, 영역이 완전히 겹치지는 않는다.</p>
+<p>Redshift는 복잡한 구조를 가진 데이터셋 처리에 능하다. 여러가지 데이터를 구겨넣고 빠른 성능으로 대규모 JOIN 작업도 무리없이 해낼 수 있다.<br />
+반면 Athena는 단일 데이터셋에 대한 처리에 최적화되어있으며, JOIN 같은 작업에는 성능한계가 있다.</p>
+<p>사용성에서는 Athena가 큰 강점을 가진다. Redshift의 경우에는 별도의 프로그램을 구성해서 동기화를 해줘야 하지만, Athena는 몇번의 클릭만으로 S3를 통째로 바로 로드할 수 있다.</p>
+<p>비용 면에서는 논란이 있을 수 있다. 하지만 Redshift는 비용 계산이 매우 복잡한 반면에 Athena는 꽤나 간단하고 명료한 과금 체계를 가지고 있다.</p>
+<p>성능은 마치 RDB vs NoSQL의 대결과 비슷하다.<br />
+단순 Read나 Aggregate는 대체로 Athena가 약간 더 빠르다.<br />
+하지만 테이블간 Join에 대해서는 Redshift가 확실하게 더 빠르다.</p>
+<br>
+<br>
+<br>
+<h2 id="data-source">Data Source</h2>
+<p>데이터 소스는 데이터를 어디서 가져올지에 대한 구성이다.</p>
+<p><img src="/images/img_51586ea6b65fd0fe.png" alt="" />
+S3만을 사용할거라면 추가로 구성을 할 필요는 없다.<br />
+이미 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="beokis-mandeulgi">버킷 만들기</h2>
+<p>먼저 원본 소스를 저장해둘 버킷을 만든다. 꼭 전용 버킷을 만들어야만 하는건 아니고, 기존 버킷에 폴더 추가해서 거기다 써도 되긴 한다.</p>
+<p><img src="/images/img_8229647e83cef564.png" alt="" /></p>
+<p>여기다가 csv로 테스트데이터를 올려보겠다.<br />
+csv 말고도 tcv, json 같은 다양한 데이터 포맷을 지원한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>time</span><span style="color: #9399B2;">,</span><span>user_id</span><span style="color: #9399B2;">,</span><span>board_name</span><span style="color: #9399B2;">,</span><span>action</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">06 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>bob</span><span style="color: #9399B2;">,</span><span>game</span><span style="color: #9399B2;">,</span><span>insert</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>jake</span><span style="color: #9399B2;">,</span><span>free</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">delete</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>jake</span><span style="color: #9399B2;">,</span><span>stock</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">delete</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>jake</span><span style="color: #9399B2;">,</span><span>free</span><span style="color: #9399B2;">,</span><span>insert</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>bob</span><span style="color: #9399B2;">,</span><span>game</span><span style="color: #9399B2;">,</span><span>insert</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>mike</span><span style="color: #9399B2;">,</span><span>qna</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">delete</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>alica</span><span style="color: #9399B2;">,</span><span>qna</span><span style="color: #9399B2;">,</span><span>insert</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>mike</span><span style="color: #9399B2;">,</span><span>game</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">delete</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>mike</span><span style="color: #9399B2;">,</span><span>stock</span><span style="color: #9399B2;">,</span><span>view</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">2022</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">03</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">05 22</span><span>:</span><span style="color: #FAB387;">06</span><span style="color: #9399B2;">,</span><span>jake</span><span style="color: #9399B2;">,</span><span>qna</span><span style="color: #9399B2;">,</span><span>insert</span></span></code></pre>
+<p><img src="/images/img_497d8042ab06ad4c.png" alt="" />
+이렇게 잘 올라가면 됐다.</p>
+<br>
+<br>
+<br>
+<h2 id="culryeog-gyeongro-jijeong">출력 경로 지정</h2>
+<p>Athena는 전부 S3만을 기반으로 동작한다.<br />
+그래서 출력 결과도 S3에 백업을 해두는데, 그걸 저걸 눌러서 하면 된다.</p>
+<p><img src="/images/img_a8799ec98727461c.png" alt="" /></p>
+<p>원하는 경로로 깔아주기만 하면 된다.</p>
+<p><img src="/images/img_87ed456437f0eaf6.png" alt="" />
+저 디렉터리는 가급적 비어있어야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteobeiseu-mandeulgi">데이터베이스 만들기</h2>
+<p>아테나도 RDB들과 마찬가지로 데이터베이스-&gt;테이블의 레이어를 가진다.<br />
+먼저 하나 만들어준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE DATABASE test</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_6b9023810044f3f6.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="teibeul-mandeulgi">테이블 만들기</h2>
+<p>테이블 생성 쿼리는 마법사를 써서 짜는게 편하다.</p>
+<p><img src="/images/img_ad3fb94fdfdb7957.png" alt="" /></p>
+<p>이름 짓고 데이터베이스 고르고</p>
+<p><img src="/images/img_234a4cdecc703a91.png" alt="" /></p>
+<p>테스트데이터가 들어있는 경로를 넣어준다.</p>
+<p><img src="/images/img_b00c9ae35d3f262a.png" alt="" />
+경로는 /로 끝나야하고, 아테나는 저기 들어있는 파일을 전부 풀스캔때린다.</p>
+<p>그리고 입력 파일 형태도 정해준다.</p>
+<p><img src="/images/img_9453c7f624b700f0.png" alt="" />
+내가 csv로 올렸으니까, csv로 하면 된다.</p>
+<p>그리고 컬럼을 순서대로 정의한다.</p>
+<p><img src="/images/img_ea86a251b5db54b5.png" alt="" /></p>
+<p>그럼 이러한 형태로 쿼리가 생성될 것이다.</p>
+<p><img src="/images/img_f0de3fdf6da5be60.png" alt="" />
+생성해준다.</p>
+<br>
+<p><img src="/images/img_2b6c01ca22925ebf.png" alt="" />
+그래서 이렇게 왼쪽에 테이블이 생성되면 잘 된 것이다.</p>
+<p>csv만 처리할거라면 이렇게 하는게 좋다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE EXTERNAL TABLE IF NOT EXISTS</span><span style="color: #A6E3A1;"> `DB명`</span><span style="color: #94E2D5;">.</span><span style="color: #A6E3A1;">`테이블명`</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  ...</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ROW FORMAT SERDE</span><span style="color: #A6E3A1;"> &#39;org.apache.hadoop.hive.serde2.OpenCSVSerde&#39;</span><span> </span></span>
+<span class="giallo-l"><span>WITH</span><span style="color: #89B4FA;font-style: italic;"> SERDEPROPERTIES</span><span> (</span><span style="color: #A6E3A1;">&quot;separatorChar&quot;</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;,&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;escapeChar&quot;</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;</span><span style="color: #F5C2E7;">\\</span><span style="color: #A6E3A1;">&quot;</span><span>) </span></span>
+<span class="giallo-l"><span>LOCATION</span><span style="color: #A6E3A1;"> &#39;s3://...-cost/aws/디렉터리/&#39;</span><span style="color: #94E2D5;"> --</span><span> 읽어올 csv 파일이 존재하는 디렉터리</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">TBLPROPERTIES</span><span> (</span><span style="color: #A6E3A1;">&quot;skip.header.line.count&quot;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;1&quot;</span><span>)</span><span style="color: #94E2D5;"> --</span><span> 첫번째 row는 생략</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="bunseoghagi">분석하기</h2>
+<p>테이블이 잘 만들어졌다면, 그냥 RDB쓰듯이 쿼리를 날려서 결과를 조회하면 된다.</p>
+<p><img src="/images/img_b5b9a845b1b17150.png" alt="" /></p>
+<p>분석 결과는 실시간으로 S3 버킷에 백업된다.</p>
+<p><img src="/images/img_531417ac23802630.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/athena/">https://aws.amazon.com/ko/athena/</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/big-data/analyzing-data-in-s3-using-amazon-athena/">https://aws.amazon.com/ko/blogs/big-data/analyzing-data-in-s3-using-amazon-athena/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223175717079/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>terraform best practice.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223170405307/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] 포인터<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

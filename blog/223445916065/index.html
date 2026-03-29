@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] Communicating Sequential Processes | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223445916065/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] Communicating Sequential Processes">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223445916065/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-05-14T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223445916065/">[Concurrency] Communicating Sequential Processes</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-05-14T00:00:00+00:00"><time datetime="2024-05-14T00:00:00+00:00">2024.05.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="330 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223445916065" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Communicating Sequential Processes(이하 CSP)는 동시성 시스템의 주요 모델 중 하나다.<br />
+Actor 모델과 비슷하면서도 좀 다르다.</p>
+<p>1978년에 Tony Hoare에 의해 제시된 이론이다. 이 양반이 quicksort 같은 핵심 알고리즘이나 핵심 이론들을 많이 만든 양반이다.</p>
+<p>이 매커니즘을 적용한 대표적인 구현체로는 프로그래밍 언어인 Go가 있다. 그다음으로 유명한건 Clojure의 core.async다.</p>
+<p>Erlang은 CSP의 정의를 완전히 충족하진 않았지만, 영향을 좀 받아서 만들어졌다.<br />
+그 외에도 채널을 지원한다고 하면 최소한 느슨한 의미에서의 CSP를 구현했다고 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-weonri">기본 원리</h2>
+<p>기본적인 원리 자체는 그리 복잡할 것이 없다.<br />
+프로세스를 여러개 깔고 멀티프로세스로 동시성 처리를 하다보면, 당연히 서로 데이터를 주고받을 일이 잦을 것이다. 고전적인 동시처리 방법론에서는 그냥 Mutex 같은거 깔고 복잡하게 제어를 한다.</p>
+<p>하지만 CSP에서는</p>
+<p><img src="/images/img_c6ccff290b68388c.png" alt="" />
+위 그림과 같이 "채널"이란 단위를 통해서 서로 통신 기반의 공유를 하도록 유도한다.<br />
+이를 통해 복잡한 동기화 처리나 관련된 수많은 버그들을 최소화할 수 있다.</p>
+<p>문제를 단순화하는 것이다.</p>
+<p>이런건 본질적으로 편의성과 안정성을 위한 것이지, 성능을 위한 방법론은 아니다. 사실 뮤텍스 걸고 돌리는게 더 빠르다.</p>
+<br>
+<br>
+<br>
+<h2 id="vs-actor-model">vs Actor Model</h2>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223124061290">https://blog.naver.com/sssang97/223124061290</a><br />
+각각의 프로세스를 별도로 띄우고 채널 같은 통신 형태를 응용해서 서로간의 데이터 동기화 - communicate를 한다는 점에서 CSP와 Actor는 꽤나 비슷한 부분이 많다.<br />
+하지만 근본적인 부분에서는 차이점이 꽤 많다.</p>
+<p><img src="/images/img_6673ad42032d3b32.png" alt="" /></p>
+<br>
+<ol>
+<li><strong>CSP는 Actor에 비해 가볍다.</strong></li>
+</ol>
+<br>
+<p>Actor는 프로세스라고 하기엔 추상화를 위한 요소가 많은 편이다.<br />
+Actor는 Actor마다 고유한 식별번호가 할당된다. 그에 비해 CSP의 프로세스는 그냥 프로세스일 뿐이다.</p>
+<p>애초에 Actor 주 목적 중 하나는 분산프로그램을 위한 것이다. 그래서 단순 OS 프로세스나 스레드 수준에 국한되지 않는다.<br />
+반면 CSP는 단일 머신에서의 단순한 동시성 처리를 목적으로 한다.</p>
+<p><strong>2. 통신 방식</strong><br />
+CSP에서는 채널을, Actor Model은 메일박스(mailbox)라는 것을 통해 프로세스간 통신을 처리하는데, 이름만 다른게 아니라 구조도 좀 다르다.</p>
+<p>채널은 항상 보낸 순서대로 메세지가 바로 도착한다는 것이 보장된다.<br />
+반면 메일박스는 비동기적으로 메세지를 일단 쏘고 본다. 순서가 보장되지도 않고, consumer가 받을 준비가 되지 않았더라도 일단 쏜다. 기다리지 않는다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Communicating_sequential_processes">https://en.wikipedia.org/wiki/Communicating_sequential_processes</a><br />
+<a rel="external" href="https://dev.to/karanpratapsingh/csp-vs-actor-model-for-concurrency-1cpg">https://dev.to/karanpratapsingh/csp-vs-actor-model-for-concurrency-1cpg</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223449129234/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] 스왑 메모리 (swap memory)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223443892802/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>anyrust v0.1.0<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

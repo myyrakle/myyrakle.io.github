@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] groupcache | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223382362211/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] groupcache">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223382362211/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-03-13T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223382362211/">[Go] groupcache</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-13T00:00:00+00:00"><time datetime="2024-03-13T00:00:00+00:00">2024.03.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="646 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223382362211" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>그룹캐시는 memcached 같은 인메모리 대체용으로 만들어진 분산 캐싱용 라이브러리다. memcached 개발자가 직접 만들었다.<br />
+현재 구글 내부에서 다운로드 서버 등에 많이 사용된다고 한다.</p>
+<p>memcached 같은 인메모리 DB들과의 가장 큰 차이점은, DB를 별도로 띄우는게 아니라 in-program으로 Go 코드 내에서만 동작한다는 것이다.</p>
+<p><img src="/images/img_6bc5f49f812be631.png" alt="" />
+쉽게 말해서, 인메모리 DB를 GO 프로그램 내에서 직접 만드는 것이다.<br />
+막 원클릭 투클릭으로 생성할 정도로 편하게 만들어져있는건 아니고, 사용사례에 따라서 직접 구현해서 핸들링해야 하는 부분이 많다. Memcache 대체용이라고는 하지만 1:1 대응이 되는 구조도 아니다. 많이 다르다.</p>
+<p>그래서 많이 안쓰는 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="gandanhan-yeje">간단한 예제</h2>
+<p>한번 싱글노드에서 그룹캐시를 만드는 방법을 정리해보겠다.<br />
+진짜 기본적인 로직만 있다.</p>
+<p>전역변수로 인메모리 데이터를 두고</p>
+<p><img src="/images/img_1fae863387259c2b.png" alt="" /></p>
+<p>그룹을 생성함과 동시에, Get에서 방금 저 전역 데이터를 가져오도록 했다.</p>
+<p><img src="/images/img_4806df3dbb22dc77.png" alt="" /></p>
+<p>그러면 Group 객체를 통해 값을 가져오도록 할 수 있다.</p>
+<p><img src="/images/img_2762fcfddf10572f.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;context&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;errors&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/golang/groupcache&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> Store</span><span style="color: #94E2D5;"> =</span><span> map[string][]byte</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;red&quot;</span><span style="color: #94E2D5;">:</span><span>   []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#FF0000&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;green&quot;</span><span style="color: #94E2D5;">:</span><span> []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#00FF00&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;blue&quot;</span><span style="color: #94E2D5;">:</span><span>  []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#0000FF&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> Group</span><span style="color: #94E2D5;"> =</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewGroup</span><span>(</span><span style="color: #A6E3A1;">&quot;foobar&quot;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 64</span><span style="color: #94E2D5;">&lt;&lt;</span><span style="color: #FAB387;">20</span><span style="color: #9399B2;">,</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GetterFunc</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	func</span><span>(ctx context</span><span style="color: #94E2D5;">.</span><span>Context</span><span style="color: #9399B2;">,</span><span> key string</span><span style="color: #9399B2;">,</span><span> dest groupcache</span><span style="color: #94E2D5;">.</span><span>Sink) error</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log.Println(</span><span style="color: #A6E3A1;">&quot;looking up&quot;</span><span style="color: #9399B2;">,</span><span> key)</span></span>
+<span class="giallo-l"><span>		v</span><span style="color: #9399B2;">,</span><span> ok </span><span style="color: #94E2D5;">:=</span><span> Store[key]</span></span>
+<span class="giallo-l"><span>		if</span><span style="color: #94E2D5;"> !</span><span>ok</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			return errors.New(</span><span style="color: #A6E3A1;">&quot;color not found&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		}</span></span>
+<span class="giallo-l"><span>		dest.SetBytes(v)</span></span>
+<span class="giallo-l"><span>		return nil</span></span>
+<span class="giallo-l"><span>	},</span></span>
+<span class="giallo-l"><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func main() {</span></span>
+<span class="giallo-l"><span>	var b []byte</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	err </span><span style="color: #94E2D5;">:=</span><span> Group</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(nil</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;red&quot;</span><span style="color: #9399B2;">,</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">AllocatingByteSliceSink</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>b))</span></span>
+<span class="giallo-l"><span>	if err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log.Fatal(err)</span></span>
+<span class="giallo-l"><span>		return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;red&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> string</span><span>(b))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>잘 동작은 하지만 서버도 없고, Set도 없고, 분산 구성도 안되어있어서 불완전한 구성이다.</p>
+<p>이제 확장해보자.</p>
+<br>
+<br>
+<br>
+<h2 id="http-seobeo-guseong-read-only">HTTP 서버 구성 (Read Only)</h2>
+<p>일단 데이터 몇개만 있고, 단순 조회만 가능한 단일 싱글 캐시서버를 만들어보겠다.<br />
+실제로 이런 형태로 쓸 일은 없을 것이다.</p>
+<p><img src="/images/img_61e59fd8c6ec3387.png" alt="" />
+서버를 적절히 이런 형태로 만들어준다.<br />
+GET으로 들어오면 그룹캐시에서 캐시값을 반환하는 간단한 로직만을 포함한다.</p>
+<br>
+<p><img src="/images/img_3ef92dbe4252180f.png" alt="" />
+그렇게 실행하면</p>
+<br>
+<p><img src="/images/img_a6ba7282db63d029.png" alt="" /></p>
+<p><img src="/images/img_253e8a76e5a4d378.png" alt="" />
+잘 동작할 것이다.</p>
+<p>아래는 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;errors&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/golang/groupcache&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> Store</span><span style="color: #94E2D5;"> =</span><span> map[string][]byte</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;red&quot;</span><span style="color: #94E2D5;">:</span><span>   []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#FF0000&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;green&quot;</span><span style="color: #94E2D5;">:</span><span> []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#00FF00&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;blue&quot;</span><span style="color: #94E2D5;">:</span><span>  []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#0000FF&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> Group</span><span style="color: #94E2D5;"> =</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewGroup</span><span>(</span><span style="color: #A6E3A1;">&quot;foobar&quot;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 64</span><span style="color: #94E2D5;">&lt;&lt;</span><span style="color: #FAB387;">20</span><span style="color: #9399B2;">,</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GetterFunc</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	func</span><span>(ctx groupcache</span><span style="color: #94E2D5;">.</span><span>Context</span><span style="color: #9399B2;">,</span><span> key string</span><span style="color: #9399B2;">,</span><span> dest groupcache</span><span style="color: #94E2D5;">.</span><span>Sink) error</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log.Println(</span><span style="color: #A6E3A1;">&quot;looking up&quot;</span><span style="color: #9399B2;">,</span><span> key)</span></span>
+<span class="giallo-l"><span>		v</span><span style="color: #9399B2;">,</span><span> ok </span><span style="color: #94E2D5;">:=</span><span> Store[key]</span></span>
+<span class="giallo-l"><span>		if</span><span style="color: #94E2D5;"> !</span><span>ok</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			return errors.New(</span><span style="color: #A6E3A1;">&quot;color not found&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		}</span></span>
+<span class="giallo-l"><span>		dest.SetBytes(v)</span></span>
+<span class="giallo-l"><span>		return nil</span></span>
+<span class="giallo-l"><span>	},</span></span>
+<span class="giallo-l"><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func main() {</span></span>
+<span class="giallo-l"><span>	myPort </span><span style="color: #94E2D5;">:=</span><span style="color: #A6E3A1;"> &quot;:8888&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	me :</span><span style="color: #94E2D5;">=</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span><span style="color: #A6E3A1;">&quot;http://localhost%s&quot;</span><span style="color: #9399B2;">,</span><span> myPort)</span></span>
+<span class="giallo-l"><span>	peers :</span><span style="color: #94E2D5;">=</span><span> []string</span><span style="color: #9399B2;">{</span><span style="color: #A6E3A1;">&quot;http://localhost:8888&quot;</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/color&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(w http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> r</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		switch r.Method </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		case</span><span> http</span><span style="color: #94E2D5;">.</span><span>MethodGet:</span></span>
+<span class="giallo-l"><span>			color</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> r</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">URL</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Query</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(</span><span style="color: #A6E3A1;">&quot;key&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			var</span><span> b []byte</span></span>
+<span class="giallo-l"><span>			err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> Group</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(nil</span><span style="color: #9399B2;">,</span><span> color</span><span style="color: #9399B2;">,</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">AllocatingByteSliceSink</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>b))</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>				http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Error</span><span>(w</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Error</span><span>()</span><span style="color: #9399B2;">,</span><span> http</span><span style="color: #94E2D5;">.</span><span>StatusNotFound)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span>			w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>(b)</span></span>
+<span class="giallo-l"><span>			w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>([]byte</span><span style="color: #9399B2;">{</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #F5C2E7;">\n</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #9399B2;">}</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		case</span><span> http</span><span style="color: #94E2D5;">.</span><span>MethodPost:</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"><span>	pool :</span><span style="color: #94E2D5;">=</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewHTTPPool</span><span>(me)</span></span>
+<span class="giallo-l"><span>	pool</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Set</span><span>(peers</span><span style="color: #94E2D5;">...</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;Groupcache server is running on&quot;</span><span style="color: #9399B2;">,</span><span> myPort)</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ListenAndServe</span><span>(myPort</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>여기서는 메모리에 값을 저장하고 그걸 캐시되도록 했지만, File Read나 Network I/O로 가져오게 구성해도 GroupCache 자체적으로 인메모리 캐시에 넣는다.</p>
+<br>
+<br>
+<br>
+<h2 id="http-seobeo-guseong-sseugi-ganeung">HTTP 서버 구성 (쓰기 가능)</h2>
+<p>이번에는 쓰기가 가능하게도 만들어보자.</p>
+<p>근데 여기서는 그냥 쓰기 작업을 할 수 없는 것이, 당연히 http 요청에 의한 프로세스는 병렬적으로 실행될 수 있다.<br />
+그냥 무작정 쓰면 동시성 write로 패닉 대잔치가 발생할 것이다.</p>
+<p><img src="/images/img_fe95aacfbbffc398.png" alt="" />
+안전한 쓰기를 위해서 Lock을 하나 둬야 한다.<br />
+캐시 특성상 쓰기보다는 읽기가 많기 때문에 RWMutex로 뒀다.</p>
+<br>
+<p><img src="/images/img_f7cfdca30fd2af25.png" alt="" />
+읽을 때도 락을 걸어주고</p>
+<br>
+<p><img src="/images/img_4d3aa617a46f5d2d.png" alt="" />
+쓰기 동작을 구현해서, 거기에도 락을 걸어준다.</p>
+<p>아래는 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;context&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;encoding/json&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;errors&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;io&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;sync&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/golang/groupcache&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> Store</span><span style="color: #94E2D5;"> =</span><span> map[string][]byte</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;red&quot;</span><span style="color: #94E2D5;">:</span><span>   []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#FF0000&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;green&quot;</span><span style="color: #94E2D5;">:</span><span> []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#00FF00&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;blue&quot;</span><span style="color: #94E2D5;">:</span><span>  []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;#0000FF&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> StoreLock sync.RWMutex</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> Group</span><span style="color: #94E2D5;"> =</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewGroup</span><span>(</span><span style="color: #A6E3A1;">&quot;foobar&quot;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 64</span><span style="color: #94E2D5;">&lt;&lt;</span><span style="color: #FAB387;">20</span><span style="color: #9399B2;">,</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GetterFunc</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	func</span><span>(ctx groupcache</span><span style="color: #94E2D5;">.</span><span>Context</span><span style="color: #9399B2;">,</span><span> key string</span><span style="color: #9399B2;">,</span><span> dest groupcache</span><span style="color: #94E2D5;">.</span><span>Sink) error</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log.Println(</span><span style="color: #A6E3A1;">&quot;looking up&quot;</span><span style="color: #9399B2;">,</span><span> key)</span></span>
+<span class="giallo-l"><span>		StoreLock.RLock()</span></span>
+<span class="giallo-l"><span>		v</span><span style="color: #9399B2;">,</span><span> ok </span><span style="color: #94E2D5;">:=</span><span> Store[key]</span></span>
+<span class="giallo-l"><span>		StoreLock</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">RUnlock</span><span>()</span></span>
+<span class="giallo-l"><span>		if</span><span style="color: #94E2D5;"> !</span><span>ok</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			return errors.New(</span><span style="color: #A6E3A1;">&quot;color not found&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		}</span></span>
+<span class="giallo-l"><span>		dest.SetBytes(v)</span></span>
+<span class="giallo-l"><span>		return nil</span></span>
+<span class="giallo-l"><span>	},</span></span>
+<span class="giallo-l"><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func main() {</span></span>
+<span class="giallo-l"><span>	myPort </span><span style="color: #94E2D5;">:=</span><span style="color: #A6E3A1;"> &quot;:8888&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	me :</span><span style="color: #94E2D5;">=</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span><span style="color: #A6E3A1;">&quot;http://localhost%s&quot;</span><span style="color: #9399B2;">,</span><span> myPort)</span></span>
+<span class="giallo-l"><span>	peers :</span><span style="color: #94E2D5;">=</span><span> []string</span><span style="color: #9399B2;">{</span><span>me</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	ctx :</span><span style="color: #94E2D5;">=</span><span> context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Background</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/color&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(w http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> r</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		switch r.Method </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		case</span><span> http</span><span style="color: #94E2D5;">.</span><span>MethodGet:</span></span>
+<span class="giallo-l"><span>			color</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> r</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">URL</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Query</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(</span><span style="color: #A6E3A1;">&quot;key&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			var</span><span> b []byte</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>			err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> Group</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(ctx</span><span style="color: #9399B2;">,</span><span> color</span><span style="color: #9399B2;">,</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">AllocatingByteSliceSink</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>b))</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>				http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Error</span><span>(w</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Error</span><span>()</span><span style="color: #9399B2;">,</span><span> http</span><span style="color: #94E2D5;">.</span><span>StatusNotFound)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span>			w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>(b)</span></span>
+<span class="giallo-l"><span>			w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>([]byte</span><span style="color: #9399B2;">{</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #F5C2E7;">\n</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #9399B2;">}</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		case</span><span> http</span><span style="color: #94E2D5;">.</span><span>MethodPost:</span></span>
+<span class="giallo-l"><span>			bytedata</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> io</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ReadAll</span><span>(r</span><span style="color: #94E2D5;">.</span><span>Body)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>				w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>([]</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;Invalid data&quot;</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			type</span><span style="color: #F9E2AF;font-style: italic;"> KV struct {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">				Key   string `json:&quot;key&quot;`</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">				Value string `json:&quot;value&quot;`</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>			var kv KV</span></span>
+<span class="giallo-l"><span>			err</span><span style="color: #94E2D5;"> =</span><span> json</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Unmarshal</span><span>(bytedata</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> &amp;</span><span>kv)</span></span>
+<span class="giallo-l"><span>			if err != nil </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>				w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>([]</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">&quot;Invalid JSON&quot;</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>			StoreLock.Lock()</span></span>
+<span class="giallo-l"><span>			Store[kv</span><span style="color: #94E2D5;">.</span><span>Key] = []byte(kv.Value)</span></span>
+<span class="giallo-l"><span>			StoreLock.Unlock()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>			w.Write([]byte(&quot;OK&quot;))</span></span>
+<span class="giallo-l"><span>		}</span></span>
+<span class="giallo-l"><span>	})</span></span>
+<span class="giallo-l"><span>	pool </span><span style="color: #94E2D5;">:=</span><span> groupcache</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewHTTPPool</span><span>(me)</span></span>
+<span class="giallo-l"><span>	pool</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Set</span><span>(peers</span><span style="color: #94E2D5;">...</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;Groupcache server is running on&quot;</span><span style="color: #9399B2;">,</span><span> myPort)</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ListenAndServe</span><span>(myPort</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이대로 실행해보면</p>
+<p><img src="/images/img_9ca0c09e97af14c8.png" alt="" />
+처음에는 black이 없다.</p>
+<br>
+<p><img src="/images/img_b7b6e678f765a741.png" alt="" />
+POST로 추가하면</p>
+<br>
+<p><img src="/images/img_ab92050c5acd7839.png" alt="" />
+이제는 조회된다.</p>
+<p>이게 여러개의 분산 노드에서도 동작하도록 하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="bunsan-nodeu-guseong">분산 노드 구성</h2>
+<p>사용법이 어렵지는 않다. 일단 각각의 고유한 IP를 가진 머신이 2개 이상 있어야 한다. 포트만 다르게 한다던가 하는 형태로는 동작하지 않는다.</p>
+<p>0.8 IP를 가진 A 서버에는 이렇게</p>
+<p><img src="/images/img_4eed7378badb108d.png" alt="" /></p>
+<p>0.46 IP를 가진 B 서버에는 이렇게</p>
+<p><img src="/images/img_84c6f3be523a0883.png" alt="" />
+전체 피어 목록을 등록해준다.<br />
+실사용 환경에서는 이걸 이렇게 코드에 다 박는게 아니라 피어 등록 API를 만들어서 쓰게 될 것이다.</p>
+<p>이것만 하면 된다.<br />
+그리고 각각의 서버를 띄운다.</p>
+<p><img src="/images/img_e64664879cb7fc2f.png" alt="" /></p>
+<p><img src="/images/img_5864204a836e7af6.png" alt="" /></p>
+<p>이제 한번 돌려보자.</p>
+<p><img src="/images/img_de4bbc5c6aeaf2b0.png" alt="" />
+처음에는 black이 없다.</p>
+<br>
+<p><img src="/images/img_97353fbe404a2f6e.png" alt="" />
+B 서버에 black을 집어넣으면</p>
+<br>
+<p><img src="/images/img_81dbdf18554a895a.png" alt="" />
+A 서버에서도, B 서버에서도 조회가 가능해진다.<br />
+대략적인 사용법은 대충 이정도다.</p>
+<br>
+<br>
+<br>
+<h2 id="weonri">원리</h2>
+<p>사실 이게 기본적인 원리는 별게 없다.</p>
+<p><img src="/images/img_4010d7ef012f8552.png" alt="" />
+그냥 자신에게 없는 값이 들어온다면 내부적으로 다른 피어 서버에 요청해서 값을 가져온다. 그리고 그 값을 자신의 인메모리에도 캐싱을 한다.</p>
+<p>굉장히 단순한 구조다.</p>
+<br>
+<br>
+<br>
+<h2 id="danjeom">단점</h2>
+<p>단순하고 빠르나, 단점도 많다.</p>
+<p>일단 저 캐시 동작 자체는 "추가"만 가능하다. 수정이나 삭제가 불가능하다.<br />
+만료에 대한 처리도 어렵다.</p>
+<p>피어, 클러스터 관리를 직접 다 해줘야 한다.</p>
+<p>가용성도 높다고 하기는 어렵다.<br />
+원천 데이터 자체는 결국 원본 서버만 들고 있고, 다른 서버들은 그 메모리 카피만을 들고 있기 때문에 원본 서버가 죽고 난 뒤에는 그걸 가져올 수가 없다.</p>
+<p>Memcache 대체용이라고 거창하게 소개는 했지만 실제로 대체는 불가능하다.<br />
+단순히 캐시 추가만 해도 되며, 그개 매우 오랫동안 만료 없이 존재해도 되는 한정된 영역에서만 사용 가능하다.</p>
+<p>근데 대부분의 비즈니스 로직에서는 캐시가 만료되거나 갱신되는 동작이 필요하다. 빛좋은 개살구다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/golang/groupcache">https://github.com/golang/groupcache</a><br />
+<a rel="external" href="https://juejin.cn/post/6844903442855493646">https://juejin.cn/post/6844903442855493646</a><br />
+<a rel="external" href="https://sconedocs.github.io/groupcacheUseCase/">https://sconedocs.github.io/groupcacheUseCase/</a><br />
+<a rel="external" href="https://capotej.com/blog/2013/07/28/playing-with-groupcache/">https://capotej.com/blog/2013/07/28/playing-with-groupcache/</a><br />
+<a rel="external" href="https://www.mailgun.com/blog/it-and-engineering/golangs-superior-cache-solution-memcached-redis/">https://www.mailgun.com/blog/it-and-engineering/golangs-superior-cache-solution-memcached-redis/</a><br />
+<a rel="external" href="https://gist.github.com/fiorix/816117cfc7573319b72d">https://gist.github.com/fiorix/816117cfc7573319b72d</a><br />
+<a rel="external" href="https://github.com/capotej/groupcache-db-experiment">https://github.com/capotej/groupcache-db-experiment</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223381620061/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] PostGIS: 설치<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223382617511/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] clap과 ratatui로 기깔난 CLI 만들어보기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

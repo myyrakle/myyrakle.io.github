@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>내부망에서 자체 DNS 서버 구성해보기 (with dnsmasq) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224062175094/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="내부망에서 자체 DNS 서버 구성해보기 (with dnsmasq)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224062175094/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-11-02T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224062175094/">내부망에서 자체 DNS 서버 구성해보기 (with dnsmasq)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-11-02T00:00:00+00:00"><time datetime="2025-11-02T00:00:00+00:00">2025.11.02</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="360 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224062175094" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>DNS 서버는 사실 그렇게 대단한 것까지는 아니다.</p>
+<p>일정 프로토콜에 맞춰서 도메인 날리면 IP을 반환해주는 매우 단순한 동작만을 해주는데, 그 중앙화된 서버 몇개가 시스템마다 디폴트로 설정되어있을 뿐이다.</p>
+<p><img src="/images/img_7d0d0f3958a84732.png" alt="" />
+그래서 프로토콜만 맞춰서 DNS 서버를 구현하고, 그 DNS 서버를 클라이언트마다 사용하게 설정한다면, 자체적인 도메인 환경을 만들어 쓰는 것도 어려운 일이 아니다.</p>
+<p>서비스를 만들다보면 내부망에서 내부망용 서버를 올려서 쓸 일이 잦은데, 그러면 보통 내부망 IP를 통해서 직접 사용하게 된다.<br />
+근데 아무래도 매번 IP로 접속해서 쓰는 것도 하다보면 좀 피곤하고 헷갈리는 일이고,  DNS 서버를 활용한다면 접근시의 사용 편의성을 보다 늘릴 수도 있다.</p>
+<p><img src="/images/img_3790f481264e6f28.png" alt="" />
+이 nginx 서버를 내부 DNS를 통해 내부 도메인으로 접속할 수 있게 해보자.</p>
+<br>
+<br>
+<br>
+<h2 id="dns-seobeo-guseonghagi-linux">DNS 서버 구성하기 (Linux)</h2>
+<p>먼저 서버부터 구성해보자.<br />
+내 경우에는 dnsmasq라는 도구를 사용했다. 가볍게 쓰기엔 이만한 것이 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get install</span><span style="color: #94E2D5;"> -</span><span>y dnsmasq  # debian</span></span>
+<span class="giallo-l"><span>sudo pacman</span><span style="color: #94E2D5;"> -</span><span>Sy dnsmasq</span></span></code></pre>
+<p><img src="/images/img_92c0ad9793561b7d.png" alt="" /></p>
+<p>그리고, 사전에 설정하거나 확인할 것이 몇개 있다.<br />
+우선 네트워크 인터페이스부터 확인해야 한다.</p>
+<p><img src="/images/img_191fa90622a8ae2e.png" alt="" />
+무슨 이름으로 연결되는지 조사한다.<br />
+내 경우에는 이름이 enp5s0였다. 저걸 설정에 넣어야 한다.</p>
+<p>설정 파일을 열어서, 다음과 같이 파일을 수정한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>dnsmasq</span><span style="color: #94E2D5;">.</span><span>conf</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 로컬 도메인 설정</span></span>
+<span class="giallo-l"><span>address</span><span style="color: #94E2D5;">=/</span><span>myapp</span><span style="color: #94E2D5;">.</span><span>local</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">192.168</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1.5</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># DNS</span><span style="color: #89B4FA;font-style: italic;"> 포워딩</span><span> (외부 도메인용)</span></span>
+<span class="giallo-l"><span>server</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">8.8</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">8.8</span><span> # Google DNS</span></span>
+<span class="giallo-l"><span>server</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1.1</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1.1</span><span> # Cloudflare DNS</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 리스닝 인터페이스</span></span>
+<span class="giallo-l"><span>interface</span><span style="color: #94E2D5;">=</span><span>enp5s0 # 인터페이스 확인해서 넣기 </span></span>
+<span class="giallo-l"><span>bind</span><span style="color: #94E2D5;">-</span><span>interfaces</span></span></code></pre>
+<p><img src="/images/img_227f8e945aac912e.png" alt="" />
+로컬 커스텀 도메인으로는 myapp.local을 설정했다.<br />
+저기로 DNS lookup을 하면 아까의 nginx 서버 IP를 주게 되는 것이다.</p>
+<p>기존 DNS도 쓸 수 있게 포워딩도 해놓고, 방금 확인한 인터페이스 이름도 넣어준다.</p>
+<p>그리고 이 DNS 서버는 53포트를 사용하는데, 기존에 있던 시스템이 그 포트를 쓰고 있어서 그대로는 안될 수도 있다. 보통 systemd-resolved라는 녀석이 기본적으로 53포트를 점유하고 있다.</p>
+<p><img src="/images/img_022e93779da56b24.png" alt="" /></p>
+<p>우리는 저걸 끄고 dnsmasq로 대체해야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>systemd</span><span style="color: #94E2D5;">/</span><span>resolved</span><span style="color: #94E2D5;">.</span><span>conf</span></span>
+<span class="giallo-l"><span>sudo systemctl restart systemd</span><span style="color: #94E2D5;">-</span><span>resolved</span></span></code></pre>
+<p><img src="/images/img_cff67542967cd3c4.png" alt="" />
+이렇게 수정해서 재시작하면</p>
+<br>
+<p><img src="/images/img_dea95ac805e07aed.png" alt="" />
+이렇게 사라져있을 것이다.</p>
+<p>그럼 이제 dnsmasq를 시작하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl enable dnsmasq</span></span>
+<span class="giallo-l"><span>sudo systemctl restart dnsmasq</span></span>
+<span class="giallo-l"><span>sudo systemctl status dnsmasq</span></span></code></pre>
+<p><img src="/images/img_f178722a5bfcba89.png" alt="" />
+오류 없이 시작되면 설정은 잘 된 것이다.</p>
+<p>방금 만든 커스텀 도메인으로 접속이 되는지 먼저 확인해보자.</p>
+<p><img src="/images/img_3d1c6c0e42f7e280.png" alt="" />
+설정한대로 잘 나왔다.</p>
+<br>
+<p><img src="/images/img_322c78cc699c3899.png" alt="" />
+그리고 다른 도메인도 조회가 여전히 잘 되면, 설정에는 이상이 없는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="keulraieonteue-dns-seoljeonghagi">클라이언트에 DNS 설정하기</h2>
+<p>저걸 이제 쓰려먼, 클라이언트마다 DNS 서버 설정을 추가해줘야 한다.<br />
+번거롭지만 어쩔 수 없다.</p>
+<p><img src="/images/img_943206eb2dadf1f3.png" alt="" />
+DNS 서버가 뭔지 모르니까 당연히 찾을 수도 없기 때문이다.</p>
+<p>DNS 서버를 추가하는 방법은 OS마다 다르다.</p>
+<p>Windows의 경우에는 파워쉘 관리자권한으로 열어서 다음 코드를 실행하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 인터페이스 확인</span></span>
+<span class="giallo-l"><span>Get</span><span style="color: #94E2D5;">-</span><span>NetAdapter</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># DNS 설정</span></span>
+<span class="giallo-l"><span>Set</span><span style="color: #94E2D5;">-</span><span>DnsClientServerAddress</span><span style="color: #94E2D5;"> -</span><span>InterfaceAlias</span><span style="color: #A6E3A1;"> &quot;이더넷&quot;</span><span style="color: #94E2D5;"> -</span><span>ServerAddresses</span><span style="color: #A6E3A1;"> &quot;192.168.1.5&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;">&quot;8.8.8.8&quot;</span></span></code></pre>
+<p>MacOS는 다음 스크립트를 실행하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># Wi</span><span style="color: #94E2D5;">-</span><span>Fi</span></span>
+<span class="giallo-l"><span>networksetup</span><span style="color: #94E2D5;"> -</span><span>setdnsservers Wi</span><span style="color: #94E2D5;">-</span><span>Fi</span><span style="color: #FAB387;"> 192.168</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1.5 8.8</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">8.8</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 이더넷</span></span>
+<span class="giallo-l"><span>networksetup</span><span style="color: #94E2D5;"> -</span><span>setdnsservers Ethernet</span><span style="color: #FAB387;"> 192.168</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1.5 8.8</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">8.8</span></span></code></pre>
+<p>Linux는 배포판마다 좀 다를 수는 있는데, systemd-resolved 설정을 수정하면 적용할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>systemd</span><span style="color: #94E2D5;">/</span><span>resolved</span><span style="color: #94E2D5;">.</span><span>conf</span></span></code></pre>
+<p><img src="/images/img_236ec6daafbab4bb.png" alt="" />
+저걸 방금 만든 DNS 서버로 바꿔보자.</p>
+<p>그러면 DNS 지정 없이도 lookup이 될 것이다.</p>
+<p><img src="/images/img_5fe2b5e69d6dff7b.png" alt="" /></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224061538134/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>난수(Random). 진짜 난수와 가짜 난수<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224060974663/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.91.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

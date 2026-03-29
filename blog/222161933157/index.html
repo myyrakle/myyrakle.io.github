@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Q: Rust의 Option 타입은 어떤 오버헤드가 있나요? (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222161933157/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Q: Rust의 Option 타입은 어떤 오버헤드가 있나요? (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222161933157/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2020-12-03T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222161933157/">Q: Rust의 Option 타입은 어떤 오버헤드가 있나요? (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-12-03T00:00:00+00:00"><time datetime="2020-12-03T00:00:00+00:00">2020.12.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="211 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222161933157" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://stackoverflow.com/questions/16504643/what-is-the-overhead-of-rusts-option-type">https://stackoverflow.com/questions/16504643/what-is-the-overhead-of-rusts-option-type</a></p>
+<br>
+<h2 id="jilmun">질문</h2>
+<p>Rust에서 참조는 절대 null이 될 수 없지만, null이 실제로 필요할 경우가 많죠.<br />
+그래서 아래처럼 Option으로 null을 표현하곤 하는데요.</p>
+<p>**struct Element **<br />
+**{ **<br />
+**    value: i32, **<br />
+**    next: Option&lt;Box<Element>&gt;, **<br />
+**} **</p>
+<p>그냥 포인터와 비교하면 메모리 할당이나 역참조에서 얼마나 많은 오버헤드가 발생할까요?</p>
+<p>컴파일러나 런타임에 Option의 비용을 없애주는 '매직'이 있는 건가요?<br />
+아니면 그냥 동일한 열거형 구성을 사용하거나 포인터를 벡터로 래핑하여 non-core 라이브러리에서 직접 Option을 구현하는 것보다 비용이 적게 드는 수준인가요?</p>
+<br>
+<br>
+<h2 id="dabbyeon">답변</h2>
+<p>네. Rust 컴파일러는 Option&lt;포인터&gt;를 포인터로 바꿔주는 매ㅡ직을 부립니다. 대부분의 경우에요.</p>
+<p>**use std::mem::size_of; **</p>
+<p>**macro_rules! show_size **<br />
+**{ **<br />
+**    (header) =&gt; ( **<br />
+**        println!("{:&lt;22} {:&gt;4} {}", "Type", "T", "Option<T>"); ); **<br />
+**    ($t:ty) =&gt; ( println!("{:&lt;22} {:4} {:4}", stringify!($t), size_of::&lt;$t&gt;(), size_of::&lt;Option&lt;$t&gt;&gt;()) ) **<br />
+**} **</p>
+<p>**fn main() **<br />
+**{ **<br />
+**    show_size!(header); **<br />
+**    show_size!(i32); **<br />
+**    show_size!(&amp;i32); **<br />
+**    show_size!(Box<i32>); **<br />
+**    show_size!(&amp;[i32]); **<br />
+**    show_size!(Vec<i32>); **<br />
+**    show_size!(Result&lt;(), Box<i32>&gt;); **<br />
+<strong>}</strong></p>
+<p>이건 다음과 같이 출력될 겁니다. 포인터가 8바이트인 64비트 머신에서요.</p>
+<p>// As of Rust 1.22.1<br />
+Type                                 T             Option<T><br />
+i32                                    4                    8<br />
+&amp;i32                                  8                    8<br />
+Box<i32>                         8                    8<br />
+&amp;[i32]                               16                 16<br />
+Vec<i32>                         24                 24<br />
+Result&lt;(), Box<i32>&gt;     8                   16</p>
+<p>여기서 &amp;i32, Box, &amp;[i32], Vec<i32>은 모두 Option 안에 들어가면 non-nullable 포인터 최적화를 사용할 수 있어요!</p>
+<br>
+<br>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222161818413/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Docker] 볼륨: 볼륨 컨테이너<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222156062320/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 함수: 분기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Amazon Managed Prometheus (AMP) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223637437385/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Amazon Managed Prometheus (AMP)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223637437385/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-10-28T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223637437385/">[AWS] Amazon Managed Prometheus (AMP)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-28T00:00:00+00:00"><time datetime="2024-10-28T00:00:00+00:00">2024.10.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="465 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223637437385" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>AWS는 Prometheus도 관리형으로 제공한다.<br />
+쓰는 사람은 잘 못본 것 같다만, 아무튼 있긴 있다.</p>
+<p>사실 prometheus 쓸 정도면 보통 쿠버 올리고 직접 관리할테니 굳이 이걸 찾는 사람이 없는 것 같다.</p>
+<p>약어가 왔다갔다 통일이 안된다.<br />
+엔드포인트 레벨에서는 aps라고 하는데 문서에서는 amp라고 하고 그런다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>프로비저닝이 아니라 서버리스처럼 온디맨드 요금이 나오는게 특징이다.<br />
+Thanos 같은걸 구성할 필요 없이 알아서 HA 보장해주고, 때리는대로 다 들어간다.<br />
+<a rel="external" href="https://aws.amazon.com/ko/prometheus/pricing/">https://aws.amazon.com/ko/prometheus/pricing/</a></p>
+<br>
+<p><img src="/images/img_12937ac1d00b8a15.png" alt="" />
+그대신 수집한 데이터 개수, 그리고 저장공간 등으로 비용을 매긴다. 쓴만큼 나가는 것이다.<br />
+저장공간 비용은 압축된 최종 크기를 기준으로 하고, 로그는 기본 설정값으로 150일까지만 저장된다.</p>
+<br>
+<p><img src="/images/img_f0bfb9f78a5fc554.png" alt="" />
+무료 사용량도 조금 있다.</p>
+<p>적당한 사용량에서는 메리트가 있을 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="workspace-mandeulgi">Workspace 만들기</h2>
+<p>직접 만들고 써보자.</p>
+<p><img src="/images/img_9ede6e3433b8d11d.png" alt="" /></p>
+<p><img src="/images/img_9e9473e6fdc387ad.png" alt="" />
+클러스터 자체는 이름만 정하면 바로 생성이 가능하다.<br />
+쉽다.</p>
+<p>조금만 기다리면 생성이 완료되고</p>
+<p><img src="/images/img_ddf34667b95958b7.png" alt="" /></p>
+<p><img src="/images/img_108c1944a358dce0.png" alt="" />
+엔드포인트도 열린다.</p>
+<br>
+<p><img src="/images/img_79e76c3f2e4f5444.png" alt="" />
+근데 이 엔드포인트는 별다른 추가 처리 없이는 사용이 불가능하다.<br />
+접근하면 이렇게 에러가 뜬다.</p>
+<br>
+<br>
+<br>
+<h2 id="with-eks">with EKS</h2>
+<p>어째서인지 모르겠지만, AWS 문서나 기타 사용사례들에는 EKS를 상정한 연결 방법만이 다뤄져있다.<br />
+EC2나 ECS Fargate, 단순 온프레미스에서 이걸 사용하는 것은 전혀 고려하지 않은 것 같다.</p>
+<p>다음 문서를 참조하면 EKS에서 AMP를 연동하는 방법을 확인할 수 있다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html">https://docs.aws.amazon.com/prometheus/latest/userguide/AMP-collector-how-to.html</a></p>
+<br>
+<br>
+<br>
+<h2 id="sigv4ro-jigjeob-yeongyeolhaebogi">sigv4로 직접 연결해보기</h2>
+<p>친절하게 안내를 해주지는 않지만, EKS 밖에서도 사용 자체는 가능하다.<br />
+이건 다른 DB들처럼 보안그룹으로 거는 것도 아니고 sigv4로 인증을 거쳐서 쏴야 하는데, 그거는 직접 하려면 좀 복잡스럽다. 라이브러리 갖다쓰는게 편리하다.</p>
+<p>여기서는 일단 aws-cli와 awscurl로 간단하게 연결 되는 것만 보여보겠다.</p>
+<p><img src="/images/img_0d99dbaba131c4f2.png" alt="" />
+우선 aws 계정이나 role이 있어야 한다.</p>
+<p>그리고 prometheus에도 전용 권한이 따로 있다.</p>
+<p><img src="/images/img_639759e9965389ea.png" alt="" />
+필요한 권한들은 지금 사용할 User/Role에 붙여줘야 한다.<br />
+난 지금 단순 쿼리만 쏴볼 것이기 때문에 QueryAccess만 달아줬다.</p>
+<p>그리고</p>
+<p><img src="/images/img_b9313bc3db09f372.png" alt="" /></p>
+<p><img src="/images/img_918f5eb86859f364.png" alt="" />
+awscurl을 깔았다. 복잡스런 sigv4 인증을 알아서 처리해주는 curl와 비슷한 도구다.<br />
+이걸 기반으로 토큰같은거 뽑고 최종 엔드포인트에 쏴줘야 한다.</p>
+<p>그리고 이런 느낌으로 요청을 쏘면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>awscurl</span><span style="color: #94E2D5;"> --</span><span>region ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span><span style="color: #94E2D5;"> --</span><span>service aps</span><span style="color: #A6E3A1;"> &quot;...엔드포인트/api/v1/query?query=prometheus_api_remote_read_queries&quot;</span></span></code></pre>
+<p><img src="/images/img_87de998d81b6d9f9.png" alt="" />
+응답이 잘 오는 것을 볼 수 있다.</p>
+<p>remote-write도 이런 식으로 할 수 있는데, json도 아니고 protobuf로 말아서 보내야 하는데다 좀 정신없어서 굳이 더 다루지는 않겠다.<br />
+그냥 에이전트 라이브러리 갖다쓰면 된다.</p>
+<p>에이전트들 보면 이런 식으로 쓸 수 있게 옵션을 제공한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>remote_write</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> url</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;http://.../remote_write&quot;</span></span>
+<span class="giallo-l"><span>    sigv4</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>       region</span><span style="color: #9399B2;">:</span><span> ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span></span>
+<span class="giallo-l"><span>       access_key</span><span style="color: #9399B2;">:</span><span> ACCESSKEY</span></span>
+<span class="giallo-l"><span>       secret_key</span><span style="color: #9399B2;">:</span><span> SECRETKEY</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/prometheus/latest/userguide/what-is-Amazon-Managed-Service-Prometheus.html">https://docs.aws.amazon.com/prometheus/latest/userguide/what-is-Amazon-Managed-Service-Prometheus.html</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/prometheus/pricing/">https://aws.amazon.com/ko/prometheus/pricing/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonECS/latest/developerguide/application-metrics-prometheus.html">https://docs.aws.amazon.com/ko_kr/AmazonECS/latest/developerguide/application-metrics-prometheus.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/prometheus/latest/userguide/AMP-compatible-APIs.html">https://docs.aws.amazon.com/ko_kr/prometheus/latest/userguide/AMP-compatible-APIs.html</a><br />
+<a rel="external" href="https://discuss.prometheus.io/t/prometheus-remote-write-to-amp/215/3">https://discuss.prometheus.io/t/prometheus-remote-write-to-amp/215/3</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223638622649/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] ECS: 작업정의 정보 조회하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223635870247/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] zerocopy<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

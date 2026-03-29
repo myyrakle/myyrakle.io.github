@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] 서비스 (Service) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223084158042/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] 서비스 (Service)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223084158042/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-04-25T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223084158042/">[k8s] 서비스 (Service)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-04-25T00:00:00+00:00"><time datetime="2023-04-25T00:00:00+00:00">2023.04.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="825 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223084158042" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>쿠버네티스 클러스터를 직접 만들든, AWS EKS나 GCP GKE 같은 클라우드 클러스터를 쓰든 간에, pod만 띄운다고 해서 서버를 띄우는게 끝나는게 아니다.</p>
+<p>Pod들은 기본적으로는 그냥 private 내부 아이피만 할당이 되기 때문이다.<br />
+완전 외부에서 접근 가능한 public endpoint(혹은 IP)를 열기 위해서는, 쿠버네티스의 자체적인 네트워크 추상화 계층인 "서비스"를 사용해야 한다.</p>
+<p>Service의 실질적인 운영 방법은 하드웨어 환경에 따라서 크게 달라진다.<br />
+AWS 같은 Cloud에서 관리형 클러스터를 쓰는 경우에는 Service에 IP나 도메인을 붙여주는걸 클라우드에서 알아서 처리해준다.<br />
+하지만 온프레미스 환경일 경우에는 좀 복잡해진다. IP를 직접 붙이거나 포트를 개방해줘야 한다.</p>
+<p>이것도 컨트롤러 단위로 관리가 되고, 다른 컨트롤러처럼 다룰 수 있다.<br />
+조회 명령은 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get service</span></span></code></pre>
+<p><img src="/images/img_1cd39e5629fcdae4.png" alt="" />
+처음에 보면 외부 접근이 불가능한 기본 내부 아이피만 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="seobiseu-guseonghaebogi">서비스 구성해보기</h2>
+<p>서비스가 어떤 식으로 동작하는지를 직접 만들어보고 테스트해보면서 알아보겠다.</p>
+<p>서비스는 단독으로 사용할 수는 없고, 요청을 실제 Pod로 연결해주는 역할만 한다.<br />
+그래서 다음과 같이 Deployment를 통해 Pod를 띄우고 Service를 거기에 붙이는 것이 일반적인 사용법이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> apps</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      imagePullSecrets</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> harbor</span><span style="color: #94E2D5;">-</span><span>secret</span></span>
+<span class="giallo-l"><span>      containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>          image</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;myyrakle/node-server-for-test:latest&quot;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">---</span></span>
+<span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Service</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>service</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>      protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  type</span><span style="color: #9399B2;">:</span><span> ClusterIP</span></span></code></pre>
+<p>selector 표현식을 통해서 어떤 label을 가진 pod와 매칭할지를 지정한다.</p>
+<br>
+<p><img src="/images/img_1044c9396683b233.png" alt="" />
+만들고 나면 이런 식으로 serivce가 추가되어있을 것이다.</p>
+<p>근데 이 상태에서는 뭔가 제대로 활용하긴 어렵다. 기본값으로는 외부 접근이 불가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="external-ip-haldang">External IP 할당</h2>
+<p>Service를 외부 공개하는 가장 간단한 방법은, 그냥 명시적으로 IP를 할당하는 것이다.<br />
+External IP를 사용하면 Service의 타입과 별개로 매핑해서 그냥 열어버린다.</p>
+<p>현재 쿠버네티스 노드가의 내부 IP를 확인하고</p>
+<p><img src="/images/img_b54cc6f905b04ac1.png" alt="" /></p>
+<p>그걸 넣어주면 된다.</p>
+<p><img src="/images/img_2947c26707abea92.png" alt="" /></p>
+<p><img src="/images/img_05df27b6954b21bc.png" alt="" />
+그럼 이런 식으로 External IP가 추가될텐데</p>
+<br>
+<p><img src="/images/img_e3ceafcfe9a6b762.png" alt="" />
+이렇게 실제 접근도 가능해질 것이다.</p>
+<p>External IP에 넣을 수 있는건 기본적으로 쿠버네티스 노드들의 내부 IP다.<br />
+생뚱맞을걸 넣으면 오류는 없지만 그냥 동작하지 않을 것이다.</p>
+<p>이 External IP의 라우팅을 실제로 처리하고 매개하는 주체는 kube-proxy 같은 Service Proxy다.</p>
+<br>
+<br>
+<br>
+<h2 id="serviceyi-jongryu">Service의 종류</h2>
+<p>Service에는 크게 3가지 타입이 있다. ClusterIP와 NodePort, LoadBalancer가 그것이다.<br />
+이 타입에 따라서 실제로 어떻게 네트워크를 개방할지가 결정된다.</p>
+<br>
+<br>
+<h4 id="1-cluster-ip">1. Cluster IP</h4>
+<p>ClusterIP는 기본값으로 사용되는 가장 원초적인 Service 타입이다.<br />
+그래서 위에서 방금 만든 Service도 Cluster IP로 만들어졌다.</p>
+<p><img src="/images/img_a1041079b9ef3c56.png" alt="" />
+이건 논리가 매우 간단하다. 그냥 클러스터 내에서만 접근이 가능하다는 것이다.</p>
+<p>그럼 저 Cluster IP로 접근할 수도 있고,</p>
+<p><img src="/images/img_920f5b0b7188f26e.png" alt="" /></p>
+<p>Pod 내부에서는 이름을 통해서 내부 DNS로 접근할 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl run curl</span><span style="color: #94E2D5;">-</span><span>test</span><span style="color: #94E2D5;"> --</span><span>image</span><span style="color: #94E2D5;">=</span><span>curlimages</span><span style="color: #94E2D5;">/</span><span>curl</span><span style="color: #94E2D5;"> -</span><span>i</span><span style="color: #94E2D5;"> --</span><span>tty</span><span style="color: #94E2D5;"> --</span><span>rm</span><span style="color: #94E2D5;"> --</span><span>restart</span><span style="color: #94E2D5;">=</span><span>Never</span><span style="color: #94E2D5;"> --</span><span> sh</span><span style="color: #94E2D5;"> -</span><span>c</span><span style="color: #A6E3A1;"> &quot;curl http://test-service&quot;</span></span></code></pre>
+<p><img src="/images/img_9f4adda4ee2254d1.png" alt="" /></p>
+<br>
+<br>
+<h4 id="2-nodeport">2. NodePort</h4>
+<p>ClusterIP가 클러스터 내에서만 접근 가능하게 하는 것이라면, NodePort는 모든 Node의 IP를 통해서 접근 경로를 열어주는 Service 타입이다.</p>
+<p>만약 노드 A(192.168.1.2), 노드 B(192.168.1.3)가 있고 31000 포트로 NodePort를 연다면, 192.168.1.2:31000, 192.168.1.3:31000 2가지로 외부 접근이 개방되는 것이다.</p>
+<p>대신 포트 영역은 30000-32767로 제약되어있다. 이 범위는 할당 자체가 불가능하다.</p>
+<p>사용법은 어렵지 않다. type만 NodePort로 변경하면</p>
+<p><img src="/images/img_748fecf49ad4e129.png" alt="" /></p>
+<p><img src="/images/img_42443cdd00511ce6.png" alt="" /></p>
+<p>즉시 Port가 생긴다. NodePort는 포트를 지정하지 않으면 범위 내에서 자동으로 포트를 할당한다.</p>
+<p><img src="/images/img_00d59ebed5f55a60.png" alt="" /></p>
+<p><img src="/images/img_0fb500e84514b6c9.png" alt="" />
+그럼 이렇게 32527 포트가 할당된 것을 볼 수 있는데</p>
+<br>
+<p><img src="/images/img_4bb4b7cf6c5fa590.png" alt="" />
+이렇게 바로 쓸 수 있는 것이다.</p>
+<br>
+<p><img src="/images/img_2a9c82d172cc9b07.png" alt="" /></p>
+<p><img src="/images/img_7a4c41a8ffe72129.png" alt="" />
+원한다면 ports.nodePort 필드를 통해 포트를 직접 지정할 수도 있다.</p>
+<br>
+<br>
+<br>
+<h4 id="3-loadbalancer-type">3. LoadBalancer Type</h4>
+<p>LoadBalancer 타입은 조금 복잡하다. 이건 그 자체로 고유한 동작을 정의하지 않는다.<br />
+이 타입으로 설정하면 "로드밸런서로 사용할 것이니 알아서 External IP를 잘 할당해달라"는 의미가 된다.</p>
+<p>AWS 같은 클라우드를 쓴다면 클라우드에서 알아서 실제로 로드밸런서를 붙여줄 것이다.<br />
+온프레미스라면 그런걸 해주는 로드밸런서 환경을 구축해줘야 한다. MetalLB가 대표적이다.</p>
+<br>
+<br>
+<br>
+<h2 id="keulraudeueseo-rodeubaelreonseo-sayonghagi">클라우드에서 로드밸런서 사용하기</h2>
+<p>AWS의 EKS, GCP의 GKE 같은 클라우드 서비스를 사용한다면, 클라우드에서 제공하는 로드밸런서 기능을 토대로 아주 간단하게 바로 엔드포인트를 만들 수 있다.<br />
+그냥 상기한대로 LoadBalancer 타입의 Service를 만들기만 하면 되는 것이다.</p>
+<p>대체로는 그 클라우드 서비스에서 제공하는 로드밸런서를 진짜 프로비저닝하는 것이라서, 비용 지점이 추가된다. 비용 관리에 유의하길 바란다.</p>
+<p>내 경우에는 GKE를 사용했다.</p>
+<p>Service를 작성해서 apply로 추가만 해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Service</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>service</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>      port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>  type</span><span style="color: #9399B2;">:</span><span> LoadBalancer</span></span></code></pre>
+<p>그럼 처음에는 pending 상태이다가</p>
+<p><img src="/images/img_b7a305e37df6b996.png" alt="" /></p>
+<p>진짜 external ip가 뜰 것이다.</p>
+<p><img src="/images/img_56997cfd04161b4c.png" alt="" /></p>
+<p>그럼 로드밸런서가 진짜 뜬 것이고</p>
+<p><img src="/images/img_e6deb0276c5272b1.png" alt="" /></p>
+<p>접속도 될 것이다.</p>
+<p><img src="/images/img_c1d5f04b1439e831.png" alt="" />
+이게 끝이다.<br />
+클라우드 서비스마다 세부적인 부분에서 차이가 좀 있긴 한데, 기본적인 흐름은 동일하다.</p>
+<p>service를 delete하면 로드밸런서도 함께 리소스가 정리된다.</p>
+<p><img src="/images/img_66bf73916a4b158e.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="onpeuremiseu-hwangyeongeseo-rodeubaelreonseo-sayonghagi">온프레미스 환경에서 로드밸런서 사용하기</h2>
+<p>온프레미스에서 로드밸런서 시스템을 구축하려면 꽤나 번거로운 작업들이 필요하다.<br />
+해당 클러스터가 존재하는 네트워크 구성의 상태에 따라서도 세팅 방법이 좀 달라질 것이다.</p>
+<p>일반적으로 많이 사용하는 것은 metallb라는 오픈소스 시스템이다.<br />
+이걸 쓰면 미리 IP 풀을 정의해놓고, 그것들 중에 하나가 랜덤으로 LoadBalancer의 External IP로 할당되게 만들 수 있다.</p>
+<p>자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223330537493">https://blog.naver.com/sssang97/223330537493</a></p>
+<br>
+<br>
+<br>
+<h2 id="service-proxy">Service Proxy</h2>
+<p>Service가 트래픽을 실제로 라우팅하는 동작은 쿠버네티스의 책임이 아니고, Service Proxy라는 별도 계층을 통해서 이루어진다. kube-proxy 같은 도구가 대표적이다.</p>
+<p>Service를 활용함에 있어서 성능이나 보안을 고려해야 한다면, 이 또한 어느정도 알고 있는 편이 좋다.<br />
+선택지가 여럿이고, 그 선택에 따라서 여러가지 제반사항들이 달라질 수 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224174739370">https://blog.naver.com/sssang97/224174739370</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/docs/tutorials/stateless-application/expose-external-ip-address/">https://kubernetes.io/docs/tutorials/stateless-application/expose-external-ip-address/</a><br />
+<a rel="external" href="https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer">https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer</a><br />
+<a rel="external" href="https://itnext.io/kubernetes-service-type-lb-for-on-prem-deployments-89e9b2a73a0c">https://itnext.io/kubernetes-service-type-lb-for-on-prem-deployments-89e9b2a73a0c</a><br />
+<a rel="external" href="https://kubernetes.io/ko/docs/tutorials/stateless-application/expose-external-ip-address/">https://kubernetes.io/ko/docs/tutorials/stateless-application/expose-external-ip-address/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223087167228/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 모듈시스템과 계층구조 (File hierarchy)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223084166458/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] ConfigMap<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

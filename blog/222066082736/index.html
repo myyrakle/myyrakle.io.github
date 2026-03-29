@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Scan | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222066082736/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Scan">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222066082736/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2020-08-20T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222066082736/">[PostgreSQL] Scan</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-08-20T00:00:00+00:00"><time datetime="2020-08-20T00:00:00+00:00">2020.08.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="646 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222066082736" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Scan이란 말 그대로 데이터베이스를 스캔하는 것을 말한다.</p>
+<p>기본적으로 관계형 데이터베이스들은 데이터를 디스크에 저장해놨다가 읽어들이는 방식을 취하는데. DB 사용에 있어서 가장 큰 부하가 걸리는 부분 중 하나가 이것이다.</p>
+<p>디스크는 겁나 느리기 때문이다.</p>
+<p>스캔에도 여러가지 종류가 있고 DB 시스템마다 조금씩 다른데, 일단 여기서는 Postgres의 스캔 종류만 간략히 다뤄보도록 하겠다.</p>
+<p>Postgres에는 크게 순차 스캔, 인덱스 스캔, 인덱스 Only 스캔, 비트맵 스캔, TID 스캔 등이 있다.</p>
+<br>
+<br>
+<h2 id="sunca-seukaen-sequencial-scan">순차 스캔(Sequencial Scan)</h2>
+<p>순차 스캔은 말 그대로 순차적으로 읽어오는 스캔이다.</p>
+<p><img src="/images/img_cea65882ccf2a174.png" alt="" />
+가장 단순하고, 기본적이지만 성능의 폭발을 불러일으킬 수 있다.<br />
+만약 테이블에 10000개의 데이터가 있고, 그 중에 1개만 가져오려고 해도 순차 스캔이 발생한다면 10000개를 전부 읽어야 하는 말도 안되는 일이 벌어지기 때문에다.</p>
+<p>그래서 저기서 text 중 하나만 가져오려 해도</p>
+<p><img src="/images/img_2d210b041c6b9915.png" alt="" />
+실행시간이 전혀 줄어들지 않음을 볼 수 있다.</p>
+<p>데이터가 많아지면 많아질수록 이에 대한 문제는 커진다.<br />
+아래는 약 2천만개의 데이터를 넣었을 때의 실행계획이다.</p>
+<p><img src="/images/img_fa6db64277f4d618.png" alt="" />
+비용이 급격하게 상승한 것을 볼 수 있다.</p>
+<p>따라서 순차스캔은 아주 적은 특정 값을 가져올 때는 적합하지 않다.</p>
+<br>
+<br>
+<h2 id="indegseu-seukaen-index-scan">인덱스 스캔(Index Scan)</h2>
+<p>인덱스는 말 그대로 데이터베이스에 대한 색인(Index)을 다는 것이다.<br />
+기본 테이블이 순차적으로 저장되는 것에 반해서, 인덱스는 B트리 형태로 생성이 된다. 그리고 각 인덱스는 데이터베이스 원본을 직접 참조해서 접근할 수가 있다.<br />
+때문에 훨씬 빠른 속도로 탐색을 수행할 수 있는 것이다.</p>
+<p>인덱스의 생성은 다음과 같이 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE INDEX 인덱스명 ON 테이블명 USING</span><span style="color: #89B4FA;font-style: italic;"> btree</span><span> (컬럼들)</span></span></code></pre>
+<p><img src="/images/img_4405bf875f0e8b18.png" alt="" /></p>
+<p>다시 이전의 쿼리를 측정해보면, 다르게 나올 것이다.</p>
+<p><img src="/images/img_de2ba769cd279af1.png" alt="" />
+비용이 28만에 달했던 것이 무려 11로 줄어들었다.<br />
+무식하게 읽어온다음에 걸러낸 것이 아니라, 인덱스 트리로 빠르게 접근한 후에 가져와서 그렇다.</p>
+<p>그렇다면 컬럼마다 인덱스를 달아주는게 빠르고 좋은 걸까?<br />
+그렇지는 않다.</p>
+<p>인덱스를 생성하면 데이터마다 대응되는 인덱스 트리값이 생겨나기 때문에 기본적으로 메모리를 적지 않게 차지한다. 뿐만 아니라 데이터를 삽입, 수정, 삭제할때마다 인덱스값도 그에 맞춰주는 작업을 수행하기 때문에 추가적인 부하가 늘어날 수도 있다.</p>
+<p>그렇다고 인덱스 스캔이 순차 스캔보다 항상 빠른 것도 아니다.<br />
+인덱스 스캔은 내부적으로 랜덤IO를 사용하는데, 이 작업 자체는 사실 순차IO보다 대략 4배는 느리다!<br />
+'빠르게 선별해서' 읽어올 수 있다는 것이지, 읽어오는 것 자체가 빠른 것은 아니란 것이다. 그래서 뭔가 잔뜩 가져올때는 인덱스가 더 느릴 수 있다.</p>
+<p>게다가 테이블 규모가 어느 임계점을 넘어서 초대형 규모가 되면 인덱스가 오히려 느려지고 순차 스캔이 빨라질 수도 있다. 순차스캔은 규모가 클 경우 병렬처리를 통해 훨씬 빠른 스캔을 기대할 수 있는데, 인덱스의 랜덤 접근은 테이블 규모가 커지면 커질수록 캐싱 성공 확률이 낮아지는 등의 결점이 있기 때문이다.</p>
+<p>그래서 소형 테이블의 경우 순차와 인덱스의 손익점이 15%라면, 대형의 경우에는 5%, 초대형의 경우에는 1%가 될 수도 있는 것이다. 이런 극단적인 경우에는 전체 데이터의 1%를 인덱스 스캔하는 것보다 순차스캔을 때리는 것이 빠를 수 있다.</p>
+<p>그래서 웬만하면 필요할 때, 필요한 만큼만 추가해서 쓰는 것이 바람직하다.</p>
+<br>
+<br>
+<h2 id="indegseu-only-seukaen">인덱스 Only 스캔</h2>
+<p>이건 기본적으로 인덱스 스캔과 유사하다.<br />
+차이점은, 인덱스로 탐색해서 인덱스 컬럼값을 가져올 때만 발생한다는 것이다.</p>
+<p>아까는 select *로 인덱스컬럼이 아닌것까지 다 가져왔지만, 이번에는 인덱스인 text만 가져왔다.</p>
+<p><img src="/images/img_2a47bafda9861e53.png" alt="" /></p>
+<p>인덱스 스캔에 비해서 특별한 성능 이점이 있는지는 잘 모르겠다.</p>
+<br>
+<br>
+<h2 id="biteumaeb-bitmap-seukaen">비트맵(Bitmap) 스캔</h2>
+<p>앞에서 언급했듯이, 인덱스 스캔은 적은 데이터를 가져올 때 효과적이고, 순차 스캔은 많은 데이터를 가져올 때 효과적이다.<br />
+근데 인덱스를 돌리기엔 애매하게 많고, 순차를 돌리기엔 애매하게 적을 때가 있을 수 있다.<br />
+그럴 때 사용되는 것이 바로 비트맵 스캔이다.<br />
+비트맵 스캔은 인덱스 스캔에서 발생할 수 있는 과도한 랜덤IO를 방지하면서, 인덱스의 성능도 어느정도 가져올 수 있다.<br />
+게다가 무겁고 경직된 BTree가 아닌 비트맵을 올려놓고 돌리는 형태라, 이런저런 효율점이 많은 편이다.</p>
+<p>비트맵 스캔은 비트맵 인덱스 스캔과 비트맵 힙 스캔의 2 단계를 거친다.<br />
+1.비트맵 인덱스 스캔이란 것으로 인덱스를 가져와서 비트맵이란 걸 만들고,<br />
+2.비트맵 힙 스캔. 그 비트맵을 읽고 메모리에서 데이터를 가져오는 것이다.</p>
+<p><img src="/images/img_d5a36ad222ef5dfd.png" alt="" /></p>
+<br>
+<br>
+<h2 id="tid-seukaen">TID 스캔</h2>
+<p>postgresql의 데이터에는 TID라는 고유한 식별값이 내장되어있다.<br />
+이건 평소엔 숨겨져있지만, 일반 컬럼처럼도 접근이 가능하다.</p>
+<p><img src="/images/img_071687f62d61e32d.png" alt="" /></p>
+<p>그리고 저걸 통해 검색을 시도하면 TID 스캔을 수행하게 되는 것이다.</p>
+<p><img src="/images/img_bff5c4b4673bfebb.png" alt="" /></p>
+<p>아마 빠르기는 제일 빠르지 않나 싶다?</p>
+<br>
+<p>참조<br />
+"『새로 쓴 대용량 데이터베이스 솔루션』, 이화식"<br />
+<a rel="external" href="https://severalnines.com/database-blog/overview-various-scan-methods-postgresql">https://severalnines.com/database-blog/overview-various-scan-methods-postgresql</a><br />
+<a rel="external" href="http://www.gurubee.net/lecture/2394">http://www.gurubee.net/lecture/2394</a><br />
+<a rel="external" href="http://wiki.gurubee.net/pages/viewpage.action?pageId=1507452">http://wiki.gurubee.net/pages/viewpage.action?pageId=1507452</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222066563015/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] Join<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222060556508/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] JSON<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

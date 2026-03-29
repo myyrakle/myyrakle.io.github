@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 샤딩(sharding) - partition | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222907546000/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 샤딩(sharding) - partition">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222907546000/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2022-10-23T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222907546000/">[PostgreSQL] 샤딩(sharding) - partition</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-10-23T00:00:00+00:00"><time datetime="2022-10-23T00:00:00+00:00">2022.10.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="573 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222907546000" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>SQL RDB에서 샤딩이란 규모가 큰 테이블을 임의로 여러개로 분할해서 사용하는 것을 말한다.</p>
+<p>다 풀스캔을 때리기 어렵거나 한곳에 저장하기 힘들 정도의 대용량 데이터를 다루다보면 사용하게 되는 기법이다.</p>
+<br>
+<br>
+<br>
+<h2 id="syadingyi-weonri">샤딩의 원리</h2>
+<p>대략적인 원리는 이렇다.</p>
+<ol>
+<li>일단 컬럼중에 기준값으로 삼을 것을 하나 정한다. 보통은 유일성이 보장되고 인덱스를 타는 기본키 등으로 정할 것이다.</li>
+<li>만약 사용자 데이터라면 유저 고유번호 user_id가 1,2,3,4... 의 순서로 들어가있을 것이다.</li>
+<li>샤드 분배용 해시함수를 작성한다. 2개의 테이블로 샤딩을 하고 싶다면, user_id를 홀수 짝수대로 분배되도록 할 수 있겠다.</li>
+<li>그러면 A 샤드에는 1,3,5,...의 유저 데이터가 들어가고, B 샤드에는 2,4,6,...의 데이터가 들어가도록 구성하면 되는 것이다.</li>
+</ol>
+<p>아래 이미지는 방금 언급했던 것과 동일한 예시다. 숫자에서 A, B, C, D으로 바뀌었을 뿐이다.</p>
+<p><img src="/images/img_dcde31767c7d561f.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="jangdanjeom">장단점</h2>
+<p>일단 특정 샤드에만 접근해도 될 경우에는, 샤딩을 하지 않은것보다 훨씬 빠르게 스캔을 해올 수가 있다. 또 그렇기때문에 성능 최적화를 고려해서 샤드를 분할해야 한다.<br />
+샤드가 애매하게 나뉘어서 매번 샤드 여러개를 다 읽어오면, 나눠놓은 의미가 없을 것이다.</p>
+<p>또, 대량으로 업로드하는 경우에도 상당한 성능의 이점이 있다. 데이터 뭉치를 insert할때 그냥 올리는게 아니라 그걸 insert해놓은 새 샤드를 통째로 올려버리는 것이다. 그럼 postgresql vaccum의 특성 일반적인 대량 insert나 대량 delete보다 훨씬 빠르게 처리가 된다.<br />
+partition attach와 partition detach 등의 명령어로 이를 수행할 수 있다.</p>
+<p>그리고 데이터베이스의 저장소 자체가 부족해질 경우에도 필수적이다. 디스크에 다 쓰지를 못하는데.. 어떻게 하겠는가? 나눠서 다른 머신에 저장해야지.<br />
+게다가 잘 사용되지 않는 샤드의 경우에는 느리고 저렴한 스토리지에 몰아넣어서 비용의 효율화를 꾀할 수도 있다.</p>
+<p>다만, 메모리 분할에도 신경을 좀 써야 한다.<br />
+관련해서 가장 대표적인 문제로는 유명인(celebriry) 문제라는 것이 있다.<br />
+그냥 컴퓨터적인 사고로는 홀수 짝수 분리해놓으면 알아서 균형을 맞추겠지 싶을 수도 있지만.. 항상 그렇지는 않다. 이를테면 특정 데이터에만 무언가가 쏠리는 경우 말이다. 이런건 복합적인 아키텍처를 통해 해결을 해야한다.</p>
+<br>
+<br>
+<br>
+<h2 id="partition">partition</h2>
+<p>샤딩도 원리는 간단하지만 직접 구성하려면 귀찮고 번거로운 작업인데, postgresql은 다행히 이러한 기능을 기본으로 제공한다.</p>
+<p>아래는 예제의 원본 쿼리다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create table Food </span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span>	id serial primary key</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>	name</span><span style="color: #89B4FA;font-style: italic;"> varchar</span><span>(</span><span style="color: #FAB387;">100</span><span>)</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>	value int</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>만약 이러한 테이블을 파티셔닝으로 구현하고 싶다면 일단 파티션용 테이블을 하나 작성해야 한다면,</p>
+<p>다음과 같이 partition by에 파티션 타입을 넣어주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create table 파티션테이블명</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">...</span><span> table 정의</span></span>
+<span class="giallo-l"><span>partition by</span><span style="color: #89B4FA;font-style: italic;"> hash</span><span>(기준값)</span></span></code></pre>
+<p><img src="/images/img_43fe105d301ff8d1.png" alt="" />
+파티션 타입은 hash 외에도 range, list가 있는데, 해시는 나머지셈을 해서 모든 샤드에 골고루 들어가도록 유도한다.<br />
+range는 말 그대로 값의 범위별로 나누는거고... list는 특정 값의 목록만 하드코딩받아서 그걸로 나누는 것이다.<br />
+range는 보통 기간별로 분할하는데 주로 사용될 것이다.</p>
+<p>이렇게 만들어진 파티션용 테이블은 그 자체로는 동작하지 않는다.</p>
+<p><img src="/images/img_8cda38a695b52ec4.png" alt="" />
+그저 여러개의 파티션을 묶어서 보여주는 중간자에 불과하기 때문이다.</p>
+<p>그럼 이제 저기다 파티션을 추가해보자.<br />
+나는 2로 나머지셈을 해서 1이 남으면 홀수 샤드로, 0이 남으면 짝수 샤드로 가도록 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create table 샤드명 partition</span><span style="color: #CBA6F7;"> of</span><span> 파티션테이블명 for values</span><span style="color: #CBA6F7;"> with</span><span>(값 조건</span><span style="color: #94E2D5;">...</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_329618293e527e9a.png" alt="" />
+그럼 내부적으로 샤드 테이블이 생성되고 관리된다.</p>
+<p>이렇게 보일 것이다.</p>
+<p><img src="/images/img_30d72d1d97c34668.png" alt="" /></p>
+<p>이제부터는 파티션용 테이블을 일반 테이블처럼 사용할 수 있다.<br />
+그냥 넣는것도 문제없고</p>
+<p><img src="/images/img_981eef7b6f8dbc47.png" alt="" /></p>
+<p>읽어올때도 잘 읽어온다.</p>
+<p><img src="/images/img_540593384478740e.png" alt="" /></p>
+<p>그냥 쭉 읽어오는것처럼 보이지만, 플랜을 찍어보면</p>
+<p><img src="/images/img_23f0cfb6b7f3759c.png" alt="" />
+실제로는 2번 호출해서 이어붙이고 있다는 것을 알 수 있다.</p>
+<p>반대로 짝수값만 필터하도록 유도하면</p>
+<p><img src="/images/img_2b4663721978aac3.png" alt="" />
+짝수 샤드만 읽어서 가져올 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="dareun-taib-range">다른 타입 (range)</h2>
+<p>바로 위에서는 hash로 샤딩을 했지만, 실제로는 range 기반의 샤딩도 곧잘 쓰이곤 한다.<br />
+로그성 데이터 같은 것들을 달이나 연 단위로 분할해서 관리하는 것이다.</p>
+<p>우선 파티션용 테이블을 정의할때 hash 대신 range를 넣어준다.</p>
+<p><img src="/images/img_09752cd199d05fa4.png" alt="" /></p>
+<p>그리고 이걸 연단위로 샤딩할 수 있게 파티션들을 3개만 추가해보겠다.</p>
+<p><img src="/images/img_e119ab8dc41b6141.png" alt="" />
+이런식으로 FROM - TO에 범위값을 잘 집어넣어주면 된다.</p>
+<p>그럼 마찬가지로 저 created_at 날짜값에 따라 각각의 샤드로 저장이 될 것이다.</p>
+<p><img src="/images/img_3fae8a04d337dacd.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.postgresql.org/docs/current/ddl-partitioning.html">https://www.postgresql.org/docs/current/ddl-partitioning.html</a><br />
+<a rel="external" href="https://needjarvis.tistory.com/574">https://needjarvis.tistory.com/574</a><br />
+<a rel="external" href="https://www.digitalocean.com/community/tutorials/understanding-database-sharding">https://www.digitalocean.com/community/tutorials/understanding-database-sharding</a><br />
+<a rel="external" href="https://www.postgresql.fastware.com/postgresql-insider-prt-ove">https://www.postgresql.fastware.com/postgresql-insider-prt-ove</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222910103210/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Chatbot: codepipeline에 Slack 알림 연동하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222907889425/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] iptables: 포트 매핑하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

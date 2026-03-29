@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] 클러스터: 부하 분산 매커니즘 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223565728766/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] 클러스터: 부하 분산 매커니즘">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223565728766/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-08-30T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223565728766/">[MongoDB] 클러스터: 부하 분산 매커니즘</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-08-30T00:00:00+00:00"><time datetime="2024-08-30T00:00:00+00:00">2024.08.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="406 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223565728766" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>mongodb는 기본적으로 single master - multi slave 형태의 replication을 지원한다.<br />
+single node로도 운영이 가능하긴 하지만, 일반적으로 3 노드 환경을 권장하며, atlas 시스템에서도 기본 생성 옵션이 3 노드 클러스터다.</p>
+<p>mongodb 클러스터의 개략적인 구조와, 클러스터를 잘 활용하는 방안을 간단히 정리해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="replication-gujo">Replication 구조</h2>
+<p>mongodb는 고전적인 방식으로 복제를 구현한다.</p>
+<p>master만 write를 직접 받고, 나머지 slave들은 복제를 받아서 읽기만을 처리하는 것이다.</p>
+<p><img src="/images/img_99add0f04e248f83.png" alt="" />
+mongodb에서는 primary=master, secondary=slave라고 부르긴 하는데, 난 master slave가 더 입에 잘 붙어서 master와 slave라고 통칭하겠다. 항의 안받는다.</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223038029971">https://blog.naver.com/sssang97/223038029971</a><br />
+참조</p>
+<p>아무튼 만약 master node에 과부하가 걸리거나 하면 뻗은걸로 간주하고, slave들이 다시 투표를 해서 새 master를 선출한다. 이 과정에서는 당연히 시스템이 뻗어서 몇초 정도의 중단이 발생할 수 있다.<br />
+그래서 master node에 과도한 부하가 걸리지 않도록 read만큼은 slave에 잘 분산되도록 하는 것이 중요하다.</p>
+<p>애초에 single master 시스템들이 으레 그렇듯, 이건 쓰기 부하를 분산하기 위한 것이 아니라, 읽기 분산을 하기 위한 매커니즘이다.</p>
+<br>
+<br>
+<br>
+<h2 id="cluster-url-srv">Cluster URL (SRV)</h2>
+<p>mongodb 단일노드는 mongo:// 같은 일반적인 프로토콜을 쓰는데, mongodb 클러스터는 좀 특이한 엔드포인트 형식을 사용한다.</p>
+<p><img src="/images/img_8ba96f58741bd675.png" alt="" /></p>
+<p>SRV라고 하는데, N개의 노드 엔드포인트에 동시에 접근할 수 있게끔 해주는 그룹의 역할을 해주는 프로토콜이다.<br />
+이걸 통해서 커넥션을 구성하면, 클러스터 내에 있는 모든 노드 엔트포인트에 참조할 수 있다.</p>
+<p>편하기도 편한데, 일반적인 TCP 프로토콜이 아니라서 프록시나 터널링 구성하는게 좀 빡센 편이다.</p>
+<br>
+<br>
+<br>
+<h2 id="read-preference">Read Preference</h2>
+<p>read preference는 read 동작을 어떤 노드에 때릴지를 결정하는 옵션이다.<br />
+왜 그런지는 모르겠는데, mongodb 동작의 기본 설정은 primary다. master에만 read를 때린다는 것이다.</p>
+<p>그래서 클러스터로 쓴다면 Read Preference 옵션을 Secondary로 설정해야만 노드 3개 띄워서 쓰는걸로 본전을 뽑을 수 있다.</p>
+<p><img src="/images/img_28c7c5ab4e328f95.png" alt="" /></p>
+<p>내 경우에도 뒤늦게 리소스 낭비를 하고 있는 것을 깨달아서 옮겼다.</p>
+<p><img src="/images/img_759603665fe2524b.png" alt="" />
+readPreference=primary라서 주인만 바쁘게 일하면서 다운되던 것이</p>
+<br>
+<p><img src="/images/img_e0b8c0861206042c.png" alt="" />
+readPreference=secondary로 바꾸고 나서는 노예들이 열심히 일하기 시작했다.</p>
+<br>
+<br>
+<br>
+<h2 id="write-concern">Write Concern</h2>
+<p>무슨 DB든간에 DB를 복제해서 쓰다보면 겪게되는 가장 큰 문제가 복제로 인한 딜레이다.</p>
+<p>write node에 A 값을 넣었는데, 그 값이 read node에 복제되기도 전에 참조를 하면 데이터가 꼬이는 상황이 발생할 수 있기 때문이다.</p>
+<p>mongoDB의 경우에는 write concern을 이용해서 read after write를 그럭저럭 대처할 수 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223248671329">https://blog.naver.com/sssang97/223248671329</a><br />
+master+slave1+slave2의 3 노드라면 write concern을 3으로 줘서, 모든 노드에 복제되기까지 기다리게 할 수 있다.</p>
+<p>물론 이걸 쓰면 클라이언트와 DB 서버 양측에 추가적인 부하가 생기긴 하는데, 대체로 그리 크진 않은 것 같다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/66225004/what-is-meant-by-srv-in-the-mongodb-connection-string">https://stackoverflow.com/questions/66225004/what-is-meant-by-srv-in-the-mongodb-connection-string</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223567852662/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] aggregate: 기본 구조<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223563255563/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Rupring v0.8.1 배포<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

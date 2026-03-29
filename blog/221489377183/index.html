@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 소켓통신해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221489377183/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 소켓통신해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221489377183/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2019-03-15T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221489377183/">[Rust] 소켓통신해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-03-15T00:00:00+00:00"><time datetime="2019-03-15T00:00:00+00:00">2019.03.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="105 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221489377183" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>그냥 간단하게 메세지 주고받는걸 서버-클라이언트 구조로 구현해보려 한다.</p>
+<p>사용할 모듈은 std::net이다.<br />
+rust는 표준에 통신 모듈이 자체적으로 들어있어서 뭘 따로 땡겨쓸 필요는 없다.</p>
+<p>일단 해보자.<br />
+컴퓨터 두개 쓰기는 귀찮아서 그냥 루프백 아이피로 혼자 북치고 장구치고 했다.<br />
+제대로 하려면 아이피 구해서 갖다박으면 된다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//서버 측 코드</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//루프백 IP</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> IP_ADDRESS</span><span style="color: #94E2D5;">:&amp;</span><span style="color: #F9E2AF;font-style: italic;">str</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;127.0.0.1:56789&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //리스너 생성</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> listener</span><span style="color: #94E2D5;"> =</span><span> TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(IP_ADDRESS)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;bind 실패&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;## Server Running ##&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    for stream</span><span style="color: #CBA6F7;"> in</span><span> listener</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">incoming</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        if</span><span> stream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">is_ok</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;클라이언트 연결됨&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//클라이언트 측 코드</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> IP_ADDRESS</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">str</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;127.0.0.1:56789&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //그냥 연결만 함</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> stream</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span>        TcpStream::</span><span style="color: #89B4FA;font-style: italic;">connect</span><span>(IP_ADDRESS)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;connect 실패&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이렇게 짜놓고 서버를 먼저 컴파일해서 돌린다.<br />
+서버는 당연히 무한루프로 계속 돌아야한다.</p>
+<br>
+<p><img src="/images/img_805e6f31f0c2fefc.png" alt="" />
+잘 돌아간다.</p>
+<br>
+<p>이제 클라이언트로 신호를 줘보자</p>
+<p><img src="/images/img_bc740e7f0279afaa.png" alt="" />
+실행을 하니</p>
+<br>
+<p><img src="/images/img_72b46ff05ca92722.png" alt="" />
+인식을 했다.</p>
+<p>이제 뭔가 데이터를 주고받아보자.</p>
+<br>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//서버 측 코드</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:io</span><span style="color: #9399B2;">:</span><span>:Read</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> //명시 안하면 &#39;read&#39;에서 에러남!</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//루프백 IP</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> IP_ADDRESS</span><span style="color: #94E2D5;">:&amp;</span><span style="color: #F9E2AF;font-style: italic;">str</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;127.0.0.1:56789&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> handle_client</span><span>(mut stream: TcpStream)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //입력 버퍼</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut input </span><span style="color: #94E2D5;">=</span><span> [</span><span style="color: #FAB387;">0</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> u8</span><span>; </span><span style="color: #FAB387;">50</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //받을때까지 계속 루프 돌림</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    while</span><span> stream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">read</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>mut input)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">is_err</span><span>()</span><span style="color: #9399B2;"> {</span><span style="color: #9399B2;font-style: italic;"> /*nothing*/</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;$ 클라이언트: {}&quot;</span><span style="color: #9399B2;">,</span><span> String::</span><span style="color: #89B4FA;font-style: italic;">from_utf8_lossy</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>input))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //리스너 생성</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> listener</span><span style="color: #94E2D5;"> =</span><span> TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(IP_ADDRESS)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;bind 실패&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;## Server is Running ##&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    for stream</span><span style="color: #CBA6F7;"> in</span><span> listener</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">incoming</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        if</span><span> stream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">is_ok</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            handle_client</span><span>(stream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>())</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">//클라이언트 측 코드</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:io</span><span style="color: #9399B2;">:</span><span>:Write</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> //표시 안하면 에러남!</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> IP_ADDRESS</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">str</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;127.0.0.1:56789&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //그냥 연결만 함</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut stream </span><span style="color: #94E2D5;">=</span></span>
+<span class="giallo-l"><span>        TcpStream::</span><span style="color: #89B4FA;font-style: italic;">connect</span><span>(IP_ADDRESS)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;connect 실패&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    stream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">write</span><span>(</span><span style="color: #A6E3A1;">&quot;안녕하세요?&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_bytes</span><span>())</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;전송 실패&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>서버 먼저 돌리고</p>
+<p><img src="/images/img_5e42a4e33815ae2c.png" alt="" /></p>
+<p>클라이언트가 문자열을 쏘면</p>
+<p><img src="/images/img_8672e041519c9066.png" alt="" /></p>
+<p>서버에서 받아서 로그에 띄운다.</p>
+<p><img src="/images/img_87dedb85f047a554.png" alt="" /></p>
+<p>나머지는 응용만 하면 된다.</p>
+<p>끝</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221489085996/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] Result와 Option 타입에 대해서<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221488349654/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] msvc std::codecvt 인코딩 변환 버그<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Network] UDP 홀펀칭 (Hole punching) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223231444031/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Network] UDP 홀펀칭 (Hole punching)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223231444031/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-10-08T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223231444031/">[Network] UDP 홀펀칭 (Hole punching)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-08T00:00:00+00:00"><time datetime="2023-10-08T00:00:00+00:00">2023.10.08</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="478 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223231444031" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>홀펀칭은 네트워킹에서 구전으로 전해지는 흑마법 중 하나다. 보통 게임업계에서 많이 쓴다.</p>
+<p>표준적인 용어로는 STUN (Simple Traversal of User Datagram Protocol Through Network Address Translators)라고도 부른다.<br />
+HTTP3 Quic이나 WebRTC 같은 표준 프로토콜 또한 이러한 기능을 지원한다.</p>
+<br>
+<br>
+<br>
+<h2 id="p2p-tongsinyi-teugjing">P2P 통신의 특징</h2>
+<p>P2P는 기본적으로 서버 없이 클라이언트와 클라이언트가 서로 직접 통신을 하는 것을 말한다.</p>
+<p>서버를 거치지 않고 당사자들이 직접 소통을 하기 때문에 전송 레이어를 최소화할 수 있다는 장점이 있다.</p>
+<p>그로 인해 따라오는 보안이나 여러가지 문제들이 있지만, 네트워킹 딜레이를 최소화해야하는 시스템에서는 어쩔수 없이 이런 방법을 써야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="munje-1-public-ipreul-eoddeohge-aljyo">문제 1: Public IP를 어떻게 알죠?</h2>
+<p>P2P 통신이 제대로 시작되려면 A와 B가 서로의 IP를 알고 있어야 한다.<br />
+근데, 상대에게 자신의 IP를 어떻게 알려줘야 할지부터 문제다. 서로가 서로의 위치를 정확하게 특정하기 위해서는 Public IP를 알려줘야 한다.</p>
+<p>하지만 A가 확실하게 알 수 있는 IP 주소는 자신의 private IP밖에 없다. 실제로는 보통 NAT을 타고 나가서 공유기 등의 외부 시스템 수준에서야 Public IP가 나오기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="stun-gibeob">STUN 기법</h2>
+<p>STUN은 전용 STUN 서버를 만들어서 IP를 중계해주는 기법을 말한다.</p>
+<p><img src="/images/img_59f32d83bbe3aaad.png" alt="" />
+여기서 STUN 서버가 하는 역할은 간단하다.<br />
+어떤 클라이언트가 자신의 public IP를 물어보면, 자신이 받은 request IP를 다시 알려주는 것이다.</p>
+<p>그럼 그 A는 자신의 Public 주소를 알았으니, 이를 통해 자신을 소개하고 소통창구를 열 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="munje-2-poteuneun-eoddeohge-yeoljyo">문제 2: 포트는 어떻게 열죠?</h2>
+<p>홀펀칭에는 또 하나의 문제가 있다.</p>
+<p>당연히 A가 B에 연결하려면 어떻게든 포트 포워딩이 되어있어야 Public IP -&gt; Private IP 변환이 돼서 클라이언트 간 통신이 들어갈 텐데, 유저더러 포트포워딩을 다 해달라고 할 수는 없기 때문이다.</p>
+<p>그럼 이걸 어떻게 해결할까?</p>
+<p>다행히 상당수의 NAT 장비(공유기)들은 이러한 동작과 관련해서 보조적인 기능을 제공한다.<br />
+Full corn, Restrict corn, Post Restrict corn, Symetric 등이 있는데 굳이 다 알 필요는 없다. Symetric만 알아도 된다.</p>
+<p>예를 들어 A가 다른 곳에 UDP 패킷을 전송한다면, UDP 포트 상태가 생성된다.<br />
+그럼 UDP 포트가 열려있는 동안에는 그 포트로 B가 A에게 UDP 패킷을 전송할 수 있다!<br />
+공유기가 해주는 동작이다.</p>
+<p>다만 이 UDP 포트 상태는 수십초에서 몇분이 지나면 자동으로 닫히므로, 주기적으로 패킷을 날려서 갱신을 해줘야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="holpeoncingyi-hangye">홀펀칭의 한계</h2>
+<p>홀펀칭은 Symetric 방식으로 작동하는 NAT 환경에서는 제대로 동작하지 않는다. 게다가 Symetric 방식이 점점 늘어나고 있는 관계로 홀펀칭의 적중률은 점점 떨어지고 있다고 한다.</p>
+<p>홀펀칭이 불가능한 조건에서는 어쩔 수 없이 relay 서버를 통해 직접 중계를 하는 게 보통이다.</p>
+<p>홀펀칭이 불가능할 경우 relay로 중계를 해주는 시스템을 또 TURN(Traversal Using Relays around NAT)이라고 부른다.</p>
+<p><img src="/images/img_7ac16dafbbaeda60.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://cjwoov.tistory.com/5">https://cjwoov.tistory.com/5</a><br />
+<a rel="external" href="https://cjwoov.tistory.com/6">https://cjwoov.tistory.com/6</a><br />
+<a rel="external" href="https://m.blog.naver.com/PostView.naver?blogId=ya3344&amp;logNo=221784315478&amp;categoryNo=0&amp;proxyReferer=">https://m.blog.naver.com/PostView.naver?blogId=ya3344&amp;logNo=221784315478&amp;categoryNo=0&amp;proxyReferer=</a><br />
+<a rel="external" href="https://202psj.tistory.com/m/1484">https://202psj.tistory.com/m/1484</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/13501288/what-is-stun-and-does-it-need-a-port-forwarded-server">https://stackoverflow.com/questions/13501288/what-is-stun-and-does-it-need-a-port-forwarded-server</a><br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/NAT_traversal">https://en.m.wikipedia.org/wiki/NAT_traversal</a><br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/UDP_hole_punching">https://en.m.wikipedia.org/wiki/UDP_hole_punching</a><br />
+<a rel="external" href="https://gh402.tistory.com/m/45">https://gh402.tistory.com/m/45</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223232181952/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>LSM 트리<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223230049388/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.73.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

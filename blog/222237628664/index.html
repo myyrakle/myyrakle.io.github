@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Rust의 enum 크기 최적화 (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222237628664/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Rust의 enum 크기 최적화 (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222237628664/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2021-02-09T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222237628664/">Rust의 enum 크기 최적화 (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-02-09T00:00:00+00:00"><time datetime="2021-02-09T00:00:00+00:00">2021.02.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="681 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222237628664" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://adeschamps.github.io/enum-size">https://adeschamps.github.io/enum-size</a></p>
+<p>Rust가 다른 언어에서 빌려온 아이디어 중에서 사람들이 가장 좋아하는 건 enum 같습니다.</p>
+<p>sum 타입, algebraic 데이터타입 또는 태그가 달린 공용체(tagged union)라고도 하죠. 그리고 일반적으로 함수형 프로그래밍 언어와 관련된 개념이지만 다른 패러다임을 방해하는 요소는 없습니다.</p>
+<p>enum은 많은 사람들이 그 유용성에 동의하는 것 같습니다. 어지간한 언어들에서 다 제공되고 있잖아요?</p>
+<p>Elm, Swift 및 Typescript와 같은 다른 새로운 언어에도 이러한 기능이 있으며, C++17에는 표준 라이브러리에 std::variant가 생겼습니다. Boost에는 boost::variant가 있죠.</p>
+<p>이 기사에서는 Rust의 enum에 약간 익숙하다고 가정하겠습니다. 다른 언어로 유사한 기능을 사용해본 적이 있어도 괜찮습니다. 이걸 처음본다면 Rust book의 enum을 먼저 보시는걸 권해요.</p>
+<br>
+<br>
+<br>
+<h2 id="enumyi-memori-reiaus">enum의 메모리 레이아웃</h2>
+<p>enum의 다양한 이름 중에서 태그달린 union은 메모리에서 enum이 표현되는 방식을 가장 잘 설명한다고 생각합니다.</p>
+<p>Rust의 enum 표현은 정확하게, 모든 가능한 variants들의 union입니다. 가장 큰 페이로드의 사이즈를 공간으로 두고, 태그값을 갖죠. 태그는 현재 갖고있는 variant가 무엇인지 알려줍니다.</p>
+<p>다음 enum을 참고해보세요</p>
+<p><strong>enum Name **<br />
+<strong>{ **<br />
+**    Anonymous, <strong><strong>// 0 바이트 페이로드</strong></strong></strong><br />
+**    Nickname(String),</strong>** // 24 바이트 페이로드******<br />
+**    FullName{ first: String, last: String }, <strong><strong>// 48 바이트 페이로드</strong></strong>**<br />
+**} **</p>
+<p>이 경우에 가장 큰 variant는 FullName입니다.<br />
+Rust의 String은 24 바이트거든요. 포인터+사이즈+ capacity 각 8바이트씩의 총합이에요.</p>
+<p>태그는 1바이트가 필요하지만 정렬(alignment) 상의 이유로 8 바이트가 필요합니다.</p>
+<p>그래서 std::mem::size_of::<Name>() == 56가 되죠.</p>
+<p><strong>[ tag (8 bytes) ]</strong><br />
+**[ **<br />
+**    empty **<br />
+**    OR **<br />
+**    String **<br />
+**    OR **<br />
+**    { String, String } (48 bytes) **<br />
+**] **</p>
+<p>그런데 겨우 세 가지 다른 값만 가질 수 있는 것에 8 바이트를 사용하는 건 낭비처럼 보입니다.</p>
+<p>이러한 이유로 Rust는 참조와 관련된 몇 가지 일반적인 경우를 최적화했습니다.</p>
+<p>예를 들어 null 포인터 최적화는 참조가 절대 null이 될 수 없다는 점을 가져다가 대신 태그를 나타내는 특수 값으로 사용합니다.</p>
+<p>만약 Option&lt;&amp;T&gt;을 쓴다면</p>
+<p>[ tag (8 bytes) ][ pointer (8 bytes) ]<br />
+대신에</p>
+<p>[ pointer (8 bytes) ]<br />
+를 쓰게되죠.</p>
+<p>포인터가 null이면 Option이 None이라는 것을 알지만 유효한 포인터면 Some(&amp;T)임을 알 수 있죠.</p>
+<br>
+<br>
+<br>
+<h2 id="styloeseoyi-teureideuopeu">Stylo에서의 트레이드오프</h2>
+<p>Rust Belt Rust 2017에서 Josh Matthews는 Rust로 작성된 Stylo CSS 엔진을 주로 C++인 Firefox에 통합하는 것에 대해 훌륭한 강연을했습니다.</p>
+<p>그의 슬라이드에서 설명한 고충 중 하나는 enum 중첩을 시작하면 태그가 누적되어 타입의 크기가 눈덩이처럼 불어날 수 있다는 점입니다.</p>
+<p>예는 다음과 같습니다.</p>
+<p>**enum BorderStyleValue **<br />
+**{ **<br />
+**    Solid, **<br />
+**    Dashed(Option<u32>) **<br />
+**} **</p>
+<hr />
+<p>**type BorderStyle = Option<BorderStyleValue>; **</p>
+<p>BorderStyle에는 3개의 레이어가 중첩된 enum이 있으며, 16바이트로 상당히 무겁습니다. 각각 4 바이트짜리 태그가 3개인 상황이죠.</p>
+<p>이 경우엔, 약간 덜 인체 공학적이지만 메모리에 효율적인 것을 선택하기로 결정했습니다.</p>
+<p>**enum BorderStyle **<br />
+**{ **<br />
+**    None, **<br />
+**    Solid, **<br />
+**    DashedNone, **<br />
+**    Dashed(u32) **<br />
+**} **</p>
+<p>이 타입은 8 바이트에 불과하며 첫번째 버전과 똑같은 값을 나타낼 수 있지만, 작업하기에는 좋지 않습니다.</p>
+<p>모든 것은 트레이드 오프고, 이 경우에는 메모리 효율이 더 중요했습니다.</p>
+<br>
+<br>
+<h2 id="keikeureul-gajigo-meogeuseyo">케이크를 가지고 먹으세요.</h2>
+<h2 id="have-your-cake-and-eat-it-too">(Have your cake and eat it too)</h2>
+<p>내가 모든것은 트레이드오프라고 말했나요?<br />
+글쎄요. 꼭 그렇지만은 않습니다.<br />
+널포인터 최적화를 기억하시나요?</p>
+<p>한 타입의 가능한 모든 값이 할당된 비트들보다 훨씬 적은 비트에 들어갈 수 있고, 이러한 추가 비트들이 태그에 사용될 수 있는 경우가 많이 있습니다.</p>
+<p>예를 들어 bool은 실제로 1 비트만 필요하지만 전체 바이트로 채워집니다.</p>
+<p>정보를 채울 수 있는 7개의 비트가 더 있죠!</p>
+<p>Rust 컴파일러의 최근 PR은 타입이 메모리에 배치되는 방식을 리팩토링하여 몇 가지 새로운 최적화를 추가했습니다.</p>
+<p>예를 들어 Rust 1.22에서는 Option <bool>이 2바이트였는데, 1.23에서는 1바이트가 됩니다.</p>
+<p>사용되지 않는 추가 비트를 찾을 또 다른 위치로는 다른 enum의 태그가 있습니다.</p>
+<p>Josh의 강연에서, BorderStyleValue의 원래 정의에서 각 중첩 enum은 두 variant만 구분했습니다.</p>
+<p>각 태그는 유용한 정보의 단일 비트만 전달했음에도, 각 태그가 4바이트로 채워졌죠.</p>
+<p>Rust 1.23에서는 이러한 모든 정보를 훨씬 더 좁은 공간에 압축할 수 있으며, BorderStyleValue는 다음과 같이 나타낼 수 있습니다.</p>
+<p>[ all the tags (4 bytes) ][ u32 (4 bytes) ]</p>
+<p>이제는 이전의 인체공학적이지 않지만 메모리 친화적인 버전과 마찬가지로 8바이트로 압축이 된다는 거죠.</p>
+<p>앞으로 Stylo 개발자들은 더 이상 이와 같은 트레이드오프를 만들 필요가 없습니다.</p>
+<p>그러나 이 타입에는 여전히 약간의 패딩이 있습니다. 태그는 4개의 바이트를 모두 사용하지 않죠.<br />
+하지만 이는 다른 enum에 이것을 래핑하면 그 크기가 이전처럼 미친듯이 불어나지는 않는다는 것을 의미합니다.</p>
+<p>Result&lt;BorderStyleValue, i32&gt;도 여전히 8바이트일 것이고요.</p>
+<br>
+<br>
+<br>
+<h2 id="gyeolron">결론</h2>
+<p>이것은 구현 세부사항을 지정하지 않아서 언제든 뛰어난 최적화를 덧붙일 수 있는 방법의 예시입니다.</p>
+<p>이 기사의 ASCII 메모리 레이아웃 다이어그램이 유용한 멘탈 모델이라고 생각하지만 정확하지 않을 수 있습니다.</p>
+<p>Rust가 enum의 메모리 레이아웃이 항상 태그 뒤에 union이 오는 것을 보장했다면 혹시나 있을 누군가의 코드를 깨뜨리지 않고는 이 최적화를 할 수 없었을 것입니다.</p>
+<p>대신 컴파일러는 타입의 레이아웃을 최적화할 수 있는 자유를 유지하며, 새 버전의 컴파일러로 업데이트를 하기만 해도 코드의 메모리 효율성이 높아지는 장점이 있죠.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222241066224/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.50.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222235649010/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Rust는 enum 값을 배열에 어떻게 저장하나요? (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

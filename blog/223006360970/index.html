@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Context | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223006360970/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Context">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223006360970/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-02-06T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223006360970/">[Go] Context</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-02-06T00:00:00+00:00"><time datetime="2023-02-06T00:00:00+00:00">2023.02.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="181 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223006360970" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>context는 고루틴 기반의 병렬 처리를 위한 보조적인 시스템이라고 할 수 있다.</p>
+<p>서로 다른 프로세스들끼리 상호작용을 해야할때 주로 사용한다.</p>
+<p>핵심 구성요소들은 기본 패키지인 "context"에 들어있다.</p>
+<p><img src="/images/img_f62076065bffa8e4.png" alt="" /></p>
+<p>그리고 컨텍스트의 생성은 이런식으로 할 수 있다.<br />
+다음 코드의 WithCancel은 "취소" 명령을 전달할 수 있는 context를 생성해주는 함수다.</p>
+<p><img src="/images/img_960cfcd77239c3ee.png" alt="" />
+이외에도 값을 전달할 수 있는 WithValeu, 타임아웃 기반의 WithTimeout 등이 있는데, 본 포스트에서는 Cancel만을 기반으로 개략적인 구조만 정리해보도록 하겠다.</p>
+<p>일단 고루틴으로 호출할 함수를 먼저 구현해보겠다.<br />
+context를 통한 제어가 필요한 함수라면, 매개변수로 그 context 제어 객체를 전달받는게 기본이다.<br />
+그리고 context를 통해서 값을 전달받으면 그에 따른 액션을 취하면 되는 것이다.</p>
+<p>Cancel Context의 경우에는 cancel 이벤트가 전송되었을 경우 Err가 발생한다.<br />
+이를 통해서 고루틴의 중단을 구현할 수도 있고</p>
+<p><img src="/images/img_75aea56585ad1678.png" alt="" /></p>
+<p>혹은 Done 함수의 채널을 통해서 취소 신호 전달 여부에 대응할 수 있다.<br />
+아래 코드는 채널과 switch를 응용해서 이벤트 수신을 처리한다.</p>
+<p><img src="/images/img_299de534c257801e.png" alt="" /></p>
+<p>그러면 취소를 보낼 주체가 되는 메인 고루틴은 다음과 같이 처리를 할 수 있다.</p>
+<p><img src="/images/img_a16ce503e26a2e9b.png" alt="" /></p>
+<p>그렇게 해서 돌리면</p>
+<p><img src="/images/img_ad8afebd7758144d.png" alt="" /></p>
+<p><img src="/images/img_5a8d007912734f91.png" alt="" />
+적당 시간 돌다가 죽는 것을 확인할 수 있다.</p>
+<p>다른 context 타입들도 사용형태는 엇비슷하다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://pkg.go.dev/context">https://pkg.go.dev/context</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223007481091/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>HTTP 인증 방식<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223006383537/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Redshift<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

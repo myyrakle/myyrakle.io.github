@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Deployment: Blue&#x2F;Green 배포해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223122896721/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Deployment: Blue/Green 배포해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223122896721/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-06-07T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223122896721/">[k8s] Deployment: Blue&#x2F;Green 배포해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-06-07T00:00:00+00:00"><time datetime="2023-06-07T00:00:00+00:00">2023.06.07</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="239 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223122896721" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>본 포스트에서는 자동화까지 전부 다루지는 않고, 원리에 대해서만 정리한다.</p>
+<p>블루그린은 Rolling Update에서 조금 발전한 형태의 배포 기법이다.</p>
+<p>아래의 프로세스를 따른다.</p>
+<ol>
+<li>구버전의 파드를 Blue, 새버전의 파드를 Green으로 가정한다.</li>
+<li>일단 Green 파드를 먼저 띄운다.</li>
+<li>메인 서비스(로드밸런서 등)는 아직 Blue를 가리킨다.</li>
+<li>Green이 성공적으로 다 떴다면, 메인 서비스는 한번에 가리키는 대상을 Green으로 교체하고, Blue는 버린다.</li>
+</ol>
+<p>Rolling에서 발생할 수 있는 구버전과 신버전의 공존 문제를 해결했다는게 장점이다.</p>
+<br>
+<br>
+<br>
+<h2 id="deployment-gibon-guseong">Deployment 기본 구성</h2>
+<p>만약 이런 형태의 단일 Deployment가 있었다면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> apps</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  strategy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    type</span><span style="color: #9399B2;">:</span><span> RollingUpdate</span></span>
+<span class="giallo-l"><span>    rollingUpdate</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      maxSurge</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>      maxUnavailable</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    metadata</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      labels</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>        app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    spec</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      containers</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>          image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">1</span></span></code></pre>
+<p><img src="/images/img_19f14c746c23c476.png" alt="" />
+이걸 blue와 그린 2개의 Deployment로 분리해야한다.</p>
+<p><img src="/images/img_22f6545fac093273.png" alt="" />
+구분되게 메타데이터만 다르게 하면 되고, 다른건 그냥 그대로 복붙하면 된다.<br />
+그럼 이제 저걸 배포할때마다 blue-&gt;green, green-&gt;blue, ... 돌아가면서 써먹게 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="service-gibon-guseong">Service 기본 구성</h2>
+<p>원래 그냥 하나의 서버에 고정되어있던 것을</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Service</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>service</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>      port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>  type</span><span style="color: #9399B2;">:</span><span> LoadBalancer</span></span></code></pre>
+<p><img src="/images/img_534c911801a90eca.png" alt="" /></p>
+<p>일단 초기에 사용할 deployment에 먼저 묶어준다.</p>
+<p><img src="/images/img_1582e6961481f10c.png" alt="" />
+그리고 서비스에서 셀렉터를 바꿔주는 것으로 배포 교체를 수행할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="blue-green-baepohagi">Blue-Green 배포하기</h2>
+<p>먼저 docker container의 새 버전을 push한다.<br />
+그리고 현재 프로덕션 서버가 blue라면, 서비스와 연결되어있지 않은 green 버전에 새 컨테이너를 달아서 파드를 띄운다.</p>
+<p><img src="/images/img_253a4cc945f3b03b.png" alt="" /></p>
+<p><img src="/images/img_5a0722a775b9e84d.png" alt="" /></p>
+<p>그리고 잘 뜰때까지 기다린다.</p>
+<p><img src="/images/img_6dfee3cc9f4b2d5c.png" alt="" />
+그리고 다 떴다면 health check 등을 통해 동작 여부를 추가로 확인할 수 있을 것이다.<br />
+여기서는 생략한다.</p>
+<p>blue 버전의 pod들이 다 성공적으로 떴다는게 확실하다면, 서비스의 selector를 수정한다.</p>
+<p><img src="/images/img_e1e82d0fc20f5cee.png" alt="" /></p>
+<p><img src="/images/img_eaa4a7a333f29a82.png" alt="" /></p>
+<p>그러면</p>
+<p><img src="/images/img_a687c33f12d479fb.png" alt="" /></p>
+<p><img src="/images/img_b5a7be35551d8a6e.png" alt="" />
+중단 없이 한번에 교체가 될 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@miewone/kubernetes-Blue-Green-deployment">https://velog.io/@miewone/kubernetes-Blue-Green-deployment</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223123788123/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] termux에 세팅하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223121254332/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Python] Type hinting<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

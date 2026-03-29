@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Java] synchronized와 Lock | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223614474993/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Java] synchronized와 Lock">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223614474993/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-10-11T00:00:00+00:00">
+    <meta property="article:tag" content="Java">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223614474993/">[Java] synchronized와 Lock</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-11T00:00:00+00:00"><time datetime="2024-10-11T00:00:00+00:00">2024.10.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1053 words"><time datetime="PT6M">6 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/java/">Java</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223614474993" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Java에서 Lock을 사용하는 방법과 그 종류에 대해 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="meoltiseuredeuwa-data-race-munje">멀티스레드와 Data Race 문제</h2>
+<p>Lock는 멀티스레드 환경에서 발생하는 대표적인 부작용인 동시성 쓰기, Data race 문제를 해결하기 위해 존재한다. 이 문제에 대해 안다면 무시하고 넘어가도 된다.</p>
+<p><img src="/images/img_f16f8171838258e0.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> org</span><span style="color: #94E2D5;">.</span><span>example</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> SharedObject</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public</span><span> int count</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>public</span><span style="color: #CBA6F7;"> class</span><span style="color: #F9E2AF;font-style: italic;"> Main</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public static</span><span style="color: #94E2D5;"> void</span><span style="color: #89B4FA;font-style: italic;"> main</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">String</span><span style="color: #9399B2;">[]</span><span style="color: #EBA0AC;font-style: italic;"> args</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">         var</span><span> shared</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> SharedObject</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 스레드를 5개 생성해서 count를 증가시킴</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        for</span><span> (int i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            Thread thread</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Thread</span><span>(()</span><span style="color: #94E2D5;"> -&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                for</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">int j</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span>; </span><span style="color: #EBA0AC;font-style: italic;">j</span><span> &lt; 1000; </span><span style="color: #EBA0AC;font-style: italic;">j</span><span>++</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span>                    shared</span><span style="color: #94E2D5;">.</span><span>count</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>            thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">start</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 모든 스레드가 종료될 때까지 대기</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        while</span><span> (Thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">activeCount</span><span>()</span><span style="color: #94E2D5;"> &gt;</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            Thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">yield</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System</span><span style="color: #94E2D5;">.</span><span>out</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">println</span><span>(shared</span><span style="color: #94E2D5;">.</span><span>count)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>코드를 보면, 스레드를 5개 띄우고 공유 자원에 대해서 계속해서 +1 연산을 가하고 있는 것을 볼 수 있다.<br />
+스레드 5개에서 1000번씩 증가 연산을 때리니, 일반적으로는 최종 결과값이 5000이 될 것이라고 기대할 수 있다.</p>
+<br>
+<p><img src="/images/img_c93f2e4003f46e48.png" alt="" />
+하지만 실제 결과는 그렇지 않다.</p>
+<p>여러개의 스레드에서 n+1 연산을 가하는데, 그게 동시에 중첩된다면 2개 이상의 스레드에서 동일한 값을 쓰면서 하나를 제외한 스레드의 write가 버려질 수 있기 때문이다.</p>
+<p>물론 이건 아주 단순한 경우고, 실제 프로그램에서 동시성 문제는 보통 좀 더 복잡한 형태로 드러난다.</p>
+<p>아무튼 여기서 중요한 것은, 여러개의 스레드에서 "동시에 쓰는 행위" 자체가 매우 위험하다는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="synchronizedreul-iyonghan-lock">synchronized를 이용한 Lock</h2>
+<p>Java는 드물게 동기화에 대한 지원을 언어 신택스부터 지원하는 언어다.<br />
+synchronized 키워드를 메서드에 붙이면, 그 메서드는 완벽하게 동기화되는 메서드가 된다.</p>
+<p><img src="/images/img_0a944ac01eb1144b.png" alt="" />
+동일한 객체에 대해서 저 메서드를 실행하면, 저 메서드 자체는 동시에 하나씩만 수행되는 것이 보장된다.</p>
+<p>좀 더 원리를 자세하게 설명하자면, 메서드가 시작될때 저 객체(this)를 기준으로 Mutex.lock을 걸고, 메서드가 끝나면 Mutex.unlock을 거는 것이다.</p>
+<p>그렇게 동기화된 메서드를 만들고 그걸로 대체하면</p>
+<p><img src="/images/img_e18690e298a089a1.png" alt="" /></p>
+<p><img src="/images/img_56bc436a676d70a8.png" alt="" />
+기대한 대로 충돌은 더 이상 발생하지 않을 것이다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> org</span><span style="color: #94E2D5;">.</span><span>example</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> SharedObject</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public</span><span> int count</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // synchronized 키워드를 사용하면 메소드 전체에 락이 걸림</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public</span><span> synchronized</span><span style="color: #94E2D5;"> void</span><span style="color: #89B4FA;font-style: italic;"> increment</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span>        count</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>public</span><span style="color: #CBA6F7;"> class</span><span style="color: #F9E2AF;font-style: italic;"> Main</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public static</span><span style="color: #94E2D5;"> void</span><span style="color: #89B4FA;font-style: italic;"> main</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">String</span><span style="color: #9399B2;">[]</span><span style="color: #EBA0AC;font-style: italic;"> args</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">         var</span><span> shared</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> SharedObject</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 스레드를 5개 생성해서 count를 증가시킴</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        for</span><span> (int i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            Thread thread</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Thread</span><span>(()</span><span style="color: #94E2D5;"> -&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                for</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">int j</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span>; </span><span style="color: #EBA0AC;font-style: italic;">j</span><span> &lt; 1000; </span><span style="color: #EBA0AC;font-style: italic;">j</span><span>++</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span>                    shared</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">increment</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>            thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">start</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 모든 스레드가 종료될 때까지 대기</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        while</span><span> (Thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">activeCount</span><span>()</span><span style="color: #94E2D5;"> &gt;</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            Thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">yield</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System</span><span style="color: #94E2D5;">.</span><span>out</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">println</span><span>(shared</span><span style="color: #94E2D5;">.</span><span>count)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="synchronized-beulreogeul-tonghan-donggihwa">synchronized 블럭을 통한 동기화</h2>
+<p>이것도 synchronized 메서드와 동작방식은 거의 동일하다.<br />
+그 범위가 메서드 범위에서 블록 범위로 좁혀진 것일 뿐이다.</p>
+<p>메서드가 길고, 락을 잡아야할 범위가 한정적이라면 메서드 전체에 대해서 거는 것은 처리량을 떨어뜨리는 짓이기 때문에, 락을 걸어야할 범위에 대해서만 걸어주는 것이 좋다.</p>
+<p>사용 방법은 어렵지 않다.</p>
+<p><img src="/images/img_25e155a5af20cc12.png" alt="" />
+이런 느낌으로 lock 블럭을 잡고 그 안에서만 동시성 쓰기를 하면 된다.<br />
+소괄호에 들어가는 인자가 lock을 잡는 기준값인데, 보통 this를 넣어서 저 객체 자체에 대해서만 보장한다. 애초에 synchronized method도 synchronized(this)가 내부 동작이다.</p>
+<br>
+<br>
+<br>
+<h2 id="synchronizedyi-munje">synchronized의 문제</h2>
+<p>synchronized가 간단하고 사용이 편리하긴 하지만, 단점도 많다.<br />
+이건 정말 아주 단순한 사용사례에서만 쓸만하고, 최적화가 필요한 영역에서는 한계가 크다.</p>
+<p>가장 큰 문제는 Lock을 잡는 범위를 세밀하게 조절할 수 없다는 것이다.<br />
+그래서 해당 객체에 별개의 흐름을 갖는 동기화 포인트가 2개 이상 있을 경우에는 유연하게 처리를 할 수가 없다.</p>
+<p>게다가 다른 Lock 구현체가 제공하는 lock 타임아웃, 공정성 처리, 디버깅 수준에서 부족한 부분이 많다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="reentrantlockeul-tonghan-myeongsijeog-lock">ReentrantLock을 통한 명시적 Lock</h2>
+<p>ReentrantLock은 Java의 대표적인 Lock 구현체 중 하나다.<br />
+쉽게 말하면 그냥 Mutex 구현인데, 그 외에도 자잘한 기능들이 조금 붙어있다.</p>
+<p>한번 성능비교를 해보면서 ReentrantLock이 적절한 경우를 예로 들어보겠다.</p>
+<p>이번 객체에는 2개의 공유 변수가 있고, 각각의 증가를 처리하는 함수를 만들었다.</p>
+<p><img src="/images/img_98dab836187817ea.png" alt="" /></p>
+<br>
+<p><img src="/images/img_c7a240f615100e12.png" alt="" /></p>
+<p><img src="/images/img_b6d6b48a045152b9.png" alt="" />
+그리고 스레드 잔뜩 띄워서 돌리면,</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> org</span><span style="color: #94E2D5;">.</span><span>example</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> SharedObject</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public</span><span> int a_count</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public</span><span> int b_count</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public</span><span> synchronized</span><span style="color: #94E2D5;"> void</span><span style="color: #89B4FA;font-style: italic;"> increment_a</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span>        a_count</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public</span><span> synchronized</span><span style="color: #94E2D5;"> void</span><span style="color: #89B4FA;font-style: italic;"> increment_b</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span>        b_count</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>public</span><span style="color: #CBA6F7;"> class</span><span style="color: #F9E2AF;font-style: italic;"> Main</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    public static</span><span style="color: #94E2D5;"> void</span><span style="color: #89B4FA;font-style: italic;"> main</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">String</span><span style="color: #9399B2;">[]</span><span style="color: #EBA0AC;font-style: italic;"> args</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">         var</span><span> shared</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> SharedObject</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">         var</span><span> start</span><span style="color: #94E2D5;"> =</span><span> System</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">currentTimeMillis</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 스레드를 5개 생성해서 count를 증가시킴</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        for</span><span> (int i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            Thread thread</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Thread</span><span>(()</span><span style="color: #94E2D5;"> -&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                for</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">int j</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span>; </span><span style="color: #EBA0AC;font-style: italic;">j</span><span> &lt; 10000000; </span><span style="color: #EBA0AC;font-style: italic;">j</span><span>++</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span>                    shared</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">increment_a</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                    shared</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">increment_b</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>            thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">start</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 모든 스레드가 종료될 때까지 대기</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        while</span><span> (Thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">activeCount</span><span>()</span><span style="color: #94E2D5;"> &gt;</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            Thread</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">yield</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        var</span><span> end</span><span style="color: #94E2D5;"> =</span><span> System</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">currentTimeMillis</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System</span><span style="color: #94E2D5;">.</span><span>out</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">println</span><span>(</span><span style="color: #A6E3A1;">&quot;a_count: &quot;</span><span style="color: #94E2D5;"> +</span><span> shared</span><span style="color: #94E2D5;">.</span><span>a_count)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        System</span><span style="color: #94E2D5;">.</span><span>out</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">println</span><span>(</span><span style="color: #A6E3A1;">&quot;b_count: &quot;</span><span style="color: #94E2D5;"> +</span><span> shared</span><span style="color: #94E2D5;">.</span><span>b_count)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System</span><span style="color: #94E2D5;">.</span><span>out</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">println</span><span>(</span><span style="color: #A6E3A1;">&quot;실행 시간: &quot;</span><span style="color: #94E2D5;"> +</span><span> (end</span><span style="color: #94E2D5;"> -</span><span> start)</span><span style="color: #94E2D5;"> +</span><span style="color: #A6E3A1;"> &quot;ms&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_9fca7ec8f9ed6ef9.png" alt="" />
+동작 자체는 기대한 대로 될 것이다.</p>
+<p>근데 문제는 속도다. synchronized는 객체 전체를 잠그는 건데, 저 사용 사례에서는 굳이 전체를 잠글 필요는 없다.<br />
+a는 a대로 잠그면 되고, b는 b대로 잠그면 되는데, a에 접근하는데도 b까지 잠가버리는 문제가 발생하는 것이다.</p>
+<p>a와 b에 대해 별도의 Lock 처리를 더하면 불필요한 Lock으로 인한 유실 시간을 줄일 수 있다.</p>
+<p><img src="/images/img_3d7508d02154bbff.png" alt="" />
+각각의 Lock을 명시적으로 추가하고</p>
+<br>
+<p><img src="/images/img_1a5046c3b6687df8.png" alt="" />
+접근 지점에 lock을 걸어준다.</p>
+<p>그러면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> org</span><span style="color: #94E2D5;">.</span><span>example</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> java.util.concurrent.locks.ReentrantLock;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>class SharedObject</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    public int a_count = 0;</span></span>
+<span class="giallo-l"><span>    public int b_count = 0;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    public ReentrantLock a_lock = new ReentrantLock();</span></span>
+<span class="giallo-l"><span>    public ReentrantLock b_lock = new ReentrantLock();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    public void increment_a() {</span></span>
+<span class="giallo-l"><span>        a_lock.lock();</span></span>
+<span class="giallo-l"><span>        a_count++;</span></span>
+<span class="giallo-l"><span>        a_lock.unlock();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    public void increment_b() </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        b_lock.lock();</span></span>
+<span class="giallo-l"><span>        b_count++;</span></span>
+<span class="giallo-l"><span>        b_lock.unlock();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>public class Main</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    public static void main(String[] args) {</span></span>
+<span class="giallo-l"><span>         var shared = new SharedObject();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>         var start = System.currentTimeMillis();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 스레드를 5개 생성해서 count를 증가시킴</span></span>
+<span class="giallo-l"><span>        for (int i = 0; i &lt; 5; i++) {</span></span>
+<span class="giallo-l"><span>            Thread thread = new Thread(() -&gt; {</span></span>
+<span class="giallo-l"><span>                for (int j = 0; j &lt; 10000000; j++) {</span></span>
+<span class="giallo-l"><span>                    shared.increment_a();</span></span>
+<span class="giallo-l"><span>                    shared.increment_b();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span>            });</span></span>
+<span class="giallo-l"><span>            thread.start();</span></span>
+<span class="giallo-l"><span>        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 모든 스레드가 종료될 때까지 대기</span></span>
+<span class="giallo-l"><span>        while (Thread.activeCount() &gt; 1) </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            Thread.yield();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        var end = System.currentTimeMillis();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System.out.println(</span><span style="color: #A6E3A1;">&quot;a_count: &quot;</span><span> + shared.a_count);</span></span>
+<span class="giallo-l"><span>        System.out.println(</span><span style="color: #A6E3A1;">&quot;b_count: &quot;</span><span> + shared.b_count);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        System.out.println(</span><span style="color: #A6E3A1;">&quot;실행 시간: &quot;</span><span> + (end - start) + </span><span style="color: #A6E3A1;">&quot;ms&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p><img src="/images/img_3e34e605d1720696.png" alt="" />
+전에는 2초쯤 걸리던게 이제 1초 미만으로 처리되는 것을 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="reenterantlock-gongjeongseong-fairness">ReenterantLock: 공정성 (fairness)</h2>
+<p>Lock 경합이 매우 심한 상황에서는, 운이 좋지 못하다면 특정 스레드만 계속해서 Lock을 점유하지 못할 수 있다.<br />
+이런 현상을 불공정(unfair)하다고 한다.</p>
+<p>ReenterantLock은 공정한 Lock 기능을 제공한다.<br />
+생성자에 true를 넘기면 공정 모드로 작동해서, 스레드들이 공정하게 Lock을 점유하도록 유도한다.<br />
+예를 들면, 가장 오래 기다린 스레드에게 Lock 우선순위를 주는 것이다.</p>
+<p><img src="/images/img_44588818e6e9e84e.png" alt="" />
+단, 공정성이 반드시 보장되는 것은 아니다. 가장 오래 기다린 스레드를 선호(favor)하는 것일 뿐이다.</p>
+<p>그리고 공정성은 공짜로 주어지는게 아니라, 추가적인 동기화나 로직이 들어가는 것이다.<br />
+그래서 기본 동작보다 훨씬 느려질 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="reenterantlock-jaejinib-ganeung">ReenterantLock: 재진입 가능</h2>
+<p>사실 이걸 좋은 디자인이라 할 수 있는지는 모르겠는데... synchronized와 ReenterantLock은 재진입 기능을 제공한다.<br />
+이게 무슨 말이나면, 이미 Lock을 잡은 스레드가 Lock을 중복해서 또 잡을 수 있다는 말이다.</p>
+<p><img src="/images/img_271e505ef89a22dc.png" alt="" />
+그래서 이래도 잘 동작한다.</p>
+<p>근데 이런 코드를 좋은 코드라고 할 수 있을지는 잘 모르겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="reentrantlock-timeout-giban-lock">ReentrantLock: timeout 기반 Lock</h2>
+<p>기존의 Lock 기능들은 Lock을 점유할 때까지 하염없이 기다린다.<br />
+근데 경우에 따라서는 당장 Lock을 점유할 수 없다면 다른 작업을 더 처리하도록 구현을 하는게 처리량 측면에서 유리한 상황이 있을 수도 있다.</p>
+<p>tryLock을 사용하면 Lock을 잡다가 timeout이 지나면 포기하고 나오도록 할 수 있다.</p>
+<p><img src="/images/img_eada8fe35b106f18.png" alt="" />
+그리고 Lock을 잡는데 성공한다면 tryLock은 true를 반환한다.</p>
+<br>
+<br>
+<br>
+<h2 id="reentrantreadwritelockreul-tonghan-lock">ReentrantReadWriteLock를 통한 Lock</h2>
+<p>ReentrantReadWriteLock은 다른 언어의 Read-Write-Mutex와 동등한 Lock 구현체다.</p>
+<p>ReentrantLock에는 조금 성능적인 단점이 있다.<br />
+읽기 비중이 매우 높은 경우에는 Lock으로 인한 성능 손실이 꽤 커질 수 있다는 것이다.</p>
+<p>그런데 알다시피, read에 대한 동기화는 write에 비하면 꽤 저렴하다. 읽기를 하는데 write 수준의 Lock을 항상 걸 필요는 없는 것이다.</p>
+<p>그래서 ReadWriteLock은 read와 write에 대한 Lock을 2단계로 제어하는 Lock이다. 이를 통해 read 부하가 높은 경우에는 일반 ReentrantLock보다 나은 성능을 기대할 수 있다.</p>
+<p><img src="/images/img_c70b97f8c01d9719.png" alt="" />
+기본적인 사용 원리는 크게 다르지 않다.</p>
+<p>대신</p>
+<p><img src="/images/img_9031bc71fe0a4ff5.png" alt="" />
+writeLock과</p>
+<br>
+<p><img src="/images/img_b0cb903d057c1d6f.png" alt="" />
+readLock을 명시적으로 걸 수 있다.</p>
+<p>writeLock을 걸면 다른 writeLock과 readLock이 모두 차단되지만, readLock은 다른 Lock을 차단하지 않는다.<br />
+어차피 writeLock을 많이 건다면 ReentrantLock만 쓰는게 더 단순하고 성능이 잘 나올 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="stampedlockreul-tonghan-lock">StampedLock를 통한 Lock</h2>
+<p>StampedLock는 ReentrantReadWriteLock의 조금 더 낙관적인 버전이다.<br />
+스레드의 재진입을 허용하지 않는다.<br />
+그리고 write lock이 잡혀있는 상태라도 read lock을 느슨하게 잡을 수 있다는게 특징이다.</p>
+<br>
+<p><img src="/images/img_57840ec6083cd251.png" alt="" />
+초기화 방법은 크게 다를게 없고</p>
+<br>
+<p><img src="/images/img_d5e7fce04f99fa49.png" alt="" />
+write Lock을 잡는 것도 ReentrantReadWriteLock와 크게 다르지 않다.</p>
+<p>다른건 Read Lock을 잡는 부분이다.<br />
+Read Lock을 잡을때는 tryOptimisticRead을 주로 사용하는데, 이건 write lock이 잡혀있든 말든 일단 가져온다.</p>
+<p><img src="/images/img_b03dfa1cdaf28688.png" alt="" />
+근데 당연히 write가 불완전하게 처리된 상황에서는 애매한 값이나 옛날 값을 참조할 수도 있다.</p>
+<p>여기서 핵심은 lock.validate를 사용해서 스탬프 값 기반으로 검증을 할 수 있는 것이다.<br />
+검증에 실패한다면 그제서야 readLock으로 Lock을 대기하고 최신 값을 처리하게 하면 되고, 검증에 성공한다면 그대로 써도 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@may_yun/JAVA-synchronized-VS-Reentrant-Lock-%EC%B0%A8%EC%9D%B4%EC%A0%90">https://velog.io/@may_yun/JAVA-synchronized-VS-Reentrant-Lock-%EC%B0%A8%EC%9D%B4%EC%A0%90</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/60903107/understanding-fair-reentrantlock-in-java">https://stackoverflow.com/questions/60903107/understanding-fair-reentrantlock-in-java</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/57809112/reentrantlock-vs-reentrantreadwritelock">https://stackoverflow.com/questions/57809112/reentrantlock-vs-reentrantreadwritelock</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/26094200/what-is-stampedlock-in-java">https://stackoverflow.com/questions/26094200/what-is-stampedlock-in-java</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/55766479/how-to-to-use-stampedlock-optimistic-locking-i-cant-understand-code-sample-fr">https://stackoverflow.com/questions/55766479/how-to-to-use-stampedlock-optimistic-locking-i-cant-understand-code-sample-fr</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223617798663/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] Vacuum 튜닝<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223610808574/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] Ubuntu&#x2F;Debian용 패키지 만들기 - .deb<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

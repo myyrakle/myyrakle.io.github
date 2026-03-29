@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] EFS (Elastic File Storage) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223637506065/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] EFS (Elastic File Storage)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223637506065/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-10-29T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223637506065/">[AWS] EFS (Elastic File Storage)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-29T00:00:00+00:00"><time datetime="2024-10-29T00:00:00+00:00">2024.10.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="531 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223637506065" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_26fb68fd8ad30e63.png" alt="" />
+EFS는 AWS에서 제공하는 스토리지 서비스 중 하나다.<br />
+뭔가 싶을 수도 있는데, 약간 EBS와 S3의 애매한 중간지대라고 볼 수 있다.</p>
+<p>쉽게 말해 네트워크로 공유되는 파일 스토리지다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://aws.amazon.com/ko/efs/pricing/">https://aws.amazon.com/ko/efs/pricing/</a><br />
+비용 자체는 전반적으로 좀 비싼 편이다.</p>
+<p><img src="/images/img_72b6cbe1be9bc878.png" alt="" />
+기본적으로 S3처럼 저장비용/읽기/쓰기로 비용을 부과한다.<br />
+그리고 또 저장비용에는 S3 처럼 사용 패턴에 따른 요금 클래스가 존재한다.</p>
+<p>데이터 전송은 EC2 요금을 따른다.</p>
+<br>
+<br>
+<br>
+<h2 id="efs-vs-ebs-vs-s3">EFS vs EBS vs S3</h2>
+<p>EBS/S3와 비슷하게 사용할 수도 있지만, 제약이나 사용사례가 크게 다르다.</p>
+<p><strong>가격</strong><br />
+일단 EFS는 S3, EBS보다 훨씬 비싸다.<br />
+서울 기준으로<br />
+S3=0.025 per GB<br />
+EFS=0.33 per GB<br />
+EBS(gp3)=0.0912 per GB<br />
+정도이니 압도적으로 비싸다 할 수 있겠다.<br />
+그래서 비용 효율성은 S3 &gt; EBS &gt; EFS 다.</p>
+<p><strong>유연성</strong><br />
+EBS는 단일 EC2에만 하나씩 연결할 수 있다. 하지만 EFS는 하나의 EFS를 여러개의 EC2에 마운트할 수 있다.<br />
+심지어 EFS은 온프레미스 리눅스 서버에도 마운트할 수 있다.<br />
+EBS &lt; EFS &lt; S3</p>
+<p><strong>가용성</strong><br />
+단일 AZ에만 배포되는 EBS와 다르게, EFS는 멀티 AZ 배포가 기본 옵션이다.<br />
+이를 통해 조금 더 높은 가용성을 보장할 수 있다.</p>
+<p><strong>성능</strong><br />
+접근 속도 또한 EBS가 EFS보다 빠르다.<br />
+EBS &gt; EFS &gt; S3</p>
+<p>**동시 파일 접근과 처리량 **<br />
+EBS와 달리 EFS는 여러 EC2 및 머신에서 공유되기 때문에, 수십-수백-수천개의 시스템에서 공유되는 파일 집약적인 대규모 워크로드에 적합하다. S3는 EFS에 비하면 동시 파일 쓰기 등에는 불리한 편이다.<br />
+EFS는 최대 500,000 IOPS 또는 초당 10GB의 워크로드도 감당할 수 있다. 그래서 일반 시스템보다는 빅데이터 수준 처리에 적합하다고 할 수 있다.</p>
+<p>**자동 확장 **<br />
+EFS는 S3처럼 사용에 맞춰서 자동으로 크기가 확장된다. 물론 EBS도 사용중에 확장하는 기능을 제공하지만, 편의성의 차이가 존재한다.<br />
+EFS = S3 &gt; EBS</p>
+<br>
+<br>
+<br>
+<h4 id="efs-mandeuleobogi">EFS 만들어보기</h4>
+<p>EFS를 만드는 것 자체는 S3처럼 간단하다.</p>
+<p><img src="/images/img_ac22e43690db33bb.png" alt="" />
+이름 넣고, vpc 넣고 만들면 된다.</p>
+<br>
+<p><img src="/images/img_5e48e01e146411fe.png" alt="" />
+그럼 이렇게 시스템이 만들어지고</p>
+<br>
+<p><img src="/images/img_dc273374f30b7b86.png" alt="" />
+사용량 등을 모니터링할 수 있게 된다.<br />
+저 크기 통계는 바로바로 동기화되는게 아니고, 딜레이가 좀 있다.</p>
+<p>근데 이대로는 아무 동작도 하지 않는 껍데기일 뿐이다.<br />
+EC2 같은데다가 마운팅을 해줘야 읽기나 쓰기가 가능하다.</p>
+<p><img src="/images/img_49a95450fd9433c2.png" alt="" />
+바로 해보자</p>
+<br>
+<br>
+<br>
+<h2 id="ec2e-yeongyeolhagi-mabeobsa">EC2에 연결하기: 마법사</h2>
+<p>EC2 생성 마법사에서도 EFS 연동 기능을 바로 지원한다.</p>
+<p><img src="/images/img_fd0b611360d934d2.png" alt="" />
+적당히 리눅스로 고르고</p>
+<br>
+<p><img src="/images/img_fce5b1882b654b92.png" alt="" />
+VPC와 서브넷을 골라야한다.<br />
+그래야 네트워크 타고 EFS에 접근할 수 있기 때문이다.</p>
+<br>
+<p><img src="/images/img_1d4dbcba36618631.png" alt="" /></p>
+<p><img src="/images/img_d3054772e20d4b29.png" alt="" />
+파일시스템을 고르고, 아까 만든 EFS를 선택한다.<br />
+그러면 저 마운팅 경로로 마운트되게끔 구성이 되는 것이다.</p>
+<p>만들고 EC2에 접속한다.</p>
+<p><img src="/images/img_b03070fec7c558b7.png" alt="" /></p>
+<p><img src="/images/img_afba340920118a57.png" alt="" />
+근데 그냥 최초 부팅 시에 들어가서는 마운트가 잘 되지 않을 수 있다. 정확한 이유는 모르겠다.</p>
+<p>안된다면 재부팅 한번만 더 해주자.</p>
+<p><img src="/images/img_0ea0cdb1bbfce4b7.png" alt="" />
+그래서 이렇게 마운트가 표시되면, 잘 붙은 것이다.</p>
+<br>
+<p><img src="/images/img_7df98ce3762b759c.png" alt="" />
+이제 저 마운트 경로에서 자유롭게 파일 접근을 할 수 있다.<br />
+쓰면 바로바로 EFS에 들어가는 것이다.</p>
+<br>
+<p><img src="/images/img_e0b4410968955af5.png" alt="" />
+조금 기다려보면 통계에도 상승치가 보일 것이다.</p>
+<br>
+<p>이런 느낌으로 쓸 수 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/tech/how-to-select-the-right-throughput-and-performance-mode-of-amazon-efs/">https://aws.amazon.com/ko/blogs/tech/how-to-select-the-right-throughput-and-performance-mode-of-amazon-efs/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/29575877/aws-efs-vs-ebs-vs-s3-differences-when-to-use">https://stackoverflow.com/questions/29575877/aws-efs-vs-ebs-vs-s3-differences-when-to-use</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AmazonEFS.html">https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AmazonEFS.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223639069654/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Inverted Index<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223638622649/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] ECS: 작업정의 정보 조회하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

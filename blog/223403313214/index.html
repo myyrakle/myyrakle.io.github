@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] 복구 불가능한 패닉과 복구 가능한 패닉 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223403313214/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] 복구 불가능한 패닉과 복구 가능한 패닉">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223403313214/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-04-02T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223403313214/">[Go] 복구 불가능한 패닉과 복구 가능한 패닉</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-04-02T00:00:00+00:00"><time datetime="2024-04-02T00:00:00+00:00">2024.04.02</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="518 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223403313214" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Go에서는 recover를 통한 패닉 복구 기능을 제공하지만, 복구가 불가능한 패닉도 존재한다.<br />
+제어가 어려운 OOM 같은 것만 그런게 아니라 복구 불가능 여부에는 일관성도 전혀 없어서, 잘 알아두는게 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="boggu-ganeunghan-paenig">복구 가능한 패닉</h2>
+<br>
+<br>
+<h4 id="1-sudong-paenig">1. 수동 패닉</h4>
+<p>사용자가 직접 발생시킨 패닉은 당연히 복구가 가능하다.</p>
+<p><img src="/images/img_dc27cd803ec0d5d0.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	panic</span><span>(</span><span style="color: #A6E3A1;">&quot;패닉 발생&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<h4 id="2-nil-yeogcamjo-paenig">2. nil 역참조 패닉</h4>
+<p>nil 포인터 값을 역참조하면 패닉이 발생한다. 이것도 복구는 가능하다.</p>
+<p><img src="/images/img_8bdc86767a544f57.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> a *int</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	*</span><span>a</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>nil 함수 값을 호출하는 것도 복구는 가능하다.</p>
+<br>
+<br>
+<h4 id="3-out-of-range-paenig">3. out of range 패닉</h4>
+<p>배열에 존재하지 않는 인덱스 범위로 인덱싱을 할때 나는 패닉이다.</p>
+<p><img src="/images/img_178f7d27335d3965.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	nums</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> []int</span><span style="color: #9399B2;">{</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(nums[</span><span style="color: #FAB387;">10</span><span>])</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<h4 id="4-daunkaeseuting-paenig">4. 다운캐스팅 패닉</h4>
+<p>any 타입에서 다운캐스팅을 할때 체크를 할 수도 있고 체크를 하지 않을 수도 있는데, 체크를 하지 않은 상태에서 캐스팅에 실패하면 패닉이 발생한다.</p>
+<p><img src="/images/img_168648117d834dff.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	nums</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> []int</span><span style="color: #9399B2;">{</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"><span>	boxed</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> any</span><span>(nums)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(boxed</span><span style="color: #94E2D5;">.</span><span>(int))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h4 id="5-0euro-nanussemhagi">5. 0으로 나눗셈하기</h4>
+<p>숫자를 0으로 나누면 패닉이 발생한다.</p>
+<p><img src="/images/img_80a12ec400d381b9.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h4 id="6-dadhin-caeneole-meseji-bonaegi">6. 닫힌 채널에 메세지 보내기</h4>
+<p>이미 닫힌 채널에 메세지를 보내면 패닉이 발생한다.</p>
+<p><img src="/images/img_8f2ddeac9db46391.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	ch</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(chan int)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	close</span><span>(ch)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	ch</span><span style="color: #94E2D5;"> &lt;-</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="boggu-bulganeunghan-paenig">복구 불가능한 패닉</h2>
+<p>복구가 불가능한 패닉이 더 많다.</p>
+<br>
+<br>
+<h4 id="1-out-of-memory-paenig">1. Out Of Memory 패닉</h4>
+<p>프로세스에 가용된 메모리를 초과하면 패닉이 발생한다.</p>
+<p><img src="/images/img_6b1fd3902f05ac11.png" alt="" />
+이건 당연히 복구가 불가능한게 맞다.<br />
+정확히는 Go에서 패닉을 날리는게 아니라, 보통 OS 수준에서 죽여버린다.</p>
+<br>
+<br>
+<br>
+<h4 id="2-stack-overflow-paenig">2. Stack Overflow 패닉</h4>
+<p>스택이 넘쳐도 패닉이 난다. 이것도 제어가 불가능한게 당연하다.</p>
+<p><img src="/images/img_f953b12003e6c087.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> f func(a [1000]int64)</span></span>
+<span class="giallo-l"><span>	f</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(a [</span><span style="color: #FAB387;">1000</span><span>]int64)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		f</span><span>(a)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	f</span><span>([</span><span style="color: #FAB387;">1000</span><span>]int64</span><span style="color: #9399B2;">{}</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h4 id="3-concurrent-map-write">3. concurrent map write</h4>
+<p>이건 납득이 어려운 부분 중 하나다. 좀 토나오는 설계 요소다.<br />
+그냥 map에다가 동시에 쓰기를 시도하면 패닉을 던지는데, 복구도 불가능하다.</p>
+<p><img src="/images/img_1845ba9077e8aaab.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	m</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> map[string]int</span><span style="color: #9399B2;">{}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		for</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			m[</span><span style="color: #A6E3A1;">&quot;x&quot;</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"><span>	for</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		_</span><span style="color: #94E2D5;"> =</span><span> m[</span><span style="color: #A6E3A1;">&quot;x&quot;</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>내가 겪은 unrecoverable 패닉케이스 중 상당수가 이거였다.<br />
+서드파티 라이브러리를 갖다쓰거나, 이런저런 레이어를 쌓다보면 객체에 맵이 들어있을 때가 많은데, 이런걸 사용하다보면 터질 때가 잦다.<br />
+항상 발생하는 것도 아니고 몰릴때 확률적으로 발생하다보니 추적이 더 곤란한 부분이 있다.</p>
+<p>애초에 이딴걸 왜 복구 불가능하게 만든거지? 제정신인가?</p>
+<br>
+<br>
+<br>
+<h4 id="4-nil-hamsureul-gorutin-silhaeng">4. nil 함수를 고루틴 실행</h4>
+<p>이것도 일관성이 없는 부분 중 하나다.<br />
+nil 역참조도 복구 가능하고, nil 함수 호출도 복구 가능한데, nil 함수를 고루틴으로 호출하는건 복구 불가능하다.</p>
+<p><img src="/images/img_28d24abe219d6bdd.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> f func()</span></span>
+<span class="giallo-l"><span>	go</span><span style="color: #89B4FA;font-style: italic;"> f</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>생각없이 설계해둔 것 같다.</p>
+<br>
+<br>
+<br>
+<h4 id="5-dedeurag">5. 데드락</h4>
+<p>데드락도 패닉 유발 요소가 되는데, 이것도 복구 불가능한 패닉에 들어간다. 왜지...?</p>
+<p><img src="/images/img_9d33182f8e51625e.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	select</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>아무튼 패닉 조건은 모든 고루틴이 블락걸릴 경우다.<br />
+흔한 경우는 아닐 것이다.</p>
+<br>
+<br>
+<br>
+<h4 id="6-neitibeu-seuredeu-risoseu-gogal">6. 네이티브 스레드 리소스 고갈</h4>
+<p>고루틴이 경량 스레드라서 제한없이 늘려나갈 수 있을 것이라고 환상을 다들 갖고 있지만, 실제로는 그렇지 않다. 헛소리다.</p>
+<p>스레드 제한이 부딪히면 다음과 같은 복구 불가능한 패닉이 발생한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>runtime</span><span style="color: #9399B2;">:</span><span> program exceeds</span><span style="color: #FAB387;"> 10000</span><span style="color: #94E2D5;">-</span><span>thread limit</span></span></code></pre>
+<p>고루틴은 기본적으로 스택 기반 그린 스레드로 동작하고, I/O에 블락이 걸리면 네이티브 스레드를 호출한다.<br />
+근데 만약 I/O 블락이 너무 많이 걸려서 네이티브 스레드를 끊없이 호출하다보면, 네이티브 스레드 개수 제한이 걸릴 수 있다. 그러면 이것도 패닉케이스가 된다.</p>
+<br>
+<br>
+<br>
+<h4 id="7-jasig-gorutineseo-balsaenghan-paenig">7. 자식 고루틴에서 발생한 패닉</h4>
+<p>자식 고루틴에서 발생한 패닉은 상위 고루틴에서 복구할 수 없다. 그래서 고루틴을 사용할 때는 항상 신중하게 살펴보거나, 자식 고루틴 안에도 recover를 달아줘야 한다.</p>
+<p><img src="/images/img_3ef317e22857b61d.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #A6E3A1;"> &quot;fmt&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> r</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> recover</span><span>()</span><span style="color: #9399B2;">;</span><span> r</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;복구 성공: &quot;</span><span style="color: #9399B2;">,</span><span> r)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		panic</span><span>(</span><span style="color: #A6E3A1;">&quot;패닉 발생!&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	for</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이것도 실수하기 매우 좋은 부분 중 하나다.</p>
+<p>서브프로세스 하나에서 패닉케이스가 터져도 전체 프로그램이 다운되는 것이다.</p>
+<p>이것도 Go의 저가용성에 한몫 보태는 그런 지점 중 하나다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/57486620/are-all-runtime-errors-recoverable-in-go">https://stackoverflow.com/questions/57486620/are-all-runtime-errors-recoverable-in-go</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/32042048/go-runtime-program-exceeds-10000-thread-limit">https://stackoverflow.com/questions/32042048/go-runtime-program-exceeds-10000-thread-limit</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223404949782/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[HTTP] Content-Encoding을 활용한 압축 전송<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223396414519/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] async trait<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

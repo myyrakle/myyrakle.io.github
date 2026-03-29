@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] SES: 이메일 수신 서버 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224164747915/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] SES: 이메일 수신 서버 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224164747915/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-01-30T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224164747915/">[AWS] SES: 이메일 수신 서버 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-01-30T00:00:00+00:00"><time datetime="2026-01-30T00:00:00+00:00">2026.01.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="674 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224164747915" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>SES는 보통 이메일을 전송할때 많이 쓰지만, 수신용으로도 사용할 수 있다.<br />
+보통은 그냥 gmail 같은 메일서비스를 쓰는게 일반적이라서 고려되지 않을 뿐이다.</p>
+<p>직접 메일 서버를 구현할 때의 이점은, 이메일의 ID 영역까지 자유롭게 통제할 수 있다는 것이다.<br />
+aaa@foo.com, bbbb@foo.com, cccc@foo.com처럼 별도의 수신 이메일 주소를 동적으로 만들어서 관리할 수 있다. 사실상 진짜 이메일 서비스처럼 되는 것이다.</p>
+<p>아무튼 여기서는 SES를 사용해서 확장 가능하고 관리가 용이한 메일 서버를 구성하는 방법을 다뤄본다.</p>
+<p>이걸 하려면 도메인도 필요하다. 다른 도메인 제공자도 되지만 Route53에 있는게 편하다.</p>
+<p>사전 지식<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224163430397">https://blog.naver.com/sssang97/224163430397</a></p>
+<br>
+<br>
+<br>
+<h2 id="akitegcyeo">아키텍쳐</h2>
+<p>그림으로 그리면 대강 이런 모양이 된다.</p>
+<p><img src="/images/img_49dbbd35efc1046f.png" alt="" />
+우선 MX 도메인 레코드가 가장 앞단에 있는데, 거기서는 AWS의 내부 메일 서버 도메인을 알려준다.<br />
+그러면 메일 클라이언트는 AWS의 메일 서버로 전송을 할 것이다.</p>
+<p>그 다음에는 AWS SES 수신자가 메일서버로 들어온 메일을 가로채서 SNS에 전송하고, SNS는 SQS에 메일 데이터를 적재한다. 그러면 서버는 SQS에서 데이터를 꺼내서 적절히 쓰면 되는 것이다.</p>
+<p>이 구조의 장점은 매우 높은 부하에도 유연하게 대응하기 쉽고, 비용도 그렇게 비싸지는 않다는 것이다.</p>
+<p>단, 몇가지 제한사항은 있다.<br />
+SNS, SQS는 페이로드의 크기 제한이 있다. 1MB 정도가 한계다.<br />
+하지만 사실 메일 클라이언트들도 이런걸 대응하는 방어로직이 있어서 현실적으로 저 제한을 넘을 일은 잘 없다.</p>
+<p>그리고 SQS는 보존 기한이 있다. 최대 14일이 지나기 전에는 읽어서 소비해야 유실을 피할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>주요 비용 발생 지점은 SES의 수신 비용, SNS의 게시 비용, SQS의 저장 비용, SQS의 읽기 비용이다.</p>
+<p>SES =&gt; SNS와 SNS =&gt; SQS 전송은 리전내 전송이므로 데이터 전송 자체에는 트래픽 비용이 발생하지 않는다.<br />
+대신 횟수에 따른 요청당 비용만 발생한다.</p>
+<p>만약 10KB짜리 이메일을 100만개 받는다고 하면, 발생하는 비용은 다음과 같다.</p>
+<p>SES $100 ($0.10/1,000건 + $0.09/256KB 초과당)<br />
+SNS $0.5 ($0.5/100만건)<br />
+SQS $0.4 ($0.4/100만건)</p>
+<p>SES 수신 비용이 가장 크고, SNS와 SQS의 적재 비용은 매우 작은 편이다.<br />
+게다가 월에 100만건은 무료 사용량이라서 작은 규모에서는 비용이 아예 발생하지 않을 것이다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="ses-jagyeog-jeungmyeong-identities-saengseong">SES 자격 증명 (identities) 생성</h2>
+<p>먼저 내가 이메일에 쓸 도메인을 안전하다는 의미로서 검증을 해야 한다.<br />
+SES의 자격 증명 탭에 들어가서 도메인 타입으로 하나 만들어준다.</p>
+<p><img src="/images/img_791eeb671d377f48.png" alt="" /></p>
+<p>Route53의 도메인을 쓴다면 자동으로 확인해서 검증해준다. 이런게 편하다.</p>
+<p><img src="/images/img_ecf9b3684b5cfd94.png" alt="" /></p>
+<p><img src="/images/img_757fc207c867ecb2.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="domeine-mx-rekodeu-deungrog">도메인에 MX 레코드 등록</h2>
+<p>가장 중요한 것은 MX 레코드를 추가해서 이메일 클라이언트가 메일서버를 찾을 수 있게 하는 것이다.<br />
+AWS SES의 이메일 서버로 보내게 해야하는데, 이건 우리가 만드는게 아니라 리전마다 고정으로 제공된다.</p>
+<p>다음과 같이 중간에 리전만 채워서 만들어주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #FAB387;">10</span><span> inbound</span><span style="color: #94E2D5;">-</span><span>smtp</span><span style="color: #94E2D5;">.</span><span style="color: #9399B2;">{</span><span>리전</span><span style="color: #9399B2;">}</span><span style="color: #94E2D5;">.</span><span>amazonaws</span><span style="color: #94E2D5;">.</span><span>com</span></span></code></pre>
+<p><img src="/images/img_963ae784f860d864.png" alt="" /></p>
+<p>그리고 도메인 조회에서 다음과 같이 등록한 값이 잘 조회되면 이건 끝이다.</p>
+<p><img src="/images/img_8d1b39561abdb39b.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="imeil-susin-guseong">이메일 수신 구성</h2>
+<p>이제 SES로 가서 구성을 추가해주자.<br />
+SES 메일서버로 전송하게 해뒀으니, 이건 그걸 꺼내올 수 있게 하는 설정이다.</p>
+<p>이걸 쓰면 도메인을 기반으로 수신자를 찾아서 메일을 어딘가로 전송해줄 수 있다.</p>
+<p><img src="/images/img_00f6811d63eb839e.png" alt="" /></p>
+<p><img src="/images/img_78db8035e38fe308.png" alt="" />
+이름 짓고</p>
+<br>
+<p><img src="/images/img_c9415b9afd89a94d.png" alt="" />
+보안 옵션 다 켜서 규칙도 추가해준 다음에</p>
+<br>
+<p><img src="/images/img_045d2a01782f814b.png" alt="" />
+수신자 조건에 내 이메일 도메인을 넣어주면 된다.<br />
+아까 MX 레코드로 등록한 도메인과 동일하게 넣어준다.</p>
+<br>
+<p><img src="/images/img_fff3840ff3f827da.png" alt="" />
+그 다음에는 받은 메일을 어디로 쏠지 결정할 수 있다.<br />
+내 경우에는 SNS를 통해서 SQS로 포워딩하는 방식을 택했다.</p>
+<p>저 콘솔에서 즉시 SNS를 만들 수 있는데</p>
+<p><img src="/images/img_fcdf71f3c923eb10.png" alt="" /></p>
+<p><img src="/images/img_fdf5c5acdd7c70b6.png" alt="" />
+만들어서 적당히 연결해주면 된다.</p>
+<p>그리고 인코딩은 Base64와 UTF-8을 선택할 수 있는데, 보통은 UTF-8로도 충분하고 쓰기 편하다.<br />
+UTF8을 추천한다.</p>
+<br>
+<br>
+<br>
+<h2 id="sqs-saengseong">SQS 생성</h2>
+<p>SQS는 요구사항에 맞는걸로 적당히 넣어도 되는데, 비용적으로 좋은건 표준 큐다.</p>
+<p><img src="/images/img_2fad98bd3da24443.png" alt="" />
+만들고</p>
+<p>아까 만들었던 SNS 주제에 SQS를 연결한다.</p>
+<p><img src="/images/img_b51a522922a60f2f.png" alt="" /></p>
+<p>원시 메세지는 웬만하면 켜는걸 추천한다.</p>
+<p><img src="/images/img_14ab7499ad9eac79.png" alt="" />
+안그러면 쓸데없는 메타데이터를 잔뜩 넣어서 SQS에 넣는데, 그거만 해도 1KB는 넘는데다 파싱하기도 불편하다.</p>
+<br>
+<br>
+<br>
+<h2 id="meil-jeonsonghaebogi">메일 전송해보기</h2>
+<p>이러면 이제 기본 세팅은 다 된 것이다.<br />
+지메일을 열어서 메일을 날려보자.</p>
+<p><img src="/images/img_cc19d008a7256f80.png" alt="" />
+ID 영역에는 뭘 넣어도 된다. 중요한건 도메인이다.</p>
+<p>전송하면 대략 몇초 뒤에 바로 SQS에 메세지가 쌓일텐데</p>
+<p><img src="/images/img_adb972adeca0f62e.png" alt="" /></p>
+<p><img src="/images/img_45d32a1481b41a98.png" alt="" /></p>
+<p>까보면 이런 식으로 JSON 데이터가 들어있을 것이다.</p>
+<p><img src="/images/img_4070a260d3aa3c64.png" alt="" />
+타이틀이나 수신자는 그냥 들어있어서 보면 되는데, content는 MIME (Multipurpose Internet Mail Extensions)라는 포맷으로 인코딩되어있어서 파싱을 거쳐야 한다.</p>
+<p>다음은 파이썬으로 파싱을 수행하는 간단한 코드다.</p>
+<p><img src="/images/img_e2b96b6c7389106d.png" alt="" />
+넣어서 돌려보면</p>
+<br>
+<p><img src="/images/img_af8d2c60801fad22.png" alt="" />
+방금 메일에 썼던 내용이 보일 것이다.</p>
+<p>이렇게 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/ses/latest/dg/receiving-email.html">https://docs.aws.amazon.com/ko_kr/ses/latest/dg/receiving-email.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224166966253/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 13 =&gt; 18 마이그레이션 노트 (AWS RDS)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224163430397/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>SMTP와 메일 서버<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

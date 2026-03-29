@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] 맵리듀스(map reduce) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223092993008/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] 맵리듀스(map reduce)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223092993008/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-05-04T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223092993008/">[MongoDB] 맵리듀스(map reduce)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-04T00:00:00+00:00"><time datetime="2023-05-04T00:00:00+00:00">2023.05.04</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="175 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223092993008" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>맵리듀스는 초대형데이터를 처리하기 위한 방법론이다.</p>
+<p>대표적인 맵리듀스 전용 데이터베이스 시스템으로는 Hadoop이 있는데, 몽고DB도 제한적이지만 이러한 방법을 제공한다.<br />
+하둡처럼 디스크에 잘 올라가지도 않는 초대형 데이터를 다루는데는 한계가 있지만, 뭔가 그 아래의 애매한 지점에서는 대안으로 사용할만하다.</p>
+<p>mongodb 5.0부터는 이것 대신 aggregation-pipeline을 사용하는 것을 권장한다. 그쪽이 더 빠르고 최적화도 잘 된다고 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gujo">구조</h2>
+<p>map reduce는 크게 3가지 구성요소로 이루어진다.<br />
+데이터를 가져오는 조건인 query, 최초 데이터를 가공하는 map, 데이터를 그루핑해서 축소하는 reduce다.<br />
+아래는 그 예시다.</p>
+<p><img src="/images/img_70030d5e311fbe65.png" alt="" /></p>
+<p>직접 한번 해보자.<br />
+우선 아래와 같이 데이터 세팅을 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span>orders</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// random datas</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// random datas</span></span>
+<span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span>orders</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insertMany</span><span>([</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 154</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T08:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 155</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 150</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 156</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5500</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 157</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 440</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 158</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 510</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 159</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 520</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1999</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 100</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T08:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 155</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 150</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 44</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 50</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 14</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 12</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 330</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 14</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 140</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    buyer_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    product_id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1500</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    price</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 52</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    quantity</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    date</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(</span><span style="color: #A6E3A1;">&quot;2014-03-01T09:00:00Z&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span>])</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_04eaf840f8771b91.png" alt="" /></p>
+<p>그리고 구매자(buyer_id)를 기준으로 해서 총 얼마나 돈을 썼는지 구하는 맵리듀스를 구현해봤다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span>orders</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">mapReduce</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  function</span><span style="color: #9399B2;"> () {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    emit</span><span>(</span><span style="color: #F38BA8;">this</span><span style="color: #94E2D5;">.</span><span>buyer_id</span><span style="color: #9399B2;">, {</span><span> price</span><span style="color: #94E2D5;">:</span><span style="color: #F38BA8;"> this</span><span style="color: #94E2D5;">.</span><span>price</span><span style="color: #9399B2;">,</span><span> quantity</span><span style="color: #94E2D5;">:</span><span style="color: #F38BA8;"> this</span><span style="color: #94E2D5;">.</span><span>quantity</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  function</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">key</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> values</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> values</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">reduce</span><span>(</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">acc</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> curr</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span> acc</span><span style="color: #94E2D5;"> +</span><span> curr</span><span style="color: #94E2D5;">.</span><span>price</span><span style="color: #94E2D5;"> *</span><span> curr</span><span style="color: #94E2D5;">.</span><span>quantity</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span><span> out</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;temp&quot;</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>첫번째 인자인 map에서는, emit으로 reduce에 보낼 key-value 쌍을 보낸다.<br />
+그리고 두번째 인자는 reduce에서는 각 키별로 값을 어떻게 aggregate할지를 구현한다. 여기서는 각 구매 금액을 단가*개수로 곱해서 전부 더하도록 했다.<br />
+세번째 인자에서 out은 결과물을 저장할 collection명을 지정한다.</p>
+<p><img src="/images/img_dc57ba8676a1f8f9.png" alt="" />
+저대로 실행하면</p>
+<br>
+<p><img src="/images/img_3f0d651c8aa8773c.png" alt="" />
+이렇게 저 컬렉션을 통해 조회가 가능해질 것이다.</p>
+<p>이런 식으로 쓰면 된다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/core/map-reduce/">https://www.mongodb.com/docs/manual/core/map-reduce/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223094273281/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Terraform] 로컬 변수<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223093745416/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Datadog] 개요<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

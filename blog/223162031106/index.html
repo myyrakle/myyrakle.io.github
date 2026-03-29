@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Java] 자바의 제너릭은 반쪽짜리다. | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223162031106/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Java] 자바의 제너릭은 반쪽짜리다.">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223162031106/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-07-21T00:00:00+00:00">
+    <meta property="article:tag" content="Java">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223162031106/">[Java] 자바의 제너릭은 반쪽짜리다.</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-07-21T00:00:00+00:00"><time datetime="2023-07-21T00:00:00+00:00">2023.07.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="205 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/java/">Java</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223162031106" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>자바의 제너릭 시스템에는 이상한 제한이 있다.</p>
+<p>ArrayList<T> 같은 제너릭 컬렉션을 써봤다면 알텐데, 제너릭 타입으로 int, char 같은 프리미티브 타입이 들어가지 못한다.</p>
+<p>왜일까? 그건 자바가 이상한 방식으로 땜빵치듯이 Generic을 구현해놨기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="daebubunyi-generic-siseutem-uriga-gidaehaneun-geos">대부분의 Generic 시스템 (우리가 기대하는 것)</h2>
+<p>원래라면 제너릭 시스템들은 컴파일 단계에서 모든 치환을 완료하기를 기대한다.<br />
+C++이나 Rust, C# 등의 대부분 언어들이 그렇게 동작한다.</p>
+<p>예를 들어, C++에서는 다음과 같이 제너릭 타입을 정의하곤 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>template</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> T</span><span>&gt; </span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">class ArrayList</span><span> </span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    T</span><span style="color: #94E2D5;">*</span><span> array</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그리고 다음과 같이 제너릭 구체화를 시도하면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ArrayList</span><span style="color: #94E2D5;">&lt;</span><span>int</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p>컴파일러가 제너릭 템플릿을 기반으로, int를 채워넣은 "사본"을 생성한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> ArrayList_int</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    int</span><span style="color: #94E2D5;">*</span><span> array</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이게 보통이다.</p>
+<br>
+<br>
+<br>
+<h2 id="javayi-generic-siseutem">Java의 Generic 시스템</h2>
+<p>엄밀하게 말하면 JVM은 제너릭을 지원하지 않는다.<br />
+그저 Java 컴파일러에 의해서 치환이 될 뿐이다.</p>
+<p>근데 Java는 매우 신기한 방법으로 제너릭 치환을 처리한다.<br />
+아래와 같은 제너릭 정의가 있고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> ArrayList</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">T</span><span style="color: #89DCEB;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    T[] array</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>구체화를 한다면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> list</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> ArrayList</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">Integer</span><span style="color: #89DCEB;">&gt;</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> first</span><span style="color: #94E2D5;"> =</span><span> list</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(</span><span style="color: #FAB387;">0</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>자바는 T를 Integer로 바꾸는게 아니라, 무작정 Object로 바꿔버린다!</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> ArrayList</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    Object[] array</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그리고 런타임에 Integer로 캐스팅을 해버리는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> list</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> ArrayList</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> first</span><span style="color: #94E2D5;"> =</span><span> (Integer) list</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(</span><span style="color: #FAB387;">0</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그래서 사실 그냥 Object 버전의 컬렉션을 쓰는 것에 비해 성능상의 이점은 없다고 할 수 있겠다.</p>
+<p>어쨌든 제너릭처럼 동작하고, 사용에 큰 문제는 없다.</p>
+<p>다만 리플렉션을 적용할때 꼬일 수 있는 상황이 있을 수 있고, 시스템 자체에 일관성이 떨어지는 게 단점이다.<br />
+단언은 못하겠지만 아마 최적화도 좀 구릴 것이고...</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/339699/java-generics-type-erasure-when-and-what-happens">https://stackoverflow.com/questions/339699/java-generics-type-erasure-when-and-what-happens</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223162023261/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] cargo-fuzz: Fuzzing Test<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223162050509/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] crate: sqlx<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

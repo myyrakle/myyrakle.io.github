@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] async 클로저 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223770882159/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] async 클로저">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223770882159/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-02-23T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223770882159/">[Rust] async 클로저</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-23T00:00:00+00:00"><time datetime="2025-02-23T00:00:00+00:00">2025.02.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="182 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223770882159" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust 1.85 (Rust 2024)부터 async clusure 기능이 추가되었다.<br />
+단편적으로 보면 그냥 클로저의 async 버전 숏컷이 생겼다고 할 수도 있는데, 불편했던 많은 점들이 해소가 된다.</p>
+<p>과거에 있었던 문제들이 궁금하다면, 별도 포스트를 참조하길 바란다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223745667272">https://blog.naver.com/sssang97/223745667272</a></p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>기본적인 사용법은 일반 클로저와 다르지 않다.<br />
+async만 붙이면 되고, 함수 호출하듯이 호출하면 된다.<br />
+Future 반환이라 await을 걸어야 한다는 것만 빼면 다를것은 없다.</p>
+<p><img src="/images/img_b7cbf05c150660bd.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="async-keulrojeoreul-maegaebyeonsuro-jeondalbadgi">async 클로저를 매개변수로 전달받기</h2>
+<p>원래라면 이 부분이 async Rust에서 꽤 골치아픈 부분이었는데, async 클로저의 도입으로는 별로 머리 굴릴 것 없이 작성할 수 있게 되었다.<br />
+아마 일반 함수를 콜백으로 받을때 Fn 같은 함수용 트레잇을 사용했던 것을 기억할 것이다.</p>
+<p>async 클로저나 함수를 받길 원한다면, Fn에 1:1로 대응되는 async용 트레잇인 AsyncFn를 사용해서 타입 제약을 표현할 수 있다.</p>
+<p><img src="/images/img_cb751f084c06726c.png" alt="" />
+이러면 "i32 인자를 2개 받고, Result<i32>을 반환하는 async 함수"를 표현하는 함수의 타입이 된다.<br />
+반환타입에 Future를 명시할 필요는 없다.<br />
+AsyncFn 외에도 FnOnce, FnMut와 대응되는 AsyncFnOnce, AsyncFnMut가 따로 존재한다.</p>
+<p>그리고 사용할 때는 그냥 async 클로저를 넘겨서 사용하면 된다.</p>
+<p><img src="/images/img_6cff1e54e009ccbe.png" alt="" /></p>
+<p><img src="/images/img_23af528084527120.png" alt="" />
+그러면 잘 동작하는 것을 볼 수 있을 것이다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223772135638/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana Tempo] 캐싱 설정 (with Memcached)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223769611730/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] No-Panic Rust.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

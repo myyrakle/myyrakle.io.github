@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] cargo-fuzz: Fuzzing Test | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223162023261/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] cargo-fuzz: Fuzzing Test">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223162023261/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-07-21T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223162023261/">[Rust] cargo-fuzz: Fuzzing Test</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-07-21T00:00:00+00:00"><time datetime="2023-07-21T00:00:00+00:00">2023.07.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="275 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223162023261" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/221718437043">https://blog.naver.com/sssang97/221718437043</a><br />
+fuzzing 테스트는 무작위의 값을 기반으로 테스트를 수행하는 것을 말한다.</p>
+<p>cargo-fuzz는 libFuzzer와 llvm 수준 지원을 사용해서 fuzzing 테스트를 구현하는데, 현재 Windows에서는 지원되지 않는 것 같다. 리눅스와 MacOS에서 지원된다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajeon-jogeon">사전 조건</h2>
+<p>리눅스나 MacOS여야만 한다. Windows는 WSL를 써도 안된다.</p>
+<p>nightly 버전이 필요하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>rustup</span><span style="color: #CBA6F7;"> default</span><span> nightly</span></span></code></pre>
+<p><img src="/images/img_5be8afcb84921086.png" alt="" /></p>
+<p>그리고 C++11을 지원하는 컴파일러도 설치되어 있어야 한다.<br />
+보통은 g++이 되겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get install g</span><span style="color: #94E2D5;">++</span></span></code></pre>
+<p>그리고 cli 도구를 설치한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo install cargo</span><span style="color: #94E2D5;">-</span><span>fuzz</span></span></code></pre>
+<p><img src="/images/img_2d82127c8f295e30.png" alt="" /></p>
+<p>이렇게 실행이 되면 잘 깔린 것이다.</p>
+<p><img src="/images/img_23c8e6ce3411d365.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="fuzz-seoljeong">fuzz 설정</h2>
+<p>우선 cargo fuzz init으로 fuzz 구성을 초기화한다.</p>
+<p><img src="/images/img_2115c4eb52fd6d20.png" alt="" /></p>
+<p>그럼 list로 조회가 가능해진 구성이 하나 생겼을 것이고</p>
+<p><img src="/images/img_bbf517133c8712bc.png" alt="" /></p>
+<p>실제 디렉터리에도 생겨났을 것이다.</p>
+<p><img src="/images/img_c7e2bd3e71546574.png" alt="" />
+이제 저기에다가 테스트를 띄우면 된다.<br />
+단위테스트 짜듯이 실패하면 panic을 날리면 되는 것이다.</p>
+<p>그리고 테스트 실행은 이렇게 할 수 있다. run 명령으로 fuzz 구성을 호출하면 된다.</p>
+<p><img src="/images/img_0aff3e2a8a415870.png" alt="" /></p>
+<p><img src="/images/img_5dbc6fe8c7a8a560.png" alt="" />
+그러면 계속해서 무작위 값을 쑤셔넣어서 테스트를 반복할 것인데, 아무것도 없으니 테스트는 다 통과될 것이다.</p>
+<p>이제 테스트를 한번 작성해보자.<br />
+잘못된 로직을 가진 add 함수다.</p>
+<p><img src="/images/img_90301b5fa92456ea.png" alt="" /></p>
+<p>그리고 저걸 아래와 같은 형태로 fuzz에 적합한 테스트를 적용해봤다. 교환법칙이 잘 적용되는지 확인하는 것이다.</p>
+<p><img src="/images/img_56949922e6f3955b.png" alt="" />
+저 fuzz_target의 파라미터에는 타입을 적당히 아무거나 넣어도 그 타입에 맞는 무작위 값을 알아서 넣어준다.</p>
+<p>그리고 실행해보면</p>
+<p><img src="/images/img_8fab22b6e094580a.png" alt="" />
+당연히 실패할 것이다.<br />
+어떤 입력값에서 실패했는지도 알려준다.</p>
+<p>다시 수정해서 해보겠다.<br />
+이제는 될까?</p>
+<p><img src="/images/img_6c7ff5207e12cf3f.png" alt="" /></p>
+<p><img src="/images/img_f773b09c8d867ebb.png" alt="" />
+안된다.<br />
+저 2개의 입력값을 더해보면, 오버플로가 발생하기 때문이다.</p>
+<p>그래서 정말 안전하게 add를 구현하려면 아래와 같은 형태여야 할 것이다. checked_add를 사용하거나..</p>
+<p><img src="/images/img_c8d11d8fd64ef246.png" alt="" /></p>
+<p>그러면 이제 패닉 없이 통과될 것이다.</p>
+<p><img src="/images/img_10a3a405f7e6fa18.png" alt="" />
+이런 느낌으로 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://rust-fuzz.github.io/book/cargo-fuzz/setup.html">https://rust-fuzz.github.io/book/cargo-fuzz/setup.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223162920027/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] shell: 쉘 프로그래밍-1<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223162031106/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Java] 자바의 제너릭은 반쪽짜리다.<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

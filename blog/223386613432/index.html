@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] ObjectID | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223386613432/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] ObjectID">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223386613432/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-03-18T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223386613432/">[MongoDB] ObjectID</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-18T00:00:00+00:00"><time datetime="2024-03-18T00:00:00+00:00">2024.03.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="245 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223386613432" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>MongoDB는 고유의 Unique ID 생성 매커니즘을 사용한다.<br />
+애초부터 분산환경을 고려하고 설계되었기에, RDB들이 흔히 사용하는 incremental 값이 아니라 랜덤으로 생성되는 uuid를 채택했다.</p>
+<p>ObjectId는 총 12바이트로 구성되는데, 빅 엔디안 기준으로 4바이트-5바이트-3바이트로 3개 계층으로 구성된다.</p>
+<p><img src="/images/img_8d6db23cd27cff8f.png" alt="" /></p>
+<ol>
+<li>첫번째 4바이트 영역은 초 단위의 타임스탬프다.</li>
+<li>두번째 5바이트 영역은 랜덤값이다. 해당 머신 수준에서 고유성이 보장된다.</li>
+<li>세번째 3바이트 값은 단순한 incremental 값이다.</li>
+</ol>
+<p>이러한 구조 덕분에 분산 환경에서 각각의 노드들이 독립적으로 id를 생성할 수 있고, 그와 동시에 약간의 시간순 정렬도 가능하다.<br />
+타임스탬프가 초 단위이기 때문에 느슨하게는 정렬을 할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongbeob">사용법</h2>
+<p>컬렉션에 데이터를 집어넣을때 _id를 지정하지 않으면 자동으로 ObjectId 값이 부여된다.</p>
+<p><img src="/images/img_dded2e437aef03bf.png" alt="" /></p>
+<p>ObjectId() 함수를 사용하면 임의로 생성할 수도 있고</p>
+<p><img src="/images/img_8216a53a5c9a07d3.png" alt="" /></p>
+<p>파라미터를 넘기면 문자열을 ObjectId로 변환할 수도 있다.</p>
+<p><img src="/images/img_a57918fa589531be.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="ddeudeobogi">뜯어보기</h2>
+<p>한번 설명한대로 생성이 되는건지 역분석을 해보자.<br />
+방금 내가 생성한 ObjectId는 이건데</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>65f71bcb0755d426b448106a</span></span></code></pre>
+<p>분해하면 이런 구조가 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>65</span><span style="color: #89B4FA;font-style: italic;">f71bcb</span><span>(타임스탬프) 0755</span><span style="color: #89B4FA;font-style: italic;">d426b4</span><span>(랜덤) 48106</span><span style="color: #89B4FA;font-style: italic;">a</span><span>(inc)</span></span></code></pre>
+<p>그걸 그대로 정수로 변환해서 타임스탬프로 계산해보면</p>
+<p><img src="/images/img_ed11cdd470ed0fcd.png" alt="" />
+딱 방금 시간이 나온다.</p>
+<br>
+<p><img src="/images/img_cfed6541d8d05cae.png" alt="" />
+나머지 숫자들도 이렇게 찍힌다.</p>
+<p>inc 값이 기대대로 동작하는지 확인하기 위해서 바로 하나 더 만들어보자.</p>
+<p><img src="/images/img_f5b99e5de13be27c.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>65f71cad 0755d426b4 48106b</span></span></code></pre>
+<p>이번엔 이렇게 나왔는데</p>
+<br>
+<p><img src="/images/img_fbd4a08549d79dba.png" alt="" />
+역시 기대한대로 1이 증가한 값이 반환되었다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/reference/method/ObjectId/">https://www.mongodb.com/docs/manual/reference/method/ObjectId/</a><br />
+<a rel="external" href="https://www.mongodb.com/community/forums/t/objectid-guarantees-absolute-insertion-order-if-just-one-replica-set-and-no-sharding-throughout-lifetime/16902/3">https://www.mongodb.com/community/forums/t/objectid-guarantees-absolute-insertion-order-if-just-one-replica-set-and-no-sharding-throughout-lifetime/16902/3</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223386609915/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] itertools<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223387359335/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] gobreaker<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

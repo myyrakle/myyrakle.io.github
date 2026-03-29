@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] DynamoDB로 캐시하기 (with TTL) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223346539870/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] DynamoDB로 캐시하기 (with TTL)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223346539870/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-02-07T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223346539870/">[AWS] DynamoDB로 캐시하기 (with TTL)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-02-07T00:00:00+00:00"><time datetime="2024-02-07T00:00:00+00:00">2024.02.07</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="385 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223346539870" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>내가 생각하기에, AWS 환경에서 가장 캐싱용으로 가장 적절한 DB는 다이나모DB다.</p>
+<p>경험상, 특별한 경우가 아니라면 Redis 같은 비싼 자원은 필요하지 않다.<br />
+대부분의 데이터 캐싱 사례에서는 한자릿수 밀리세컨드 수준의 레이턴시면 충분하고, 엄격한 트랜잭션이나 동시성 보장이 필요하지도 않기 때문이다.</p>
+<p>게다가 DynamoDB는 온디맨드로 사용할 경우 매우 저렴한데다, 데이터의 영속성 또한 보장된다. 껐다 켠다고 데이터 날라가고 그런거는 없단 것이다.<br />
+TTL 옵션도 제공한다. 다만, 다른 DB들에서 제공하는 TTL만큼 민첩하지는 않다. TTL에 의미를 담아야 하는 경우라면 TTL 처리를 직접 구현해야 할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="teibeul-mandeulgi">테이블 만들기</h2>
+<p>먼저 테이블을 만든다.</p>
+<p><img src="/images/img_1545ed51c1e004e5.png" alt="" />
+설정을 복잡하게 줄 것은 없다. 그냥 키만 적당히 잘 정의해준다.<br />
+캐싱은 단순한 K/V 구조만으로 충분하고, 나머지 타입은 그때그때 동적으로 주입해도 된다.</p>
+<br>
+<p><img src="/images/img_f183284b9c8ef33e.png" alt="" />
+돈이 넘쳐나는게 아니라면 온디맨드로 만든다.<br />
+이건 프로비저닝 비용이 없는데, 그런 것 치고도 사용량이나 저장비용이 매우 저렴한 편이다.</p>
+<br>
+<p><img src="/images/img_aff7054128fb268e.png" alt="" /></p>
+<p><img src="/images/img_a275348261b21c10.png" alt="" />
+만들면, 이런식으로 생성될 것이다.</p>
+<p>한번 코드를 통해 접근해보겠다. 예제코드는 Rust다. 특별한 이유는 없다.</p>
+<p><img src="/images/img_54715275a131ef80.png" alt="" />
+cache라는 테이블에 key:value로 값을 넣고 있다.</p>
+<br>
+<p><img src="/images/img_e5a2759833ab3a87.png" alt="" />
+그러면 실제로 DB에 저장이 될 것이고</p>
+<br>
+<p><img src="/images/img_2df5a093429a9f69.png" alt="" /></p>
+<p><img src="/images/img_2f3a8d93b203ad39.png" alt="" />
+또 키를 통해 꺼내올 수도 있을 것이다. 이정도 느낌으로만 쓰면 딱 적당하다.<br />
+이외에도 필터옵션이 이것저것 있고 옵션이 꽤 있는 편인데, 그렇게 복잡하게 쓰는건 별로 다이나모스럽지는 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="ttl-seoljeonghagi">TTL 설정하기</h2>
+<p>DynamoDB는 자체적으로 TTL(Time to live) 기능을 제공한다.<br />
+만료시간이 지나면 자동으로 삭제하도록 하는 기능이다. 이걸로 인한 추가 비용은 따로 없다.</p>
+<p>다만 좀 기능적으로 부실한 부분이 있는데, 만료시간이 지나도 바로바로 삭제되는게 아니라는 점이다. 삭제 시점은 명확하지 않고, 만료시간이 지난 때를 기준으로 48시간 안에 삭제하는걸 보장한다고 주장은 한다.<br />
+이렇게 느슨하게 구성해도 문제 없는 경우면 써도 괜찮겠다.</p>
+<p>추가 설정 탭으로 이동하면</p>
+<p><img src="/images/img_877d392f4ec5f198.png" alt="" />
+TTL 항목이 따로 있다.</p>
+<br>
+<p><img src="/images/img_d11cb46f93a18aee.png" alt="" />
+켜준 다음에 TTL용으로 사용할 필드를 지정해준다. 그러면 저걸 기준으로 해서 삭제를 하는 것이다.<br />
+저 필드는 Number 타입이어야 한다. 키처럼 필수 필드는 아니다.</p>
+<p>그리고 데이터를 밀어넣을때 아까 지정했던 TTL 필드로 만료시간을 밀어넣으면 된다.</p>
+<p><img src="/images/img_df4dc3f47913f131.png" alt="" />
+초 단위의 유닉스 타임스탬프고, 정수로 넣어주면 된다.</p>
+<br>
+<p><img src="/images/img_f1314a6aa0effd13.png" alt="" />
+밀어넣고 좀 기다려보면</p>
+<br>
+<p><img src="/images/img_32e5513a9df4d58a.png" alt="" />
+실제로 삭제가 될 것이다. 난 기다리다 못해서 자고 다음날에 확인했다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/time-to-live-ttl-before-you-start.html">https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/time-to-live-ttl-before-you-start.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/time-to-live-ttl-how-to.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/time-to-live-ttl-how-to.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223350073856/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.76.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223347574452/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] thread park<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

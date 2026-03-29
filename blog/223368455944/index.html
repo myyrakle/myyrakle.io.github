@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Cloudfront: Function | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223368455944/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Cloudfront: Function">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223368455944/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-02-29T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223368455944/">[AWS] Cloudfront: Function</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-02-29T00:00:00+00:00"><time datetime="2024-02-29T00:00:00+00:00">2024.02.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="679 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223368455944" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Cloudfront Function은 Cloudfront에서 요청이나 응답을 가로채서 조작할 수 있는 엣지 수준 부가기능이다.</p>
+<p><img src="/images/img_dd421511b0478916.png" alt="" />
+Lambda Edge와도 비슷한 느낌으로 동작하나, 조금 다르다.</p>
+<p>**Lambda Edge **</p>
+<ol>
+<li>
+<p>Lambda Edge는 이미지 최적화 같은 상당히 무거운 연산을 포함한 기능을 구현할때 적합하다.</p>
+</li>
+<li>
+<p>응답이나 요청 등 다양한 시점에 트리거가 가능하고, 확장성이 뛰어나다.</p>
+</li>
+<li>
+<p>그대신 무겁고 비싼 편이다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p><strong>Cloudfront Function</strong></p>
+<ol>
+<li>
+<p>Function은 간단한 HTTP 응답 헤더 조작이나 리디렉션 같은 매우 가벼운 조작에 적합하다.</p>
+</li>
+<li>
+<p>매우 작은 코드만 올릴 수 있고, 제한적인 대신에 빠르고, 훨씬 많은 엣지에 배포되어 물리적으로도 빠르다. 1밀리초 미만의 실행시간을 보장한다.</p>
+</li>
+<li>
+<p>비용이 저렴하다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>아래는 차이점을 비교한 도표다.</p>
+<p><img src="/images/img_28a9c2171d1b3e9f.png" alt="" />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/aws/introducing-cloudfront-functions-run-your-code-at-the-edge-with-low-latency-at-any-scale/">https://aws.amazon.com/ko/blogs/aws/introducing-cloudfront-functions-run-your-code-at-the-edge-with-low-latency-at-any-scale/</a></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://aws.amazon.com/ko/cloudfront/pricing/">https://aws.amazon.com/ko/cloudfront/pricing/</a></p>
+<br>
+<p><img src="/images/img_77a04ed0b4de227a.png" alt="" />
+비용은 저렴한 편이다. 단순히 횟수로만 비용을 부과한다.<br />
+100만건당 0.1 달러를 뜯는다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-dagugeo-ceorihagi">예제: 다국어 처리하기</h2>
+<p>Cloudfront 헤더와 Function 기반의 리디렉션을 응용해서 다국어 라우팅을 하는 방법을 보이겠다.<br />
+여기서는 뷰어 요청 트리거만을 응용해서 구현이 가능하다. 굳이 오리진 데이터를 받아오기 전에도 URI나 국가 정보는 다 알 수 있기 때문이다.<br />
+오리진에서 반환된 응답 헤더같은걸 조작할 일이 없다면 뷰어 요청 트리거만으로 충분하다.</p>
+<br>
+<h4 id="1-hamsu-mandeulgi">1. 함수 만들기</h4>
+<p>먼저 Cloudfront 콘솔로 이동해서</p>
+<p><img src="/images/img_78531b5393282d1a.png" alt="" />
+Function 탭에 진입</p>
+<p>생성창으로 들어간다.</p>
+<p><img src="/images/img_f17016024f259366.png" alt="" />
+이름 적당히 짓고 만들면 된다.</p>
+<br>
+<p><img src="/images/img_b6aa18daca6536f5.png" alt="" />
+이렇게 뜨면 된 것이다.</p>
+<br>
+<br>
+<h4 id="2-hamsu-kodeu-jagseonghagi">2. 함수 코드 작성하기</h4>
+<p>Function 콘솔에 들어가면 AWS Lambda 처럼 자체적인 에디터를 바로 제공한다. 그리 편하진 않지만</p>
+<p><img src="/images/img_6715691028b70776.png" alt="" />
+개발, 라이브 2개의 스테이지를 기본으로 제공한다.</p>
+<p>먼저 개발 코드에다가 아래 코드를 집어넣자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">function</span><span style="color: #89B4FA;font-style: italic;"> handler</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> request</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">.</span><span>request</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> supported_countries</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;de&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;it&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;fr&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;kr&quot;</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  if</span><span> (request</span><span style="color: #94E2D5;">.</span><span>uri</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">substr</span><span>(</span><span style="color: #FAB387;">3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #94E2D5;"> !=</span><span style="color: #A6E3A1;"> &quot;/&quot;</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> headers</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">.</span><span>headers</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> newUri</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> country</span><span style="color: #94E2D5;"> =</span><span> headers[</span><span style="color: #A6E3A1;">&quot;cloudfront-viewer-country&quot;</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (country)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      const</span><span> countryCode</span><span style="color: #94E2D5;"> =</span><span> country</span><span style="color: #94E2D5;">.</span><span>value</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">toLowerCase</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      if</span><span> (supported_countries</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">includes</span><span>(countryCode))</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        newUri</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;/&quot;</span><span style="color: #94E2D5;"> +</span><span> countryCode</span><span style="color: #94E2D5;"> +</span><span> request</span><span style="color: #94E2D5;">.</span><span>uri</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (newUri</span><span style="color: #94E2D5;"> ===</span><span style="color: #CBA6F7;"> undefined</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      const</span><span> defaultCountryCode</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;en&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>      newUri</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;/&quot;</span><span style="color: #94E2D5;"> +</span><span> defaultCountryCode</span><span style="color: #94E2D5;"> +</span><span> request</span><span style="color: #94E2D5;">.</span><span>uri</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>      statusCode</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 302</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      statusDescription</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Found&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      headers</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        location</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span> value</span><span style="color: #94E2D5;">:</span><span> newUri</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  return</span><span> request</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_77bd3390c342ce3e.png" alt="" />
+로직은 그리 복잡하지 않다.</p>
+<ol>
+<li>이미 다국어 라우팅이 된 /de... 같은 경로라면 request.uri.substr(3, 1) != "/"에 걸려서 리디렉션 없이 그대로 반환한다. 아니라면 다국어 라우팅 시도한다.</li>
+<li>Cloudfront에서 자체적으로 국가를 구분하기 위해 받는 cloudfront-viewer-country라는 헤더를 가져다가, 국가를 구분한다. 국가코드는 ISO 표준에 기반한다.</li>
+<li>국가코드가 없거나 모르는거면 영어 /en로 라우팅한다.</li>
+<li>그렇게 해서 독일, 이태리, 불란서, 한국이 들어오면 /kr/<em>, /de/</em>, ... 같은 경로로 리디렉션하도록 구성한 것이다. (location 헤더 활용)</li>
+</ol>
+<p>여기서는 location으로 떠넘겨서 uri까지 변경되게 하는 방법을 취했지만, request.uri를 변경해서 반환하는 방법도 있다. 그러면 리디렉션 없이 S3 오리진만 바뀐 채 동일한 uri로 가져올 수도 있을 것이다.</p>
+<p>아무튼 저렇게 넣어서 변경사항을 저장하고, 테스트 기능을 활용해서 잘 동작하는지 확인해보자.</p>
+<p><img src="/images/img_fa0d445912ce9a47.png" alt="" /></p>
+<p><img src="/images/img_09cbd5597b2d9263.png" alt="" />
+대충 아무것도 안넣었을때는 /en로 던져주는 것을 볼 수 있고</p>
+<br>
+<p><img src="/images/img_d0cf1c4629668ec6.png" alt="" />
+넣어서 쏘면 넣은대로 나올 것이다.</p>
+<p>그리고 게시 버튼을 눌러서 라이브로 배포하면 끝이다.</p>
+<p><img src="/images/img_5cdcbac08535b394.png" alt="" /></p>
+<p><img src="/images/img_35a41fe5c5590150.png" alt="" /></p>
+<br>
+<br>
+<h4 id="3-teseuteu-hwangyeong-guseonghagi-s3-cloudfront">3. 테스트 환경 구성하기 (S3, Cloudfront)</h4>
+<p>일단 Function은 보조적인 부가기능에 불과하고, 확인을 위해서는 테스트셋을 세팅해야 한다.</p>
+<p>먼저 다국어에 해당하는 index.html 파일들을 s3 버킷에 올려뒀다.</p>
+<p><img src="/images/img_73729d4036deb514.png" alt="" /></p>
+<p><img src="/images/img_5bc63306d6f6b6bf.png" alt="" />
+이정도로</p>
+<p>Cloudfront 캐시설정도 좀 바꿔줘야 한다.<br />
+cloudfront-viewer-country라는 특수 헤더를 Cloudfront가 오리진에 전달해줘야 그걸 Function이 받아서 처리할 수 있는건데, 기본 캐시 설정은 헤더를 전부 씹기 때문이다.</p>
+<p>근데 완성형으로 제공해주는 정책 중에 cors 설정과 cloudfront 헤더 설정이 동시에 들어있는게 없어서 또 직접 만들어야 한다. 짜증이 난다.</p>
+<p><img src="/images/img_4caa44979233d654.png" alt="" />
+정책 &gt; 원본 요청으로 이동</p>
+<br>
+<p><img src="/images/img_f7539a6cdfc96e27.png" alt="" />
+정책을 이렇게 적당히 만들어준다.<br />
+당장 필요한 Cloudfront Viewer Country 헤더와 S3 접근에 필요한 CORS 전용 헤더다. 헤더를 아무것도 넘기지 않을 때는 CORS가 발생하지 않아서 괜찮은데, 커스텀 헤더를 보내기 시작하면 이렇게 끼워줘야 하더라.</p>
+<p>"동작"의 편집창으로 이동해서</p>
+<p><img src="/images/img_a47037a01a06d7b0.png" alt="" /></p>
+<p>방금 만든 요청 정책을 끼워주고</p>
+<p><img src="/images/img_721b878a41f35d02.png" alt="" /></p>
+<p>함수도 뷰어 요청에다가 넣어준다.</p>
+<p><img src="/images/img_2b4dc5d92c8b207d.png" alt="" /></p>
+<p>이러면 세팅이 다 된 것이다.</p>
+<p>그러면 한국에서 접근할 때는</p>
+<p><img src="/images/img_f3d5c55391a43969.png" alt="" /></p>
+<p><img src="/images/img_7b948146dc9722bd.png" alt="" />
+한국어 버전으로 라우팅될 것이고</p>
+<p>미국에서 접근하면</p>
+<p><img src="/images/img_e9ebba7aad3e6b39.png" alt="" />
+영어</p>
+<p>불란서에서 접근하면</p>
+<p><img src="/images/img_d3629aec4b129983.png" alt="" />
+불어 버전으로 될 것이다.</p>
+<p>이런 느낌으로 사용하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/aws/introducing-cloudfront-functions-run-your-code-at-the-edge-with-low-latency-at-any-scale/">https://aws.amazon.com/ko/blogs/aws/introducing-cloudfront-functions-run-your-code-at-the-edge-with-low-latency-at-any-scale/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/48633610/how-do-i-get-cloudfront-viewer-country-to-appear-in-response-headers">https://stackoverflow.com/questions/48633610/how-do-i-get-cloudfront-viewer-country-to-appear-in-response-headers</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223372190032/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] GUI: egui<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223368478152/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Cloudfront: KeyValueStore<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

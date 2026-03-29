@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] CPU 성능 프로파일링: flamegraph | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223377768489/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] CPU 성능 프로파일링: flamegraph">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223377768489/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-03-09T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223377768489/">[Rust] CPU 성능 프로파일링: flamegraph</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-09T00:00:00+00:00"><time datetime="2024-03-09T00:00:00+00:00">2024.03.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="239 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223377768489" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>flamegraph는 perf 기반의 성능 프로파일링을 위한 그래프 도구다.<br />
+어떤 함수가 CPU 리소스를 얼마나 점유했는지 등을 가시화해서 성능 최적화에 도움을 주는 용도다.<br />
+메모리 프로파일링은 이걸로 안되는거같다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajeon-jogeon">사전 조건</h2>
+<p>먼저 linux kernel 측정 도구인 perf가 깔려있어야 한다. 아래 포스트를 참고한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223140670513">https://blog.naver.com/sssang97/223140670513</a></p>
+<p>그리고 몇가지 보안 수준 옵션을 좀 조절해줘야 한다.<br />
+아래 옵션을 -1로 깔아서 다 열어주고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo sysctl kernel</span><span style="color: #94E2D5;">.</span><span>perf_event_paranoid</span><span style="color: #94E2D5;">=-</span><span style="color: #FAB387;">1</span></span></code></pre>
+<p><img src="/images/img_5d8f2a3318b75093.png" alt="" /></p>
+<p>이것도 풀어준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>echo</span><span style="color: #FAB387;"> 0</span><span style="color: #94E2D5;"> |</span><span> sudo tee</span><span style="color: #94E2D5;"> /</span><span>proc</span><span style="color: #94E2D5;">/</span><span>sys</span><span style="color: #94E2D5;">/</span><span>kernel</span><span style="color: #94E2D5;">/</span><span>kptr_restrict</span></span></code></pre>
+<p><img src="/images/img_7f9c0b472c70ba8a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="cli-seolci">CLI 설치</h2>
+<p>cargo install을 통해 설치한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo install flamegraph</span></span></code></pre>
+<p><img src="/images/img_0fd8e1652268e1a9.png" alt="" />
+이거면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>먼저 성능 측정을 위한 간단한 서버를 작성해봤다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[dependencies]</span></span>
+<span class="giallo-l"><span>axum</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.7.4&quot;</span></span>
+<span class="giallo-l"><span>tokio</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> versopm</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;full&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[profile</span><span style="color: #94E2D5;">.</span><span>release]</span></span>
+<span class="giallo-l"><span>debug</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use axum</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>routing</span><span style="color: #94E2D5;">:</span><span>:get</span><span style="color: #9399B2;">,</span><span> Router</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // build our application with a route</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> app</span><span style="color: #94E2D5;"> =</span><span> Router::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(root))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/eat-cpu&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(eat_cpu))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // run our app with hyper, listening globally on port 3000</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> listener</span><span style="color: #94E2D5;"> =</span><span> tokio::net::TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:3000&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    axum</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">serve</span><span>(listener</span><span style="color: #9399B2;">,</span><span> app)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// basic handler that responds with a static string</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> root</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Hello, World!&quot;</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> eat_cpu</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut hash_set </span><span style="color: #94E2D5;">=</span><span> std::collections::HashSet::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0..1000000</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        hash_set</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insert</span><span>(i)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;cpu&quot;</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>그냥 간단한 API 하나와 cpu에 부하를 주는 API 하나만 뒀다.</p>
+<p>그리고 cargo flamegraph 명령을 통해서 코드를 실행한다.</p>
+<p><img src="/images/img_33dad6ad8312e81c.png" alt="" />
+이 명령은 내부적으로 cargo run을 돌려서 프로젝트를 실행한다.</p>
+<p>그러면 perf.data 프로파일 데이터가 쌓일 것이다.</p>
+<p><img src="/images/img_e7d9c521faf084c6.png" alt="" /></p>
+<p>이 상태에서 적절히 부하를 주면서 테스트를 해본다.</p>
+<p><img src="/images/img_934d66635f2b88d6.png" alt="" /></p>
+<p><img src="/images/img_71f463020c32156c.png" alt="" /></p>
+<p>테스트를 충분히 했다면 프로그램을 종료한다.</p>
+<p><img src="/images/img_7652ffdc175e4ca5.png" alt="" /></p>
+<p>그러면 프로젝트 루트 디렉터리에 가시화한 svg 이미지 파일이 export 되는데</p>
+<p><img src="/images/img_2782fd4d806aea8c.png" alt="" /></p>
+<br>
+<p><img src="/images/img_1ffe94c8dbf081fa.png" alt="" />
+이걸 통해서 실제 사용량을 가늠해볼 수 있는 것이다. 당연히 크고 높을 수록 영향도가 높다.</p>
+<br>
+<p><img src="/images/img_0cda74789bc5b1c4.png" alt="" />
+자세히 확대해서 보면 대부분의 부하가 eat_cpu 호출 스택에 모여있는 것을 볼 수 있다.</p>
+<p>이렇게 쫓아가면서 추적하고 최적화를 시작하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/flamegraph-rs/flamegraph">https://github.com/flamegraph-rs/flamegraph</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/21284906/perf-couldnt-record-kernel-reference-relocation-symbol">https://stackoverflow.com/questions/21284906/perf-couldnt-record-kernel-reference-relocation-symbol</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223377751198/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] tokio: tokio-console<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223377770239/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] Ubuntu: apt repository 제거<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

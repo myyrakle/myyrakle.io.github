@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] 시스템 로그 정리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224173373332/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] 시스템 로그 정리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224173373332/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2026-02-06T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224173373332/">[Clickhouse] 시스템 로그 정리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-06T00:00:00+00:00"><time datetime="2026-02-06T00:00:00+00:00">2026.02.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="192 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224173373332" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Clickhouse는 기본적으로 쿼리나 내부 로그를 아끼지 않고 푸짐하게 저장하는 편이다.<br />
+그래서 실컷 쓰다가 까보면 로그가 무시할 수 없을 정도로 쌓여있을 확률이 매우 높다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>    database</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    table</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(</span><span style="color: #89B4FA;font-style: italic;">sum</span><span>(bytes)) AS size</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    sum</span><span>(rows) AS rows</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    max</span><span>(modification_time) AS latest_modification</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    sum</span><span>(bytes) AS bytes_size</span></span>
+<span class="giallo-l"><span>FROM system</span><span style="color: #94E2D5;">.</span><span>parts</span></span>
+<span class="giallo-l"><span>WHERE active</span></span>
+<span class="giallo-l"><span>GROUP BY database</span><span style="color: #9399B2;">,</span><span> table</span></span>
+<span class="giallo-l"><span>ORDER BY bytes_size DESC</span></span>
+<span class="giallo-l"><span>LIMIT</span><span style="color: #FAB387;"> 20</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_8d13cc6592b67a5d.jpg" alt="" />
+몇백기가씩이나 먹고 있다.<br />
+part_log는 MergeTree의 내부 쓰기, 병합과 관련된 로그고, text_log는 일반 로그 전반, query_log는 개별 쿼리에 대한 기록이다.</p>
+<p>당연히 이런 로그 데이터들은 전체 보존을 할 필요까진 없으므로, 적절히 지워주는 것이 좋다.</p>
+<p>시원하게 다 날리려면 truncate를 날리는게 좋고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>TRUNCATE TABLE system</span><span style="color: #94E2D5;">.</span><span>text_log</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>TRUNCATE TABLE system</span><span style="color: #94E2D5;">.</span><span>part_log</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>TRUNCATE TABLE system</span><span style="color: #94E2D5;">.</span><span>trace_log</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>TRUNCATE TABLE system</span><span style="color: #94E2D5;">.</span><span>query_log</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>아니면 시간 기준으로 오래된것만 적당히 지울 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER TABLE system</span><span style="color: #94E2D5;">.</span><span>text_log DELETE WHERE event_date</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #89B4FA;font-style: italic;"> today</span><span>()</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 30</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE system</span><span style="color: #94E2D5;">.</span><span>part_log DELETE WHERE event_date</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #89B4FA;font-style: italic;"> today</span><span>()</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 30</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE system</span><span style="color: #94E2D5;">.</span><span>trace_log DELETE WHERE event_date</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #89B4FA;font-style: italic;"> today</span><span>()</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 30</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE system</span><span style="color: #94E2D5;">.</span><span>query_log DELETE WHERE event_date</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #89B4FA;font-style: italic;"> today</span><span>()</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 30</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_7a670358308c885c.png" alt="" />
+이건 partition 병합을 자동으로 하진 않으니 즉시 정리가 되진 않는다. 당장 비우길 원한다면 삭제한 이후에 optimize 돌려서 삭제된 행을 제거해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="ttl-seoljeong">TTL 설정</h2>
+<p>상기한 쿼리를 cron으로 돌려서 오래된 로그를 지우게 할 수도 있지만, 그냥 시스템 테이블 자체에 TTL을 걸 수도 있다. 다만 이 방법은, 일반 테이블이 아니라 시스템 테이블이라서 억지로 적용하더라도 재시작 시에 초기화된다는 단점이 있다.</p>
+<p>그래서 가장 확실한 방법은 clickhouse의 xml 설정파일을 수정하는 것이다.</p>
+<p>경로 찾아서 파일 만들어서 TTL 옵션을 넣고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>clickhouse</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #94E2D5;">.</span><span>d</span><span style="color: #94E2D5;">/</span><span>system_tables_ttl</span><span style="color: #94E2D5;">.</span><span>xml</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">&lt;?</span><span>xml version</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;1.0&quot;</span><span style="color: #94E2D5;">?&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">clickhouse</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #F5C2E7;">text_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span><span>system</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span><span>text_log</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span><span>7500</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span><span>ENGINE = MergeTree PARTITION BY (event_date) ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE SETTINGS ttl_only_drop_parts=1</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;/</span><span style="color: #F5C2E7;">text_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #F5C2E7;">query_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span><span>system</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span><span>query_log</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span><span>7500</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span><span>ENGINE = MergeTree PARTITION BY (event_date) ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE SETTINGS ttl_only_drop_parts=1</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;/</span><span style="color: #F5C2E7;">query_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #F5C2E7;">trace_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span><span>system</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span><span>trace_log</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span><span>7500</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span><span>ENGINE = MergeTree PARTITION BY (event_date) ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE SETTINGS ttl_only_drop_parts=1</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;/</span><span style="color: #F5C2E7;">trace_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #F5C2E7;">part_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span><span>system</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">database</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span><span>part_log</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">table</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span><span>7500</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #F5C2E7;">flush_interval_milliseconds</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span><span>ENGINE = MergeTree PARTITION BY (event_date) ORDER BY (event_time) TTL event_date + INTERVAL 14 DAY DELETE SETTINGS ttl_only_drop_parts=1</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">engine</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;/</span><span style="color: #F5C2E7;">part_log</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">clickhouse</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p>재부팅까지 해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl restart clickhouse</span><span style="color: #94E2D5;">-</span><span>server</span></span></code></pre>
+<p>이 적용은 당연히 다운타임이 수반된다.</p>
+<p>이렇게 하면 로그가 14일까지만 보존되고 제거될 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.ibm.com/docs/ko/instana-observability/1.0.309?topic=backend-managing-clickhouse-log-tables">https://www.ibm.com/docs/ko/instana-observability/1.0.309?topic=backend-managing-clickhouse-log-tables</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224174739370/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] Service Proxy<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224173423544/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>eBPF, Sidecar, Service Mesh의 미래.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

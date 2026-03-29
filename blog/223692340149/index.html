@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Cloudfront - 비용 최적화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223692340149/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Cloudfront - 비용 최적화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223692340149/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2024-12-13T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223692340149/">[AWS] Cloudfront - 비용 최적화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-12-13T00:00:00+00:00"><time datetime="2024-12-13T00:00:00+00:00">2024.12.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="248 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223692340149" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Cloudfront가 꽤 저렴한 편에 속하는 서비스이긴 하지만, 트래픽 크기가 늘거나, Lambda Edge 같은 것과 맞물려서 쓰이게 된다면 비용이 급상승하는 것은 드문 일이 아니다.</p>
+<p>Cloudfront에서 비용 최적화를 할 수 있는 경로를 몇가지 정리해본다,</p>
+<br>
+<br>
+<br>
+<h2 id="cache-jeongcaeg">Cache 정책</h2>
+<p>Cloudfront 리소스를 그냥 기본 옵션으로 생성했다면, 캐시 정책도 기본 옵션으로 생성될 것이다.</p>
+<p><img src="/images/img_a1ee9efecc6716f3.png" alt="" /></p>
+<p><img src="/images/img_bee8bedbc60f068f.png" alt="" />
+근데 문제는, 기본 캐시 정책의 캐시 만료 시간이 생각보다 짧다는 것이다.<br />
+기본 1일, 최소 1초, 최대 1년이다. 최대값을 따르는 경우는 생각보다 많지는 않은 것 같더라.</p>
+<p>아무튼 이게 단순 S3 매핑이면 문제가 그나마 덜할텐데, lambda edge 붙여서 이래저래 중간처리하는게 많다면 캐시 만료로 인한 재실행은 생각보다 비용에 큰 영향을 줄 수 있다.</p>
+<p><img src="/images/img_e7b4112877674015.png" alt="" />
+내 경우에는 캐시 TTL을 전부 1년으로 바꾸고</p>
+<br>
+<p><img src="/images/img_a30e3c9154c568fd.png" alt="" />
+꽤 가시적인 비용 향상을 얻었다. Lambda Edge 호출 수만 해도 절반 이하로 줄어들었다.</p>
+<br>
+<br>
+<br>
+<h2 id="moniteoring">모니터링</h2>
+<p>뭐든 마찬가지지만, 최적화를 하려면 상황을 볼 수 있는 지표가 필요하다.<br />
+Cloudfront도 분석 및 최적화를 위한 사용량 지표를 어느 정도 제공한다.</p>
+<p><img src="/images/img_8b1cbe7a3d230166.png" alt="" /></p>
+<p>실제로 많이 조회된 객체도 조회할 수 있고</p>
+<p><img src="/images/img_6b4118032ebe1df0.png" alt="" /></p>
+<p>이래저래 볼 수 있는게 좀 있다.</p>
+<p><img src="/images/img_7d01787c40e2253f.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="moniteoring-repeoreo-seoljeong">모니터링 - 레퍼러 설정</h2>
+<p>사용량을 줄이고 최적화를 하려면, 일단 어디서 많이 쓰는지부터 확인하는게 중요하다.<br />
+Cloudfront 모니터링 정보 중에는, 어떤 Referrer로 요청이 들어왔는지를 확인할 수 있는 지표가 있다.</p>
+<p><img src="/images/img_c9d04bf4e651e019.png" alt="" />
+브라우저에서는 Referrer를 자동으로 보내서 문제가 없는데, 모바일앱이나 서버 수준에서 Cloudfront 리소스를 다운받는게 있다면 Referrer를 명시적으로 보내줘야 저기에 찍힌다.</p>
+<p>그래서 저건 나쁜 지표다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://tutorialsdojo.com/validate-referrer-headers-using-cloudfront-function/">https://tutorialsdojo.com/validate-referrer-headers-using-cloudfront-function/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223693145148/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>쿠버 스펙 정리 문서.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223689292112/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>rupring v0.12.0<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

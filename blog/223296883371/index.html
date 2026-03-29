@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] RDS Aurora: Lambda로 CDC 걸기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223296883371/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] RDS Aurora: Lambda로 CDC 걸기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223296883371/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-12-19T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223296883371/">[AWS] RDS Aurora: Lambda로 CDC 걸기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-12-19T00:00:00+00:00"><time datetime="2023-12-19T00:00:00+00:00">2023.12.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="419 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223296883371" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>CDC(Change Data Capture:변경 데이터 캡쳐)는 DB 상에서 데이터가 변경될때마다 그걸 가져다 뭔가 액션을 취하는 기능 요소를 말한다.<br />
+변경을 기반으로 다른 데이터소스에 데이터를 동기화하거나, 웹훅을 쏜다거나 할때 자주 사용되는 패턴이다.</p>
+<p>이걸 구현할 때는 보통 Kafka 같은걸로 데이터 폴링하면서 쏘기도 하고 그러는데, RDS AuroraDB를 사용할 경우에는 이런 목표를 더욱 간단하게 달성할 수 있다. MySQL, PostgreSQL 둘 다 된다.</p>
+<br>
+<p><img src="/images/img_a5e789fbd0e442ec.png" alt="" />
+RDS AuroraDB는 자체적으로 위의 그림과 같이 DB에서 AWS Lambda를 바로 호출할 수 있는 기능을 제공한다. 이걸 응용해서 테이블에 update 트리거를 걸고, 트리거 프로시저에서 Lambda를 호출하면 Lambda가 그걸 받아서 추가적인 처리를 하도록 할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="lambda-hwagjang-seolci">Lambda 확장 설치</h2>
+<p>전용 확장을 설치해줘야 한다.<br />
+아무데나 cli 들어가서 아래 커맨드를 입력해준다,</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE EXTENSION IF NOT EXISTS aws_lambda CASCADE</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_aa86596fdbf49010.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="lambda-hamsu-saengseong">Lambda 함수 생성</h2>
+<p>함수를 만들때 VPC를 켜고, RDS와 동일한 VPC, 보안그룹, AZ에 놓이도록 생성한다.</p>
+<p><img src="/images/img_4eed549c94678ab0.png" alt="" /></p>
+<p><img src="/images/img_973e2748d883410b.png" alt="" />
+런타임같은건 상관없다.</p>
+<br>
+<p><img src="/images/img_7838b4794d4afa42.png" alt="" />
+그리고 적당히 들어오는 값만 찍어주도록 수정했다.</p>
+<br>
+<br>
+<br>
+<h2 id="iam-gweonhan-seoljeong">IAM 권한 설정</h2>
+<p>먼저 RDS가 Lambda에 접근할 수 있게 해줄 권한과 정책을 설정해줘야 한다.</p>
+<p>먼저 역할을 하나 만든다.</p>
+<p><img src="/images/img_40f2ad08df343084.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2012-10-17&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Statement&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Effect&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Allow&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Principal&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;Service&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;rds.amazonaws.com&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Action&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;sts:AssumeRole&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그리고 위의 신뢰 정책을 복붙해 넣어준다.</p>
+<br>
+<p><img src="/images/img_2cc8118fb2b8270e.png" alt="" />
+이름은 적당히 짓고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2012-10-17&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Statement&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Effect&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Allow&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Action&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;lambda:InvokeFunction&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;Resource&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;*&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_33395131a80b79c9.png" alt="" />
+역할에 권한을 추가해준다.<br />
+나는 인라인 정책으로 넣었다.</p>
+<br>
+<br>
+<br>
+<h2 id="rds-cugaseoljeong">RDS 추가설정</h2>
+<p>방금 만든 IAM 역할을 RDS 페이지에서 Lambda 타겟으로 등록해준다.</p>
+<p><img src="/images/img_ad02bb30d1cb575f.png" alt="" /></p>
+<p><img src="/images/img_5a8bcb8a5d3157d9.png" alt="" /></p>
+<p>그리고 연결된 컴퓨팅 리소스에 Lambda를 연결해준다.</p>
+<p><img src="/images/img_76e18468a79f2f81.png" alt="" /></p>
+<p><img src="/images/img_e1217e4905cb91eb.png" alt="" />
+프록시는 필요하다면 달면 된다. 당연히 추가비용이 나온다.</p>
+<br>
+<p><img src="/images/img_94790a79afd68c84.png" alt="" />
+그래서 이렇게 뜨면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="rdseseo-lambda-hoculhaebogi">RDS에서 Lambda 호출해보기</h2>
+<p>함수의 형태로 호출이 가능하다.<br />
+아래는 방금 만든 Lambda 함수를 RDS에서 호출하는 간단한 예제다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span><span> from aws_lambda</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">invoke</span><span>(aws_commons</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">create_lambda_function_arn</span><span>(</span><span style="color: #A6E3A1;">&#39;cdc_function&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;ap-northeast-2&#39;</span><span>)</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;body&quot;: &quot;Hello from Postgres!&quot;}&#39;</span><span>::json )</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그럼 저 페이로드로 요청을 날려서</p>
+<br>
+<p><img src="/images/img_33c9c290ab85ff46.png" alt="" />
+응답을 받아올 것이다.</p>
+<br>
+<p><img src="/images/img_7c4c41fb67886d23.png" alt="" />
+Lambda 쪽 로그에도 잘 찍혔다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="teurigeoro-cdc-guseonghagi">트리거로 CDC 구성하기</h2>
+<p>이번에는 트리거를 활용해서 Lambda를 통한 CDC를 구성해보겠다.</p>
+<p>먼저 간단한 테이블을 하나 생성했다.</p>
+<p><img src="/images/img_14036b9fbf5a1d5e.png" alt="" />
+별건 없다.</p>
+<p>그리고 아래와 같은 형태로 함수와 트리거를 생성해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE OR REPLACE FUNCTION public</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">trigger_test_table_function</span><span>()</span></span>
+<span class="giallo-l"><span> RETURNS trigger</span></span>
+<span class="giallo-l"><span> LANGUAGE plpgsql</span></span>
+<span class="giallo-l"><span>AS $function$</span></span>
+<span class="giallo-l"><span>    begin</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        IF</span><span> (TG_OP</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;DELETE&#39;</span><span>) THEN</span></span>
+<span class="giallo-l"><span>            perform aws_lambda</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">invoke</span><span>(</span></span>
+<span class="giallo-l"><span>           		aws_commons</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">create_lambda_function_arn</span><span>(</span><span style="color: #A6E3A1;">&#39;cdc_function&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;ap-northeast-2&#39;</span><span>)</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">           		json_build_object</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           			&#39;type&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;delete&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           			&#39;value&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> row_to_json</span><span>(old)</span></span>
+<span class="giallo-l"><span>           		)</span></span>
+<span class="giallo-l"><span>           	)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        ELSIF</span><span> (TG_OP</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;UPDATE&#39;</span><span>) THEN</span></span>
+<span class="giallo-l"><span>            perform aws_lambda</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">invoke</span><span>(</span></span>
+<span class="giallo-l"><span>           		aws_commons</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">create_lambda_function_arn</span><span>(</span><span style="color: #A6E3A1;">&#39;cdc_function&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;ap-northeast-2&#39;</span><span>)</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">           		json_build_object</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           			&#39;type&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;update&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           			&#39;value&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> row_to_json</span><span>(</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>)</span></span>
+<span class="giallo-l"><span>           		)</span></span>
+<span class="giallo-l"><span>           	)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        ELSIF</span><span> (TG_OP</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;INSERT&#39;</span><span>) THEN</span></span>
+<span class="giallo-l"><span>            perform aws_lambda</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">invoke</span><span>(</span></span>
+<span class="giallo-l"><span>           		aws_commons</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">create_lambda_function_arn</span><span>(</span><span style="color: #A6E3A1;">&#39;cdc_function&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;ap-northeast-2&#39;</span><span>)</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">           		json_build_object</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           			&#39;type&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;insert&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           			&#39;value&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> row_to_json</span><span>(</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>)</span></span>
+<span class="giallo-l"><span>           		)</span></span>
+<span class="giallo-l"><span>           	)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        END IF</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        RETURN NULL</span><span style="color: #9399B2;">;</span><span> </span></span>
+<span class="giallo-l"><span>    END</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>$function$</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TRIGGER trigger_test_table</span></span>
+<span class="giallo-l"><span>AFTER INSERT OR update or</span><span style="color: #94E2D5;"> delete</span></span>
+<span class="giallo-l"><span>ON test</span></span>
+<span class="giallo-l"><span>FOR EACH ROW</span></span>
+<span class="giallo-l"><span>EXECUTE Function</span><span style="color: #89B4FA;font-style: italic;"> trigger_test_table_function</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>어떤 operation으로 날라온건지, 그리고 테이블 row의 전체 값을 그대로 쏴주도록 했다.</p>
+<br>
+<p><img src="/images/img_743cf8dfc271a751.png" alt="" />
+그리고 insert를 날려보면</p>
+<br>
+<p><img src="/images/img_4a1110c561ec309b.png" alt="" />
+날린 대로 들어올 것이고</p>
+<br>
+<p><img src="/images/img_d7b1b2078430f537.png" alt="" />
+delete를 날려보면</p>
+<br>
+<p><img src="/images/img_1491831d371fa26c.png" alt="" />
+그것도 그것대로 잘 날라올 것이다.</p>
+<p>이런식으로 써먹으면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonRDS/latest/AuroraUserGuide/PostgreSQL-Lambda.html">https://docs.aws.amazon.com/ko_kr/AmazonRDS/latest/AuroraUserGuide/PostgreSQL-Lambda.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/73474076/invoking-aws-lambda-with-postgresql">https://stackoverflow.com/questions/73474076/invoking-aws-lambda-with-postgresql</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/database/capturing-data-changes-in-amazon-aurora-using-aws-lambda/">https://aws.amazon.com/ko/blogs/database/capturing-data-changes-in-amazon-aurora-using-aws-lambda/</a></p>
+<br>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223297929636/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>다익스트라 알고리즘<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223295730886/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] pebbleDB<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] VPC 설정하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222317827931/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] VPC 설정하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222317827931/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2021-04-21T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222317827931/">[AWS] VPC 설정하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-04-21T00:00:00+00:00"><time datetime="2021-04-21T00:00:00+00:00">2021.04.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="890 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222317827931" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>VPC는 Virtual Private Cloud의 준말로, 가상의 네트워크 망을 구축해주는 기능이다.</p>
+<p>이게 왜 필요할까?<br />
+AWS로 서비스를 구현하다보면, 당연히 AWS 내의 서비스들끼리 통신을 해야 할 경우가 잦다.<br />
+EC2에서 RDS로 통신을 쏘고, 그 EC2에서 다른 EC2로 요청을 쏘고, 어떤 Lambda는 EC2들에 전부 요청을 쏘고...</p>
+<p>이러다보면 서로 다 아이피를 허용해주고 그래야 하니 여러모로 불편한 것이 많다.</p>
+<p>하지만 VPC로 네트워크망을 묶어버리는 이에 대한 처리와 관리가 아주 간편해지는 것이다.</p>
+<p>뿐만 아니라 VPC를 설정해둔 서비스는 해당 VPC 안에서만 쓸수 있기 때문에, 보안적 측면에서도 아주 안정적이다.</p>
+<p>한번 들어가서 설정을 해보자.<br />
+별다른 설정을 주지 않았더라도 VPC와 보안그룹이 이렇게 한개씩은 깔려있을 것이다.</p>
+<p><img src="/images/img_29a78ae42bbb94a4.png" alt="" /></p>
+<p><img src="/images/img_a8322cffb7bf87e7.png" alt="" />
+이름이 -이라 식별이 안되니 알아볼 수 있게 바꿔주자.</p>
+<p>이름을 클릭하면 수정 창이 뜬다.</p>
+<p><img src="/images/img_784aa81392c0c37d.png" alt="" /></p>
+<p><img src="/images/img_d0c651ca7a40e562.png" alt="" /></p>
+<p><img src="/images/img_3d08f3485e492907.png" alt="" /></p>
+<p>서브넷도 바꿔준다. 서브넷은 VPC 내에 N개 이상 존재할 수 있다.<br />
+VPC가 그냥 논리적인 범위일 뿐이라면, 실제로 리소스가 생성될 수 있는 네트워크다.</p>
+<p><img src="/images/img_dcd765496664b9f7.png" alt="" /></p>
+<p><img src="/images/img_b42008e902c3a676.png" alt="" /></p>
+<p>라우팅 테이블도 바꿔주고</p>
+<p><img src="/images/img_60f7445cf11195a5.png" alt="" /></p>
+<p><img src="/images/img_e6e3a152e705ae59.png" alt="" /></p>
+<p>인터넷 게이트웨이</p>
+<p><img src="/images/img_ef984d59af7f33e7.png" alt="" /></p>
+<p><img src="/images/img_626b7cb8e6cf1ae4.png" alt="" /></p>
+<p>DHCP 옵션도 바꿔준다.</p>
+<p><img src="/images/img_b7865073f29c1828.png" alt="" /></p>
+<p><img src="/images/img_3c0f2580fd8df11a.png" alt="" /></p>
+<p>보안그룹도 마찬가지다. 이건 서비스 앞단에서 방화벽 역할을 한다.</p>
+<p><img src="/images/img_3c5195f27d8637b0.png" alt="" /></p>
+<p><img src="/images/img_462c644059c94246.png" alt="" /></p>
+<p>그리고 네트워크 ACL도 바꿔준다. 이건 서브넷 앞단에서 일종의 방화벽 역할을 하는 친구다.</p>
+<p><img src="/images/img_468af53e4507cbb9.png" alt="" /></p>
+<p><img src="/images/img_afd5904267decf53.png" alt="" /></p>
+<p>이제 저건 냅두고 이제 제대로 사용할 것들을 만들어보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="tanryeogjeog-ip">탄력적 IP</h2>
+<p>탄력적 IP는 이름은 거창해보이는데, 그냥 고정 IP를 할당해주는 것을 말한다.</p>
+<p><img src="/images/img_32097b41d59e0ca2.png" alt="" /></p>
+<p>그냥 기본값으로 할당해주면 된다.</p>
+<p><img src="/images/img_2f95d349eb8acc41.png" alt="" />
+EC2에 연결을 해두는게 아니면 돈도 조금 나가니 유의한다.</p>
+<p><img src="/images/img_566ccf8a1824b507.png" alt="" /></p>
+<br>
+<br>
+<h2 id="ki-peeo-saengseong">키 페어 생성</h2>
+<p>이번엔 EC2-&gt;키 페어로 들어가서 생성하고, 비밀키 .pem을 잘 보관해둔다.</p>
+<p><img src="/images/img_6b97b7ab18ab87cb.png" alt="" /></p>
+<p><img src="/images/img_f15e760d9915e9dd.png" alt="" /></p>
+<p><img src="/images/img_4c72acefe295a5f6.png" alt="" /></p>
+<p>이 키값은 한번 뽑으면 다시는 안주니까, 유실되지 않도록 잘 보관해야 한다.</p>
+<p><img src="/images/img_155ecd1748d9e261.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="vpc-saengseong">VPC 생성</h2>
+<p>이제 밑작업을 대강 마쳤으니, 본격적으로 사용할 VPC를 만들어보자.</p>
+<p>RDS 데이터베이스에 사용할 환경을 구축한다고 가정하겠다.</p>
+<p>대시보드에서 VPC 마법사를 클릭한다.</p>
+<p><img src="/images/img_2bde2010c2575bd8.png" alt="" />
+그냥 VPC 탭에서 생성을 해도 되지만, 이걸로 하는게 더 편리하다.</p>
+<p>퍼블릭 및 프라이빗 서브넷을 선택하고</p>
+<p><img src="/images/img_ee4069a3186c4e80.png" alt="" /></p>
+<p>2단계에선 아래와 같이 설정한다.</p>
+<p><img src="/images/img_d6d6d1963a6c5a93.png" alt="" />
+이름을 지어주고, 가용영역을 a인 것으로 설정, 방금 만든 탄력적 IP를 붙여준다.</p>
+<p>완료를 누르면, 생성이 5분 정도 걸린다.</p>
+<p><img src="/images/img_2e2d228c400cfb02.png" alt="" /></p>
+<p><img src="/images/img_7e52b66dfe29d784.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="seobeunes-saengseong">서브넷 생성</h2>
+<p>이제 VPC 아래에다 사용할 서브넷을 생성해주자.<br />
+이게 실질적으로 사용할 네트워크 영역이다.</p>
+<p><img src="/images/img_a031effe9f0ca70e.png" alt="" /></p>
+<p>RDS용으로 사용할 서브넷을 하나 만들도록 하겠다.<br />
+vpc를 선택하고, 이름을 잘 짓고, 가용영역 선택해주고, CIDR 영역을 잘 지정해준다.<br />
+CIDR은 VPC 영역 내에서 범위를 어떻게 가져갈 지를 지정해주는 값이다. 다른 항목과 겹치지만 않고, 범위를 벗어나지 않으면 된다.</p>
+<p><img src="/images/img_bfb9fa543b20e5c8.png" alt="" /></p>
+<p>완료</p>
+<p><img src="/images/img_d4836e74255a1209.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="rauting-teibeul-saengseong">라우팅 테이블 생성</h2>
+<p>라우팅 테이블은 서브넷에서 네트워킹을 할때 사용하는 목적지에 대한 테이블이다.<br />
+하나의 라우팅 테이블은 여러개의 서브넷과 연결될 수 있다.<br />
+다음과 같이 VPC를 지정해서 생성한 후에</p>
+<p><img src="/images/img_9cb1da7d1f2e8e86.png" alt="" /></p>
+<p>하나 이상의 서브넷과 연결할 수 있다.</p>
+<p><img src="/images/img_d835388ec4c0818a.png" alt="" /></p>
+<p>나는 일단 a 가용영역의 서브넷에만 연결했는데,</p>
+<p><img src="/images/img_affae89ad228676b.png" alt="" />
+장애상황을 고려한다면 c와 d 가용영역에 대한 서브넷을 생성해서 추가로 연결할 수 있다.<br />
+그렇게 한다면 a 서브넷에 문제가 생기더라도 c와 d에서 그 역할을 대신할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="dasi-ireum-jeongri">다시 이름 정리</h2>
+<p>VPC 마법사로 VPC를 생성했다면, 보안그룹이나 이런저런 것들은 또 자동으로 만들어줬을 것이다.<br />
+하지만 이름을 이전과 동일하게 -로 깔아버리므로... 보기 좋게 다시 바꿔주자.<br />
+보안 그룹 등을 위에서 했던 것과 동일하게 잘 지어주면 된다.</p>
+<p><img src="/images/img_fc1e3f5d2bfe537a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="rds-seobeunes-geurub-saengseong">RDS-서브넷 그룹 생성</h2>
+<p>데이터베이스에 사용할 서브넷 그룹을 생성한다. 이걸로 RDS가 어디에 놓일지를 정의할 것이다.</p>
+<p><img src="/images/img_efd820a900b85c7c.png" alt="" /></p>
+<p>이름 잘 짓고, VPC 고르고, 가용영역과 서브넷을 선택한다.</p>
+<p><img src="/images/img_6d8486cd04710d8c.png" alt="" />
+여기서 특이한 부분으로, RDS는 안정성을 위해서 2개 이상의 가용영역을 지정해야 한다.<br />
+그래야 하나가 만일의 사고로 죽더라도 다른 영역에서 계속 동작을 보장할 수 있기 때문이다.</p>
+<p>그래서 c로 서브넷 하나 더 만들어서 지정해줬다.</p>
+<br>
+<br>
+<br>
+<h2 id="boan-geurub-saengseong">보안 그룹 생성</h2>
+<p>그리고 공통적으로 사용할 보안 그룹을 하나 생성한다.<br />
+VPC를 지정하고 공개할 형태를 [인바운드 규칙]에서 추가한다.</p>
+<p>일반적으로 HTTP와 HTTPS는 다 열어두고, SSH는 어떤짓을 할지 모르니 아이피를 제한시켜둔다.</p>
+<p><img src="/images/img_dbfefb0e40ea0e96.png" alt="" /></p>
+<p>그리고 디비 커넥션을 허용할 대상을 적절히 지정해준다.<br />
+만약 람다에서 커넥션을 맺어야 한다면, 그 람다가 가질 보안그룹 등을 IP 항목에 지정해주면 된다.</p>
+<p><img src="/images/img_33ebcfde221f2b8a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="rdse-vpc-seoljeonghagi">RDS에 VPC 설정하기</h2>
+<p>다른 부분은 차치하고 VPC를 설정하는 부분만 보겠다.<br />
+어려울 것은 없다. 먼저 VPC를 선택하고 방금 만든 서브넷 그룹이 들어가도록 하면 끝이다.</p>
+<p><img src="/images/img_8a2ffc41864b8e20.png" alt="" />
+이외의 RDS 설정들에 대한 것들은 RDS 포스트에서 다시 정리하겠다.</p>
+<br>
+<p><img src="/images/img_3cde8009243da66c.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="ramdaro-rds-jeobsoghagi">람다로 RDS 접속하기</h2>
+<p>이제 거의 다 왔다.<br />
+람다를 만들되, VPC와 서브넷, 보안그룹을 적용해서 만들어주면 된다.</p>
+<p><img src="/images/img_6de72c2ef97a47f9.png" alt="" />
+여기서 지정한 보안그룹이 Postgres에서 사용한 보안그룹-인바운드 규칙에 있어야 한다.</p>
+<p>그리고 뭐... 레이어로 데이터베이스 커넥션 라이브러리 올리고, 대충 돌려보면 될 것이다.</p>
+<p><img src="/images/img_8584de30175a1eb9.png" alt="" />
+이렇게.<br />
+데이터베이스 도메인은 RDS 엔트리포인트를 긁어오면 된다.</p>
+<p>그럼 잘 될 것이다.</p>
+<p><img src="/images/img_e2aa43d5c74c30d6.png" alt="" /></p>
+<p>그렇다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/vpc/latest/userguide/what-is-amazon-vpc.html">https://docs.aws.amazon.com/ko_kr/vpc/latest/userguide/what-is-amazon-vpc.html</a><br />
+<a rel="external" href="https://medium.com/harrythegreat/aws-%EA%B0%80%EC%9E%A5%EC%89%BD%EA%B2%8C-vpc-%EA%B0%9C%EB%85%90%EC%9E%A1%EA%B8%B0-71eef95a7098">https://medium.com/harrythegreat/aws-%EA%B0%80%EC%9E%A5%EC%89%BD%EA%B2%8C-vpc-%EA%B0%9C%EB%85%90%EC%9E%A1%EA%B8%B0-71eef95a7098</a><br />
+<a rel="external" href="https://www.44bits.io/ko/post/understanding_aws_vpc">https://www.44bits.io/ko/post/understanding_aws_vpc</a><br />
+<a rel="external" href="https://velog.io/@doohyunlm/AWS-VPC-%EA%B0%9C%EB%85%90">https://velog.io/@doohyunlm/AWS-VPC-%EA%B0%9C%EB%85%90</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/premiumsupport/knowledge-center/connect-lambda-to-an-rds-instance/">https://aws.amazon.com/ko/premiumsupport/knowledge-center/connect-lambda-to-an-rds-instance/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222319193049/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Dynamo DB: CRUD 기본구조<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222317968458/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] C++에서 pythonic하게 비교하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 함수: 반복문 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222156172360/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 함수: 반복문">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222156172360/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2020-11-27T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222156172360/">[PostgreSQL] 함수: 반복문</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-11-27T00:00:00+00:00"><time datetime="2020-11-27T00:00:00+00:00">2020.11.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="189 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222156172360" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>plpgsql은 loop, while, for 등의 반복구문을 제공한다.</p>
+<br>
+<br>
+<h2 id="loopmun">loop문</h2>
+<p>loop문은 단순한 반복문이다.<br />
+탈출구문 exit를 사용하기 전까지는 무한하게 반복한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE FUNCTION</span><span style="color: #89B4FA;font-style: italic;"> FOO4</span><span>() RETURNS TEXT</span></span>
+<span class="giallo-l"><span>AS </span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>DECLARE </span></span>
+<span class="giallo-l"><span>i int8</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>foo text</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>BEGIN </span></span>
+<span class="giallo-l"><span>	LOOP </span></span>
+<span class="giallo-l"><span>		EXIT WHEN i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">;</span><span style="color: #94E2D5;"> --</span><span> i가 4면 탈출</span></span>
+<span class="giallo-l"><span>		foo</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> foo</span><span style="color: #94E2D5;"> ||</span><span style="color: #A6E3A1;"> &#39;foo&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>		i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> i</span><span style="color: #94E2D5;"> +</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>	END LOOP</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	RETURN foo</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>END</span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>LANGUAGE PLPGSQL</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_4b6541cd184cb1b2.png" alt="" />
+그런데 이건 대체로 표현성이 그리 좋진 않다.</p>
+<p>이걸 좀더 보기좋기 사용하기 위한게 while과 for이다.<br />
+while과 for은 loop문 머리에 추가로 붙이는 형태로 작성된다.</p>
+<br>
+<br>
+<h2 id="whilemun">while문</h2>
+<h2 id="apedaga-whilegwa-jogeonsigeul-butyeonoheumyeon-jogeonsigi-camin-donganman-banbogdoeneun-banbogmuni-doenda">앞에다가 while과 조건식을 붙여놓으면, 조건식이 참인 동안만 반복되는 반복문이 된다.</h2>
+<p>위의 코드를 while문으로 바꾸면 이렇게 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE FUNCTION</span><span style="color: #89B4FA;font-style: italic;"> FOO5</span><span>() RETURNS TEXT</span></span>
+<span class="giallo-l"><span>AS </span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>DECLARE </span></span>
+<span class="giallo-l"><span>i int8</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>foo text</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>BEGIN </span></span>
+<span class="giallo-l"><span>	WHILE i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 4</span></span>
+<span class="giallo-l"><span>	LOOP </span></span>
+<span class="giallo-l"><span>		foo</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> foo</span><span style="color: #94E2D5;"> ||</span><span style="color: #A6E3A1;"> &#39;foo&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>		i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> i</span><span style="color: #94E2D5;"> +</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>	END LOOP</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	RETURN foo</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>END</span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>LANGUAGE PLPGSQL</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_e07f85b361ce4e69.png" alt="" /></p>
+<br>
+<br>
+<h2 id="for-in-mun">for in 문</h2>
+<h2 id="igeon-ddo-beomwigabseul-ceorihagi-joheun-nomida">이건 또 범위값을 처리하기 좋은 놈이다.</h2>
+<p>위의 코드를 for-in으로 바꾸면 이렇게 된다.<br />
+0부터 3까지 순회하니, 4번 반복하는 것이다.<br />
+그리고 각각의 값은 _라는 변수에 할당되나, 필요없이 때문에 사용하지 않았다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE FUNCTION</span><span style="color: #89B4FA;font-style: italic;"> FOO6</span><span>() RETURNS TEXT</span></span>
+<span class="giallo-l"><span>AS </span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>DECLARE </span></span>
+<span class="giallo-l"><span>foo text</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>BEGIN </span></span>
+<span class="giallo-l"><span>	FOR _</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0..3</span></span>
+<span class="giallo-l"><span>	LOOP </span></span>
+<span class="giallo-l"><span>		foo</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> foo</span><span style="color: #94E2D5;"> ||</span><span style="color: #A6E3A1;"> &#39;foo&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>	END LOOP</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	RETURN foo</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>END</span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>LANGUAGE PLPGSQL</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_1ca1e00e1dd70c49.png" alt="" /></p>
+<p>또 for-in문의 장점 중 하나는 select값을 기반으로 반복을 처리할 수도 있다는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE FUNCTION</span><span style="color: #89B4FA;font-style: italic;"> FOO7</span><span>() RETURNS TEXT</span></span>
+<span class="giallo-l"><span>AS </span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>DECLARE </span></span>
+<span class="giallo-l"><span>n int8</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>foo text</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>BEGIN </span></span>
+<span class="giallo-l"><span>	FOR n</span><span style="color: #CBA6F7;"> in</span><span> SELECT num FROM test WHERE num</span><span style="color: #94E2D5;"> &lt;=</span><span style="color: #FAB387;"> 100</span></span>
+<span class="giallo-l"><span>	LOOP </span></span>
+<span class="giallo-l"><span>		foo</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> foo</span><span style="color: #94E2D5;"> ||</span><span> n</span><span style="color: #9399B2;">:</span><span>:TEXT</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>	END LOOP</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	RETURN foo</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>END</span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>LANGUAGE PLPGSQL</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_e6a6f2c2da787156.png" alt="" />
+그런데 select값을 받으려면 받는 변수를 declare에서도 선언해야 한다는 제약이 존재한다.<br />
+왜 있는지는 모르겠다. 그냥 범위값을 받을때는 필요없다.</p>
+<p>배열값같은건 못받는다.<br />
+배열을 받을 수 있는건 foreach문이 또 따로 있다.</p>
+<br>
+<br>
+<h2 id="foreachmun">foreach문</h2>
+<p>이건 배열값을 받는 것에 특화되어있는 for문이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE FUNCTION</span><span style="color: #89B4FA;font-style: italic;"> FOO8</span><span>() RETURNS TEXT</span></span>
+<span class="giallo-l"><span>AS </span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>DECLARE </span></span>
+<span class="giallo-l"><span>n int8</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>nums int8[]</span><span style="color: #94E2D5;"> =</span><span> ARRAY[</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>foo text</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>BEGIN </span></span>
+<span class="giallo-l"><span>	FOREACH n</span><span style="color: #CBA6F7;"> in</span><span> ARRAY nums </span></span>
+<span class="giallo-l"><span>	LOOP </span></span>
+<span class="giallo-l"><span>		foo</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> foo</span><span style="color: #94E2D5;"> ||</span><span> n</span><span style="color: #9399B2;">:</span><span>:TEXT</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>	END LOOP</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	RETURN foo</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>END</span></span>
+<span class="giallo-l"><span>$$</span></span>
+<span class="giallo-l"><span>LANGUAGE PLPGSQL</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_dffd77e32fbb80a1.png" alt="" /></p>
+<p>그렇다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="http://www.gisdeveloper.co.kr/?p=4621">http://www.gisdeveloper.co.kr/?p=4621</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/10214392/iterating-over-integer-in-pl-pgsql">https://stackoverflow.com/questions/10214392/iterating-over-integer-in-pl-pgsql</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222156062320/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 함수: 분기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222154975413/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 함수<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

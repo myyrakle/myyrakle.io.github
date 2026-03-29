@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] pgvector: 벡터 인덱스 다루기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223802994977/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] pgvector: 벡터 인덱스 다루기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223802994977/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-03-20T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223802994977/">[PostgreSQL] pgvector: 벡터 인덱스 다루기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-03-20T00:00:00+00:00"><time datetime="2025-03-20T00:00:00+00:00">2025.03.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="726 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223802994977" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223785241957">https://blog.naver.com/sssang97/223785241957</a></p>
+<p>pgvector에서 효율적인 벡터 검색을 위해 인덱스를 구성하는 방법을 다뤄본다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteo-seting">데이터 세팅</h2>
+<p>일단 테이블을 적당히 만들고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE</span><span style="color: #89B4FA;font-style: italic;"> vector_index_test</span><span> (</span></span>
+<span class="giallo-l"><span>    id serial8 PRIMARY KEY</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>    embedding</span><span style="color: #89B4FA;font-style: italic;"> vector</span><span>(</span><span style="color: #FAB387;">40</span><span>)</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>벡터 길이는 40으로 했다.</p>
+<p>그리고 난수 기반으로 벡터열을 1000만개 정도만 넣어놨다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSERT INTO</span><span style="color: #89B4FA;font-style: italic;"> vector_index_test</span><span>(embedding)</span></span>
+<span class="giallo-l"><span>SELECT </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    ARRAY</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        SELECT</span><span> ((</span><span style="color: #89B4FA;font-style: italic;">random</span><span>()</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 255</span><span>)::INTEGER</span><span style="color: #94E2D5;"> +</span><span> t</span><span style="color: #94E2D5;">.</span><span>n)</span><span style="color: #94E2D5;"> %</span><span style="color: #FAB387;"> 255</span></span>
+<span class="giallo-l"><span>        FROM</span><span style="color: #89B4FA;font-style: italic;"> generate_series</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 40</span><span>)</span></span>
+<span class="giallo-l"><span>    ) AS random_vector</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">FROM</span><span> (</span></span>
+<span class="giallo-l"><span>    select n</span></span>
+<span class="giallo-l"><span>    from</span><span style="color: #89B4FA;font-style: italic;"> generate_series</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 10000000</span><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> n</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> t</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_2dce10fe1699251e.png" alt="" />
+들어가는건 금방 들어간다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-seongneung">기본 성능</h2>
+<p>한번 그냥 적당히 쿼리를 때려보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">explain</span><span>(analyze) SELECT</span><span style="color: #94E2D5;"> *</span></span>
+<span class="giallo-l"><span>FROM vector_index_test</span></span>
+<span class="giallo-l"><span>WHERE</span><span style="color: #FAB387;"> 1</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>ORDER BY embedding</span><span style="color: #94E2D5;"> &lt;</span><span>#</span><span style="color: #94E2D5;">&gt;</span><span style="color: #A6E3A1;"> &#39;[165,94,53,1,253,53,142,126,1,194,46,162,189,69,107,100,153,161,30,225,165,201,264,42,29,86,2,185,98,81,49,82,119,183,46,21,222,81,227,187]&#39;</span></span>
+<span class="giallo-l"><span>LIMIT</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_9394527bbd0f7355.png" alt="" />
+그러면 풀스캔을 때릴테니, 당연히 좀 느릴 것이다.<br />
+하드웨어 스펙이 꽤 괜찮음에도 724밀리초나 걸렸다.</p>
+<p>그럼 인덱스를 걸면 좀 나아질까?</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE INDEX vector_normal_index on</span><span style="color: #89B4FA;font-style: italic;"> vector_index_test</span><span>(embedding)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_7fd8c49e7bfc1969.png" alt="" /></p>
+<p><img src="/images/img_1cf57e3ffda1a303.png" alt="" />
+그렇지는 않다.<br />
+이 벡터 유사도 연산이란 것 자체가 단순한 동등 비교나 정렬이 아니라서, 순진한 인덱스로는 인덱싱이 거의 불가능하기 때문이다.</p>
+<p>효율적으로 벡터 검색을 하게 하려면 pgvector에서 제공하는 특수한 인덱스 타입들을 사용해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="anngwa-begteo-jeonyong-indegseu">ANN과 벡터 전용 인덱스</h2>
+<p>일단 알아둬야할건, vector 전용 인덱스들은 approximate nearest neighbor(ANN) 개념에 기초한 인덱스다.<br />
+다시 말해, 성능을 위해 정확한 검색이 아니라 근사치에 의한 검색을 한다는 것이다. 그래서 정확하지 않을 수 있다.</p>
+<p>그래서 속도와 별개로 적중률 수치, recall을 유지하는 것도 중요한 과제다.<br />
+예를 들어 exact 검색으로 100개를 찾았을때, ANN으로 그 중에 95개를 찾았다면 recall은 95%라고 말한다.</p>
+<p>pgvector에서는 다음 2가지 타입의 인덱스가 제공된다.</p>
+<ul>
+<li>HNSW</li>
+<li>IVFFlat</li>
+</ul>
+<p>HNSW는 벡터들에 대해서 다중 그래프를 구성하는 무거운 인덱스다.<br />
+빌드 시간이 매우 느리고, 메모리도 많이 먹는 대신 쿼리 성능이 빠르다.</p>
+<p>IVFFlat은 파티션 기반으로 구성되는 비교적 작은 인덱스다.<br />
+빌드 시간이 비교적 빠르고, 메모리도 덜 먹는 대신 쿼리 성능이 조금 느리다.</p>
+<br>
+<br>
+<br>
+<h2 id="hnsw-indegseu">HNSW 인덱스</h2>
+<p>HNSW 인덱스는 위에서 언급했듯, 다중 그래프 기반으로 구성되는 무거운 인덱스다.</p>
+<p><img src="/images/img_9e45b597af566177.png" alt="" />
+https://www.pinecone.io/learn/series/faiss/hnsw/<br />
+원본 데이터 크기의 약 50-100% 정도를 메모리로 점유한다.</p>
+<p>모든 vector database들이 공통으로 지원하는 기본 인덱스 알고리즘이다.</p>
+<p>아래와 같은 식으로 만들 수 있는데, 유사도 검색 방법까지 미리 지정해야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE INDEX hnsw_index_test ON vector_index_test USING</span><span style="color: #89B4FA;font-style: italic;"> hnsw</span><span> (embedding vector_ip_ops)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_7bafa2ee7dbcdc6f.png" alt="" />
+근데 이건 인덱스 만드는 것부터 쉽지 않아서, 그냥 만들면 세월이 다 간다.</p>
+<p>메모리를 좀 더 주고 만들어야 그나마 빠르게 만들 수 있다.<br />
+길이 40짜리 벡터가 1000만개일때 기준으로 10GB 정도는 있어야 정상적으로 빌드가 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SET maintenance_work_mem</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;10GB&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>CREATE INDEX hnsw_index_test ON vector_index_test USING</span><span style="color: #89B4FA;font-style: italic;"> hnsw</span><span> (embedding vector_ip_ops)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_a98a3ca74dca818a.png" alt="" />
+가용 메모리가 많지 않다면 포기하고 램을 더 사라.</p>
+<p>인덱스 적용 후에 다시 이전의 유사도 쿼리를 때려보면</p>
+<p><img src="/images/img_f510dbe5bb15830d.png" alt="" />
+굉장히 빨라진 것을 볼 수 있다.<br />
+3.5 밀리초밖에 걸리지 않았다. 반복해서 실행하다보면 1밀리초 미만으로도 실행이 된다.</p>
+<p>인덱스 옵션으로는 m과 ef_construction 값이 제공된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE INDEX</span><span style="color: #94E2D5;"> ...</span><span> ON</span><span style="color: #94E2D5;"> ...</span><span> USING</span><span style="color: #89B4FA;font-style: italic;"> hnsw</span><span> (embedding vector_l2_ops)</span><span style="color: #89B4FA;font-style: italic;"> WITH</span><span> (m</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 16</span><span style="color: #9399B2;">,</span><span> ef_construction</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 64</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>m은 그래프에서의 각 레이어가 가리키는 연결 개수다. 기본값은 16이다. 높일수록 속도가 올라가는 대신 메모리 사용량이 증가한다.<br />
+ef_construction은 그래프를 구성하기 위한 dynamic candidate list의 개수다. 기본값은 64다. 이게 커질수록 삽입속도가 느려지는 대신 recall이 올라간다.</p>
+<br>
+<br>
+<br>
+<h2 id="ivfflat-indegseu">IVFFlat 인덱스</h2>
+<p>IVFFlat은 파티션 단위로 데이터 그룹을 분할해서 탐색을 수행하는 비교적 작은 크기의 인덱스다.</p>
+<p><img src="/images/img_bd36fbe7fa8b4b6b.jpg" alt="" />
+https://tembo.io/blog/vector-indexes-in-pgvector<br />
+원본 데이터 크기의 약 20-30% 정도를 메모리로 점유한다.</p>
+<p>다른 Vector DB들은 이상하게 HNSW만을 메인으로 지원하는데, 이건 pgvector 말고 구현자가 많지는 않은 것 같다. pgvector의 특이한 장점 중 하나다.</p>
+<p>벡터들을 N개 단위로 파티셔닝하는데, 각각의 파티션들은 값 범위를 기반으로 배치되기 때문에, 범위 기반으로 인접한 파티션을 찾아서 조금 더 빠르게 인접 벡터를 탐지할 수 있다.</p>
+<p>여기서 파티션 개수를 지정하는 N 값을 probe라고 한다.<br />
+행이 1000만개 미만이면 1000을 권장하고, 이상이라면 sqrt(행 개수)를 주는 것을 권장한다.<br />
+probe가 클수록 검색 속도가 빨라지는 대신 recall이 떨어진다.</p>
+<br>
+<p>이제 인덱스를 한번 만들어보자. 마찬가지로 inner product 유사도 기반으로 인덱스를 생성했다.<br />
+그리고 probe는 1000 정도로만 줬다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE INDEX ivfflat_index_test ON vector_index_test USING</span><span style="color: #89B4FA;font-style: italic;"> ivfflat</span><span> (embedding vector_ip_ops)</span><span style="color: #89B4FA;font-style: italic;"> WITH</span><span> (lists</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1000</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_3d7eafda6a312454.png" alt="" />
+HNSW에 비하면 상당히 빠르게 만들어진다.</p>
+<p>그리고 쿼리를 날려보면</p>
+<p><img src="/images/img_870ee8fe148b80bf.png" alt="" />
+2밀리초 정도로, HNSW에 못지 않게 꽤 빠른 속도로 결과가 나왔다.</p>
+<p>데이터 규모가 더 커진다면 뭔가 달라질 수 있겠지만, 이 정도 적당한 규모에서는 ivfflat으로도 대충 쓸만한 것 같다.</p>
+<br>
+<p>실제 성능은 데이터 규모와 형태, 리소스에 따라 많이 달라질 수 있을 것이다.<br />
+직접 데이터 밀어넣고 돌려본 다음에 선택할 것을 권한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gita-coejeoghwa-tib">기타 최적화 &amp; 팁</h2>
+<p>쾌적하게 쓰려면 shared_buffers 크기를 좀 넉넉하게 주는 편이 좋다.<br />
+통상적으로 서버의 25% 정도를 권장한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SHOW shared_buffers</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_246e8c5611cc6bc1.png" alt="" />
+너무 적다면 SHOW config_file;로 설정파일 찾아서 옵션을 변경하고 재부팅을 해주자</p>
+<br>
+<p>recall을 측정하려면 인덱스 미적용 버전과 적용 버전을 둘다 돌려봐야 한다.<br />
+그럴때는 현재 세션에서 인덱스 스캔을 임시로 끄고 돌리는게 편하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SET enable_indexscan</span><span style="color: #94E2D5;"> =</span><span> OFF</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_3b41b14881cb78d8.png" alt="" />
+그럼 다시 풀스캔을 돌 것이다.</p>
+<p>그리고 인덱스 미적용버전을 빠르게 돌리려면, 워커를 강제로 늘려서 병렬처리를 시키는게 편하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SET max_parallel_workers_per_gather</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">;</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://neon.tech/blog/understanding-vector-search-and-hnsw-index-with-pgvector">https://neon.tech/blog/understanding-vector-search-and-hnsw-index-with-pgvector</a><br />
+<a rel="external" href="https://velog.io/@bbkyoo/pgVector">https://velog.io/@bbkyoo/pgVector</a><br />
+<a rel="external" href="https://github.com/pgvector/pgvector">https://github.com/pgvector/pgvector</a><br />
+<a rel="external" href="https://discuss.pytorch.kr/t/2023-picking-a-vector-database-a-comparison-and-guide-for-2023/2625">https://discuss.pytorch.kr/t/2023-picking-a-vector-database-a-comparison-and-guide-for-2023/2625</a><br />
+<a rel="external" href="https://tembo.io/blog/vector-indexes-in-pgvector">https://tembo.io/blog/vector-indexes-in-pgvector</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223804295478/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Algorithm] R-Tree<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223801577003/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>스킵 리스트 (Skip List)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

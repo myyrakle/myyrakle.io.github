@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] S3: 저장비용 최적화하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223178702863/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] S3: 저장비용 최적화하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223178702863/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-08-09T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223178702863/">[AWS] S3: 저장비용 최적화하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-09T00:00:00+00:00"><time datetime="2023-08-09T00:00:00+00:00">2023.08.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="505 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223178702863" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>S3는 정말 편리하고 좋은 서비스이긴 하지만, 종종 비용적으로 부담이 될 때도 있다.<br />
+물론 RDS 같은 헤비서비스들에 비교하면 그렇게 크지는 않다.</p>
+<p>액세스 비용 같은건 Cloudfront 같은걸 앞에 대서 최적화가 쉬운데, 스토리지 비용의 경우에는 더 많은 고려가 필요하다.</p>
+<p><img src="/images/img_1dca4f799a097908.png" alt="" />
+이게 거의 저장 공간으로만 나온 비용이다.</p>
+<p>이런식으로 뜯긴다.</p>
+<p><img src="/images/img_8840164faeb5c15e.png" alt="" />
+캐시레이어를 잘 달아뒀다면 대부분의 요금은 저장공간에서 나온다.</p>
+<br>
+<br>
+<br>
+<h2 id="seutoriji-keulraeseu">스토리지 클래스</h2>
+<p>S3의 비용 산정 방식에 대해 이해하려면, 스토리지 클래스란 것을 알아야 한다.</p>
+<p>스토리지 클래스는, 말 그대로 저장공간을 어떻게 저장할지에 대한 방법이다.<br />
+S3 콘솔에서 파일 상세페이지에 들어가면, 이런 버튼이 있다.</p>
+<p><img src="/images/img_fab07209747a70f4.png" alt="" /></p>
+<p><img src="/images/img_2f5ee16474d9be28.png" alt="" /></p>
+<p>별다른 설정을 하지 않는다면, S3 파일들은 위와 같이 "Standard" 타입으로 저장이 된다.</p>
+<p><img src="/images/img_c82b35277bf974da.png" alt="" />
+성능도 대체로 가장 빠르고, 액세스 비용도 무난하지만, 저장 비용은 가장 비싸다.</p>
+<p>버킷에 저장되어있는 데이터 전부가 자주 액세스하는 데이터라면 이걸 그냥 쓰는게 맞다. 하지만 항상 그렇지는 않다는 것이 문제다. 대부분의 사용사례에서는, 자주 쓰지 않는 파일이 쓰는 데이터보다 훨씬 많을 것이다.</p>
+<br>
+<br>
+<h4 id="1-standard-infrequent-access">1. Standard: Infrequent Access</h4>
+<p>접근 빈도가 매우 적은 데이터가 대부분이라면 "Infrequent Access" 타입의 Standard 클래스를 사용할 수 있다.</p>
+<p><img src="/images/img_7b0ae0d6c8508927.png" alt="" />
+이건 스토리지 비용이 10배 이상 싼 대신에</p>
+<br>
+<p><img src="/images/img_8721ee3acd835058.png" alt="" />
+액세스비용이 10배 이상 비싸다. 대부분 이런 trade off가 있다. 그냥 주지는 않는다.</p>
+<br>
+<h4 id="2-gracier">2. Gracier</h4>
+<p>이건 진짜 자주 사용되지 않는 데이터를 보관하는 용도다. 이걸로 저장하면 요금이 스탠다드보다 5배는 더 싼데, 읽는게 너무 느려서 일반적인 용도는 아니다. 읽는데 최대 12시간까지 걸릴 수 있다.</p>
+<p><img src="/images/img_886e10cd87a597ee.png" alt="" /></p>
+<br>
+<h4 id="3-gracier-deep-archive">3. Gracier Deep Archive</h4>
+<p>이건 진짜 장기백업용이다. 삭제하기에는 뭔가 나중에 쓸일이 있을 것 같은데, 사이즈는 무식하게 큰게 있으면 이런데다 박으면 된다. 스탠다드보다 10배 이상 싸다.</p>
+<p><img src="/images/img_46c9ae830d0f771c.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="intelligent-tiering-seutoriji">Intelligent-Tiering 스토리지</h2>
+<p>S3에서 밀어주는 저장공간 절약 시스템이다.<br />
+자주 사용되지 않는 데이터를 자동으로 식별해서 더 저렴한 공간으로 옮겨주는 것이다.</p>
+<p>조금 유의할 점은, 객체 모니터링을 추가로 해주긴 해야 하기 때문에 그 개수로 비용을 추가로 뜯는다는 것이다.</p>
+<p><img src="/images/img_583b31b8de074d83.png" alt="" />
+그래서 크기가 작은 파일이 많은 것보다는, 크기가 큰 파일이 많은 경우에 더 큰 절감효과를 볼 수 있을 것이다.</p>
+<p>업로드할때 그냥 이걸로 올리거나, 올려져있는 파일의 스토리지 클래스를 편집하면 적용이 가능하다.</p>
+<p><img src="/images/img_9cb7d54343af5b0f.png" alt="" /></p>
+<p>이건 대충 이런 원리로 동작한다.</p>
+<ol>
+<li>128kb 미만의 파일은 비용 부담도 거의 없으니까 검사 대상이 되지 않는다. 항상 스탠다드로 저장된다.</li>
+<li>특정 파일이 자주 호출되지 않는 것 같다면, 시스템은 파일을 Infrequent Access로 옮긴다.</li>
+</ol>
+<p>일단 기본 기능은 이것뿐이다.<br />
+그래서 이것만 하면 성능은 안정적으로 유지할 수 있고, 비용도 어느정도 줄일 수 있다.</p>
+<p>그리고 아카이브 기능도 필요하다면 필요에 따라서 버킷에 아카이브 설정을 추가할 수 있다.<br />
+버킷 설정 페이지에 가서 구성을 누르면</p>
+<p><img src="/images/img_a0992e602a7b27a4.png" alt="" />
+일반 아카이브와 딥 아카이브 설정을 추가할 수 있다.<br />
+일반 아카이브는 90일 이상 버려진 객체를, 딥 아카이브는 180일 이상 버려진 객체를 싸구려 저장소에 옮긴다.<br />
+당연히 빠르게 읽을 수는 없다. 둘다 다시 읽어오는데서 몇시간은 지연될 수 있을 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/korea/new-automatic-cost-optimization-for-amazon-s3-via-intelligent-tiering/">https://aws.amazon.com/ko/blogs/korea/new-automatic-cost-optimization-for-amazon-s3-via-intelligent-tiering/</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/s3/pricing/">https://aws.amazon.com/ko/s3/pricing/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-class-intro.html?icmpid=docs_amazons3_console#sc-dynamic-data-access">https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-class-intro.html?icmpid=docs_amazons3_console#sc-dynamic-data-access</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223183049195/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] Zero Value 응용<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223177676734/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Keyspaces<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

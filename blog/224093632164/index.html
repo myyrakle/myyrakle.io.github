@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 분산 락 구현해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224093632164/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 분산 락 구현해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224093632164/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-12-01T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224093632164/">[PostgreSQL] 분산 락 구현해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-01T00:00:00+00:00"><time datetime="2025-12-01T00:00:00+00:00">2025.12.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="337 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224093632164" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>시스템을 구현하다보면, 잠재적으로 여러 함수에서 호출될 수 있는 리소스 사용 지점을 통제하기 위해 단일 Lock 지점을 구현해야할 일이 종종 발생한다.<br />
+보통은 Redis를 사용해서 이런 분산 락을 구현하는 경우가 많지만, 반드시 Redis일 필요는 없다. PostgreSQL를 비롯해서 Lock을 지원하는 일반적인 DB들은 전부 응용이 가능하다.</p>
+<p>여기서는 PostgreSQL를 사용해서 분산 락을 구현해보는 방법을 간단히 정리해본다.<br />
+사용 언어는 Go이지만, 핵심은 SQL Query라서 다른 언어를 사용하더라도 응용이 어렵지는 않을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="baeje-pg-advisory-lock">배제: pg_advisory_lock</h2>
+<p>PostgreSQL은 pg_advisory_lock라고 해서 세션 단위 내에서 자유롭게 락을 걸거나 풀 수 있는 기능을 제공한다.<br />
+하지만 타임아웃 등 세부적인 구현이나 제어가 불가능해서 여기서는 다루지 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="lock-teibeul-seolgye">Lock 테이블 설계</h2>
+<p>당연히 테이블이 먼저 필요하다.<br />
+테이블 구조는 대략 다음과 같이 할 수 있을 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE IF NOT EXISTS</span><span style="color: #89B4FA;font-style: italic;"> locks</span><span> (</span></span>
+<span class="giallo-l"><span>  name TEXT PRIMARY KEY</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  owner TEXT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  expires_at TIMESTAMPTZ NOT NULL</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_ae8da25a5a1527cd.png" alt="" />
+name은 lock을 잡을 key 이름이다.<br />
+key 이름이 같으면 동시에 하나의 프로세스만 락을 점유할 수 있다.</p>
+<p>owner는 TTL을 Refresh하거나 Release할 수 있는 권한을 제어하려고 만든 필드다.<br />
+필요 없다고 생각하면 빼도 되긴 한다.</p>
+<p>expires_at은 TTL을 구현하기 위한 필드다.<br />
+이런거 없이 구현하면, lock 잡고 프로세스가 비명횡사했을 경우의 대책이 없어진다. 시간이 좀 지나면 수동으로 풀지 않아도 강제로 풀리게끔 안전장치를 마련하기 위한 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="trylock-lock-guhyeon">TryLock &amp; Lock 구현</h2>
+<p>Query는 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>		INSERT INTO</span><span style="color: #89B4FA;font-style: italic;"> locks</span><span> (name</span><span style="color: #9399B2;">,</span><span> owner</span><span style="color: #9399B2;">,</span><span> expires_at)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		VALUES</span><span> ($1</span><span style="color: #9399B2;">,</span><span> $2</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>()</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> make_interval</span><span>(</span><span style="color: #EBA0AC;font-style: italic;">secs</span><span style="color: #CBA6F7;"> =&gt;</span><span> $3))</span></span>
+<span class="giallo-l"><span>		ON</span><span style="color: #89B4FA;font-style: italic;"> CONFLICT</span><span> (name) DO UPDATE</span></span>
+<span class="giallo-l"><span>		SET owner</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> EXCLUDED</span><span style="color: #94E2D5;">.</span><span>owner</span><span style="color: #9399B2;">,</span><span> expires_at</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> EXCLUDED</span><span style="color: #94E2D5;">.</span><span>expires_at</span></span>
+<span class="giallo-l"><span>		WHERE locks</span><span style="color: #94E2D5;">.</span><span>expires_at</span><span style="color: #94E2D5;"> &lt;=</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>()</span></span>
+<span class="giallo-l"><span>		RETURNING expires_at</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_d5871420b92881cf.png" alt="" />
+구현 원리는 대단치 않다.</p>
+<ol>
+<li>TTL이 지나지 않은 Lock이 존재한다면 그 즉시 Lock이 실패했다고 판단하고 중단한다. (점유 실패)</li>
+<li>TTL이 지난 Lock이 있거나, Lock이 존재하지 않는다면 Lock을 삽입하고 성공했다고 처리하는 것이다.</li>
+</ol>
+<p>이걸 다시 루프 기반으로 감싸면 블로킹 기반 Lock이 되는 것이다.</p>
+<p><img src="/images/img_2c53fa67241a17ec.png" alt="" />
+Lock을 잡는데 실패하면, 성공할 때까지 루프를 돌리면서 락을 대기하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="unlock-guhyeon">UnLock 구현</h2>
+<p>Lock을 잡는 녀석이 있으면 당연히 푸는 녀석도 있어야 한다.<br />
+이건 구현이 단순하다. 그냥 날리면 되기 때문이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>DELETE FROM locks WHERE name</span><span style="color: #94E2D5;"> =</span><span> $1 AND owner</span><span style="color: #94E2D5;"> =</span><span> $2</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_8f3ed03e50165e5f.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="refreshlock-guhyeon">RefreshLock 구현</h2>
+<p>이건 필요하지 않을 수도 있다.<br />
+하지만 실행 흐름이 길어서 Lock TTL이 정상적인 상황에서도 초과할 수 있다면, Refresh를 날려서 Lock을 연장하는 것이 필요할 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>UPDATE locks</span></span>
+<span class="giallo-l"><span>SET expires_at</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>()</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> make_interval</span><span>(</span><span style="color: #EBA0AC;font-style: italic;">secs</span><span style="color: #CBA6F7;"> =&gt;</span><span> $2)</span></span>
+<span class="giallo-l"><span>WHERE name</span><span style="color: #94E2D5;"> =</span><span> $1 AND owner</span><span style="color: #94E2D5;"> =</span><span> $3</span></span>
+<span class="giallo-l"><span>RETURNING expires_at</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_c83a967d56a49232.png" alt="" />
+그냥 TTL만 늘려주는 단순한 기능이다.</p>
+<p>그럼 이제 저걸 가져다가 Lock Acquire/Release를 반복하면서 Lock 동작을 구현할 수 있다.</p>
+<p><img src="/images/img_b03c60e95a85f30a.png" alt="" /></p>
+<p>전체 코드는 Github에서 참조할 수 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/oddments/tree/master/Go_Example/database/postgresql/pg_lock">https://github.com/myyrakle/oddments/tree/master/Go_Example/database/postgresql/pg_lock</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224095986684/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>AWS Lambda 벤치마크.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224093654995/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 분산 우선순위 락 구현해보기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

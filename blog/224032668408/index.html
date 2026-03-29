@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Asynchronous I&#x2F;O | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224032668408/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Asynchronous I/O">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224032668408/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-10-05T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224032668408/">[PostgreSQL] Asynchronous I&#x2F;O</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-10-05T00:00:00+00:00"><time datetime="2025-10-05T00:00:00+00:00">2025.10.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="331 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224032668408" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Postgresql 18 버전부터는 기존의 틀을 깨고, 비동기식 I/O를 전면 도입하는 최적화가 들어간다.</p>
+<p><img src="/images/img_7c1fb59d8dd41315.jpg" alt="" />
+기존에는 동기 방식의 I/O를 사용해서만 파일이나 네트워크 통신을 했었다고 한다. 그래도 성능이 충분히 괜찮았던게 신기하다.</p>
+<p>아무튼 18 버전부터는 비동기 I/O가 기본 동작이 된다. 그리고 I/O 방식을 파라미터로 조절할 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="i-o-jojeol-obsyeon-io-method">I/O 조절 옵션: io_method</h2>
+<p>상기했듯이, pg 18에서는 io_method라는 파라미터로 I/O 방식을 조절할 수 있다<br />
+그 옵션은 다음과 같다.</p>
+<ol>
+<li>worker=워커 기반 비동기 스케줄링</li>
+<li>sync=동기 처리 (레거시 호환)</li>
+<li>io_uring=리눅스 io_uring 사용</li>
+</ol>
+<p>기본 동작은 io_method=worker다. 자체적인 백그라운드 워커를 몇개 두고서 직접 스케줄링하는 것이다.</p>
+<p>흥미로운 부분은 성능이 우월하다고 주장하는 io_uring이 자체 구현 worker보다 처리량이 저조할 때가 많다는 것이다. 그래서 이건 지금 시점에서는 사용하기에 적절하지 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="seongneung">성능</h2>
+<p>실제 성능 벤치마크를 보면, work I/O가 sync I/O보다 2배 정도 빠르기도 하다.</p>
+<p><img src="/images/img_763de891acb9580b.png" alt="" />
+당연히 sync가 제일 느리고, io_uring이 중간 지점의 성능을 보여준다.<br />
+그리고 worker가 가장 빠른건 확실한데, 워커 개수를 어떻게 잡느냐에 따라서 폭이 좀 생긴다. 너무 적게 잡으면 느려진다.</p>
+<p>그리고 내가 예전에 만들어놨던 벤치마크가 있어서 그거에도 적용해봤는데, 엄청 크진 않지만 유의미한 성능 향상이 있었다. 17 vs 18이고, 1000만개의 KV 데이터를 빠르게 우겨넣는 APPEND 벤치마크였다.</p>
+<p><img src="/images/img_0cdfe164993a4afc.png" alt="" />
+확실히 처리량이 늘긴 늘고, 레이턴시 측면에서도 좀 더 빨라진 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="weokeo-gaesu-obsyeon-io-workers">워커 개수 옵션: io_workers</h2>
+<p>이제는 기본 동작이 worker I/O로 바뀌기 때문에 워커 수를 조정하는 것도 튜닝포인트가 된다. 파라미터는 io_workers.</p>
+<p>아직 실험 데이터가 충분하진 않아서 딱 뭐라 짚어서 추천하기도 어렵고, pg가 자동으로 하드웨어 최적값을 세팅해주지도 않는다.</p>
+<p>확실한 것은 적은 것보다는 많은게 좋은데, 코어 수보다는 같거나 적어야 한다는 것이다.<br />
+대체로는 코어 개수의 25% 정도를 워커 개수로 잡고 보는 것을 고려해볼만하다. 그 이상은 테스트가 필요하다. 코어 개수로 맞추는 것도 이론적으로는 괜찮다.</p>
+<br>
+<br>
+<br>
+<h2 id="hangye">한계</h2>
+<p>io_method를 통한 비동기/동기 선택 기능은 아직 모든 부분에 적용되진 않는다.</p>
+<p>대표적인 예외는 인덱스 스캔 부분이다. 추후에 반영될 수도 있으나, 지금은 아니다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://wiki.postgresql.org/wiki/AIO">https://wiki.postgresql.org/wiki/AIO</a><br />
+<a rel="external" href="https://vondra.me/posts/tuning-aio-in-postgresql-18/">https://vondra.me/posts/tuning-aio-in-postgresql-18/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224035570922/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>스레드 Safety가 없다면 메모리 Safety도 없음.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224027795599/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] Internal: 데이터 저장 구조<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

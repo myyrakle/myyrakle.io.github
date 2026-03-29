@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 인덱스 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222148795534/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 인덱스">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222148795534/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2020-11-19T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222148795534/">[PostgreSQL] 인덱스</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-11-19T00:00:00+00:00"><time datetime="2020-11-19T00:00:00+00:00">2020.11.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="588 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222148795534" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>인덱스가 뭘까?</p>
+<p>알고리즘을 공부해봤다면 데이터를 다루는 데 있어서 가장 중요한 것이 '정렬'이라는 것을 알 것이다.<br />
+정렬되어있지 않은 값을 가져오는 것은 몹시 비효율적인 성능을 보이기 때문이다.</p>
+<p>데이터베이스도 이와 완전히 같지는 않지만 비슷하다. 데이터베이스의 값들을 정렬시킨 상태로 관리해서 그때그때 빨리 골라올 수 있도록 하는 것이 인덱스다.</p>
+<p>인덱스가 걸려있는 컬럼을 조건에 걸어서 값을 가져오면, '인덱스 스캔'이란 것을 유도할 수 있다.<br />
+인덱스 스캔이 항상 빠른 것은 아니지만, 큰 값 목록에서 극소수의 값만을 꺼내올 때는 이보다 효율적인 것이 없다.<br />
+자세한 것은 아래 포스트를 참고하길 바란다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222066082736">https://blog.naver.com/sssang97/222066082736</a></p>
+<p>한번 테스트를 해보자.<br />
+pk 하나 걸려있는 간단한 테이블이다.</p>
+<p><img src="/images/img_e63d44fb5fa61c96.png" alt="" />
+사실 pk 자체도 인덱스지만 없는걸로 생각하고 진행하겠다.</p>
+<p>조촐하게 값을 10만개 정도만 넣었다.</p>
+<p><img src="/images/img_c30ce7cce21aeb8d.png" alt="" /></p>
+<p>num에는 현재 아무것도 없기 때문에, num으로 값을 찾아오면 느려터진 Seq Scan으로 가져온다.<br />
+일반 코드 알고리즘과 비교하면 정렬되지 않은 배열에서 값을 하나하나 비교하면서 찾는 것과 동등하다.</p>
+<p><img src="/images/img_19870e0424a049da.png" alt="" /></p>
+<br>
+<br>
+<h2 id="indegseuyi-saengseong">인덱스의 생성</h2>
+<p>이제 인덱스를 걸어보자.<br />
+인덱스 생성은 다음과 같은 구문으로 수행할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create index 인덱스명 on</span><span style="color: #89B4FA;font-style: italic;"> 테이블명</span><span>(컬럼명</span><span style="color: #94E2D5;">...</span><span>)</span></span></code></pre>
+<p><img src="/images/img_6ec1ca294cc6a1a5.png" alt="" /></p>
+<p>그럼 이제 index scan이 유도될 것이다.</p>
+<p><img src="/images/img_b9773b08166a0562.png" alt="" /></p>
+<br>
+<br>
+<h2 id="indegseu-sagje">인덱스 삭제</h2>
+<p>인덱스의 삭제는 drop index로 행할 수 있다.</p>
+<p><img src="/images/img_40291b8eeb266f56.png" alt="" /></p>
+<br>
+<br>
+<h2 id="indegseu-taib">인덱스 타입</h2>
+<p>인덱스에도 종류가 하나만 있는 것이 아니다.<br />
+postgres의 인덱스는 b-tree, hash, Gist, Gin 등이 지원되나, 특별한 이유가 없으면 그냥 btree를 쓰면 된다.<br />
+기본값도 btree다.</p>
+<p><img src="/images/img_4068311dbdc8ab00.png" alt="" />
+btree가 가장 안정적이고 유용하다.</p>
+<p>해시도 우리가 아는 그 해시테이블이다.</p>
+<p><img src="/images/img_bfc40a3813f564b1.png" alt="" />
+굉장히 빠르고 좋을 것 같지만, btree와 다르게 범위 검색이 되지 않는다는 단점이 있다.<br />
+딱 = 조건인 것만 인덱스를 탄다. 복합인덱스도 안되고.</p>
+<p><img src="/images/img_18f600fa346e93b5.png" alt="" />
+그리고 이외에 자잘한 기능적 결함도 많아서 postgres에서는 사용을 비권장하는 기능이다.</p>
+<p>나머지 둘은 조건도 참 까다로운지, 그냥은 생성이 안된다.<br />
+이건 나중에 별도로 다뤄보도록 하겠다.</p>
+<p><img src="/images/img_f72d1689b2ebfe03.png" alt="" /></p>
+<p>결론은 굳이 타입 주지 말고 그냥 btree만 쓰면 된다.<br />
+그래서 앞으로의 설명도 다 btree를 전제한 내용들이다.</p>
+<br>
+<br>
+<h2 id="boghab-indegseu">복합 인덱스</h2>
+<p>인덱스는 한 컬럼에만 지정할 수 있는 게 아니라 2개 이상의 인덱스에도 지정할 수 있다.</p>
+<p><img src="/images/img_b7fb1825cb6a3b1b.png" alt="" />
+그런데 이렇게 되면 신경쓸게 조금 더 생긴다. 컬럼을 여러개 둔다고 각 컬럼마다 인덱스가 생기는 건 아니기 때문이다.<br />
+이러면 순서가 중요해진다. 가장 왼쪽에 있는 저 num이 선행 인덱스가 돼서, 저걸로 먼저 조건을 타는게 더 빠르다!  왼쪽에서 오른쪽으로 조건을 타서 들어가는 구조라 그렇다.</p>
+<p>일단 둘다 인덱스 스캔을 유도할 수는 있다.</p>
+<p><img src="/images/img_5d8a5453bb334363.png" alt="" />
+선행 컬럼인 num은 실행시간이 0.028밀리초<br />
+후행컬럼인 text 검색은 실행시간이 2.497밀리초가 걸렸다.</p>
+<p>그럼 순서를 바꾸면 어떻게 나올까?</p>
+<p><img src="/images/img_b76b37c970af337f.png" alt="" /></p>
+<br>
+<p><img src="/images/img_25723026769eadc8.png" alt="" />
+이번엔 반대로<br />
+num이 2.951밀리초.<br />
+text가 0.050밀리초가 나왔다.</p>
+<p>신경쓰자.</p>
+<br>
+<br>
+<h2 id="jeongryeol">정렬</h2>
+<p>btree 인덱스의 또 큰 장점 중 하나가 정렬이다.<br />
+btree는 기본적으로 값들을 정렬해서 관리한다고 했다. 그래서 인덱스가 걸린 컬럼을 정렬 조건으로 걸면 인덱스를 이용해서 더 빠르게 정렬 처리를 할 수가 있다!</p>
+<p>인덱스를 걸지 않은 상태에서 order by를 걸면</p>
+<p><img src="/images/img_11bb17f2410aadb6.png" alt="" />
+비용만 19000여에,<br />
+실행시간이 66 밀리초나 걸렸다.</p>
+<p>인덱스를 걸고 다시 돌려보자.</p>
+<p><img src="/images/img_0a83da6003b58a2d.png" alt="" /></p>
+<br>
+<p><img src="/images/img_f5666b04a7c727ff.png" alt="" />
+이번에는 비용이 10000 정도에 실행시간은 19 밀리초 정도로 단축됐다.</p>
+<p>이것도 잘 응용하면 큰 성능 향상을 기대할 수 있는 부분이다.</p>
+<br>
+<br>
+<h2 id="goyu-indegseu">고유 인덱스</h2>
+<h2 id="indegseureul-saengseonghalddae-create-index-saie-uniquereul-gginggyeoneoheumyeon-goyu-indegseuga-doenda">인덱스를 생성할때 create index 사이에 unique를 낑겨넣으면 고유 인덱스가 된다.</h2>
+<p><img src="/images/img_a84d07791458a082.png" alt="" />
+이러면 이거는 인덱스로서만 동작하는게 아니라, 이 컬럼 값은 항상 중복되지 않고 고유해야 한다는 제약사항이 되기도 한다. 자동으로 CONTRAINT를 추가해주는 것이다.</p>
+<br>
+<p><img src="/images/img_6a62573c97ee90dd.png" alt="" />
+그럼 이제 중복된 값이 들어가면 오류를 낸다.</p>
+<p>그렇다.</p>
+<br>
+<br>
+<br>
+<h2 id="keobeoring-indegseu">커버링 인덱스</h2>
+<p>복합적인 조건에 대해 인덱스를 거는 방법론을 말한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223531204143">https://blog.naver.com/sssang97/223531204143</a></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.postgresql.org/docs/9.1/indexes-types.html">https://www.postgresql.org/docs/9.1/indexes-types.html</a><br />
+<a rel="external" href="https://www.postgresql.org/docs/9.1/indexes-multicolumn.html">https://www.postgresql.org/docs/9.1/indexes-multicolumn.htm</a>l<br />
+<a rel="external" href="https://www.postgresql.org/docs/9.1/indexes-ordering.html">https://www.postgresql.org/docs/9.1/indexes-ordering.html</a><br />
+<a rel="external" href="https://www.postgresql.org/docs/11/sql-createindex.html">https://www.postgresql.org/docs/11/sql-createindex.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222149378385/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 쿼리 최적화: 인덱스 태우기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222148841925/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] include 인덱스<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

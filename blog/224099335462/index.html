@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] 사용량 제한 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224099335462/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] 사용량 제한">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224099335462/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-12-05T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224099335462/">[Clickhouse] 사용량 제한</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-05T00:00:00+00:00"><time datetime="2025-12-05T00:00:00+00:00">2025.12.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="274 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224099335462" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Clickhouse는 기본적으로 폭주기관차 같은 DB다.<br />
+쿼리를 잘 짜면 빠르지만, 쿼리 패턴이 이상하면 리소스를 미친듯이 쳐먹으면서 전체 DB를 거의 멈추게 하는 것이 매우 쉽다.</p>
+<p>그래서 실제 운영 환경에서는 합리적인 수준의 사용량 제한을 걸어서 혹시나 모를 비효율적인 쿼리 패턴을 차단하는 것이 꽤 중요하다고 할 수 있겠다.</p>
+<p>사용량 제한을 잘 걸려면 계정 분리를 먼저 좀 해주는 편이 좋다. 권장되는 방법이 각각의 용도를 가진 계정마다 별도의 사용량 제한을 거는 것이다.</p>
+<p>그리고 사용량 제한을 거는 방법도 크게 2가지가 있다.<br />
+quota 기준으로 쿼리 사용량 제한을 거는 것과, 시스템 리소스 기준으로 제약을 거는 것이다.<br />
+사용 패턴에 따라서 둘다 사용해도 되고, 하나만 사용해도 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="quota-jehan">Quota 제한</h2>
+<p>CREATE QUOTA 쿼리를 사용해서 특정 계정에 쿼타를 지정할 수 있다.<br />
+예를 들어 다음 쿼리는, 1시간마다 초기화되는 쿼타를 지정한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE QUOTA metabase_quata </span></span>
+<span class="giallo-l"><span>FOR INTERVAL</span><span style="color: #FAB387;"> 1</span><span> hour </span></span>
+<span class="giallo-l"><span>    MAX queries</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 100</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 1시간 내의 최대 쿼리 횟수 100번</span></span>
+<span class="giallo-l"><span>    MAX execution_time</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3600</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">  --</span><span> 총합 3600초동안 쿼리할 수 있음</span></span>
+<span class="giallo-l"><span>    MAX result_rows</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1000000</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 총합 1000000행 만큼의 최종 결과를 볼 수 있음</span></span>
+<span class="giallo-l"><span>    MAX result_bytes</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1000000000</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 총합 1000000000바이트 만큼의 최종 결과를 볼 수 있음</span></span>
+<span class="giallo-l"><span>    MAX read_rows</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10000000</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 총합 1000000행 만큼의 내부 Read를 할 수 있음</span></span>
+<span class="giallo-l"><span>    MAX read_bytes</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10000000000</span><span style="color: #94E2D5;"> --</span><span> 총합 10000000000바이트 만큼의 내부 Read를 할 수 있음</span></span>
+<span class="giallo-l"><span>TO metabase_viewer</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>row 수나 byte 수로 제한을 거는 것은 사실 좀 지나친 설정일 수도 있다.<br />
+query 횟수나 실행시간 기준으로 제한을 거는 것은 유용하다.</p>
+<p>이건 다른 조직이나 서비스에 한정적인 사용량 제한을 부여하는 데 용이하다.</p>
+<br>
+<br>
+<br>
+<h2 id="profile-sujun-jehan">PROFILE 수준 제한</h2>
+<p>혹은, 계정 PROFILE 세팅을 기준으로 제한을 설정할 수도 있다.<br />
+이건 특정 시간 범위의 쿼타가 아니라, 한 사용자가 한번에 사용할 수 있는 리소스를 제한한다.</p>
+<p>아래는 예제 쿼리다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE SETTINGS PROFILE limit_metabase</span></span>
+<span class="giallo-l"><span>SETTINGS </span></span>
+<span class="giallo-l"><span>    max_memory_usage</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 40000000000</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">              --</span><span> 메모리는 최대 40GB만큼 사용</span></span>
+<span class="giallo-l"><span>    max_execution_time</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 30</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">                     --</span><span> 최대 30초 사용</span></span>
+<span class="giallo-l"><span>    max_threads</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">                            --</span><span> 최대 10개 스레드 사용</span></span>
+<span class="giallo-l"><span>    max_concurrent_queries_for_user</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 8</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">         --</span><span> 동시 쿼리 8개</span></span>
+<span class="giallo-l"><span>TO metabase_viewer</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이러면 아무리 쿼리를 많이 날려도 40GB를 먹는 선에서 제한을 걸고, 30초가 넘으면 제한을 거는 식이 된다.<br />
+스레드나 쿼리도 너무 미친듯이 보내지 않게 제한을 할 수 있다.</p>
+<p>개인적으로는 쿼타보다는 이 기능이 더 유연하고 유효했다.<br />
+같은 조직 내에서, 그냥 실수를 방지하고 안정성을 강화하는 측면에서는 이게 더 적합하다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/operations/quotas">https://clickhouse.com/docs/operations/quotas</a><br />
+<a rel="external" href="https://clickhouse.com/docs/sql-reference/statements/create/quota">https://clickhouse.com/docs/sql-reference/statements/create/quota</a><br />
+<a rel="external" href="https://clickhouse.com/docs/sql-reference/statements/create/settings-profile">https://clickhouse.com/docs/sql-reference/statements/create/settings-profile</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224103028730/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>pglock v0.2.1<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224095986684/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>AWS Lambda 벤치마크.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

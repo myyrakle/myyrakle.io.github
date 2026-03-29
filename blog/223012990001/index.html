@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] 클러스터 구성: containerd 세팅 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223012990001/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] 클러스터 구성: containerd 세팅">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223012990001/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-02-12T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223012990001/">[k8s] 클러스터 구성: containerd 세팅</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-02-12T00:00:00+00:00"><time datetime="2023-02-12T00:00:00+00:00">2023.02.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="271 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223012990001" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>컨테이너 런타임으로 containerd를 세팅할 경우에 건드려야 하는 것들을 대략 정리해뒀다.<br />
+다른 런타임을 사용한다면 알 필요 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="keonteineo-reontaim-seolcihagi-containerd">컨테이너 런타임 설치하기: containerd</h2>
+<p>쿠버네티스는 사실 컨테이너 제어 도구일 뿐이라서, 자체 컨테이너 시스템을 내장하고 있지는 않다.</p>
+<p>쿠버네티스는 containerd, CRI-O, dockerd 3가지의 런타임을 제공한다.<br />
+뭘 써도 사용법은 크게 다르지 않고, 문제도 별로 없다.<br />
+나는 containerd를 사용하겠다.</p>
+<p>아래 링크에 들어가서<br />
+<a rel="external" href="https://github.com/containerd/containerd/releases">https://github.com/containerd/containerd/releases</a></p>
+<p><img src="/images/img_bc5902ec376f6bad.png" alt="" />
+원하는 버전의 아키텍쳐를 골라 다운받는다.<br />
+특별한 머신환경을 가진게 아니라면 대부분 amd64일 것이다..</p>
+<p>저걸 이렇게 압축을 푼다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>tar Cxzvf</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>local containerd</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1.6</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">17</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>amd64</span><span style="color: #94E2D5;">.</span><span>tar</span><span style="color: #94E2D5;">.</span><span>gz</span></span></code></pre>
+<p><img src="/images/img_feb7f35b5e7c97f5.png" alt="" /></p>
+<p>그리고 systemctl로 데몬을 띄울 수 있게 설정파일을 작성해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 택1</span><span style="color: #94E2D5;">.</span><span> 구성에 따라 경로가 다름</span></span>
+<span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>local</span><span style="color: #94E2D5;">/</span><span>lib</span><span style="color: #94E2D5;">/</span><span>systemd</span><span style="color: #94E2D5;">/</span><span>system</span><span style="color: #94E2D5;">/</span><span>containerd</span><span style="color: #94E2D5;">.</span><span>service</span></span>
+<span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>systemd</span><span style="color: #94E2D5;">/</span><span>system</span><span style="color: #94E2D5;">/</span><span>containerd</span><span style="color: #94E2D5;">.</span><span>service</span></span></code></pre>
+<p>내용은 여기 들어가서 복붙해주면 된다.<br />
+<a rel="external" href="https://raw.githubusercontent.com/containerd/containerd/main/containerd.service">https://raw.githubusercontent.com/containerd/containerd/main/containerd.service</a></p>
+<p><img src="/images/img_c3a29d1e93828df2.png" alt="" /></p>
+<p>그리고 저걸 통해서 containerd 런타임을 올려준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl daemon</span><span style="color: #94E2D5;">-</span><span>reload</span></span>
+<span class="giallo-l"><span>sudo systemctl enable</span><span style="color: #94E2D5;"> --</span><span>now containerd</span></span></code></pre>
+<p><img src="/images/img_c3905a228dd8fc7c.png" alt="" />
+근데 뭐 이것만으로는 안되고, 뭘 또 줄줄이 따라서 깔아야 하는게 있다.<br />
+왜지...?</p>
+<br>
+<br>
+<br>
+<h2 id="containerd-runc-seolci">containerd: runc 설치</h2>
+<p>아래에 들어가서<br />
+<a rel="external" href="https://github.com/opencontainers/runc/releases">https://github.com/opencontainers/runc/releases</a></p>
+<p><img src="/images/img_f8fc44ae80c64445.png" alt="" />
+또 받고</p>
+<p>깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo install</span><span style="color: #94E2D5;"> -</span><span>m</span><span style="color: #FAB387;"> 755</span><span> runc</span><span style="color: #94E2D5;">.</span><span>amd64</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>local</span><span style="color: #94E2D5;">/</span><span>sbin</span><span style="color: #94E2D5;">/</span><span>runc</span></span></code></pre>
+<p><img src="/images/img_8c66ed96018e9d21.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="containerd-cni-seolci">containerd: cni 설치</h2>
+<p>하나 더 있다.</p>
+<p>들어가서<br />
+<a rel="external" href="https://github.com/containernetworking/plugins/releases">https://github.com/containernetworking/plugins/releases</a></p>
+<p><img src="/images/img_358298b264420c89.png" alt="" />
+받고</p>
+<p>압축을 풀어준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>opt</span><span style="color: #94E2D5;">/</span><span>cni</span><span style="color: #94E2D5;">/</span><span>bin</span></span>
+<span class="giallo-l"><span>sudo tar Cxzvf</span><span style="color: #94E2D5;"> /</span><span>opt</span><span style="color: #94E2D5;">/</span><span>cni</span><span style="color: #94E2D5;">/</span><span>bin cni</span><span style="color: #94E2D5;">-</span><span>plugins</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>amd64</span><span style="color: #94E2D5;">-</span><span>v1</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">2.0</span><span style="color: #94E2D5;">.</span><span>tgz</span></span></code></pre>
+<p><img src="/images/img_075bb8c148caaaf7.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="containerd-config-seoljeong">containerd config 설정</h2>
+<p>또 좀 해줄게 있다.<br />
+containerd는 따로 뭘 설정하지 않으면 기본설정으로 돌아가는데, 그러면 쿠버에서 이걸 쓸 수가 없다.</p>
+<p>기본설정을 설정파일로 뽑아낸 다음에, 필요한 것만 바꿔서 쓸 수 있게 하겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>containerd</span></span>
+<span class="giallo-l"><span>sudo touch</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>containerd</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #94E2D5;">.</span><span>toml</span></span>
+<span class="giallo-l"><span>sudo containerd config</span><span style="color: #CBA6F7;"> default</span><span style="color: #94E2D5;"> |</span><span> sudo tee</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>containerd</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #94E2D5;">.</span><span>toml</span><span style="color: #94E2D5;"> &gt; /</span><span>dev</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">null</span></span>
+<span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>containerd</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #94E2D5;">.</span><span>toml</span></span></code></pre>
+<p>들어가서</p>
+<p><img src="/images/img_082502c83fe8f6fd.png" alt="" />
+저 SystemCgroup만 true로 바꿔주면 된다.</p>
+<p>그리고 재시작한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl restart containerd</span></span></code></pre>
+<p>이런식으로 잘 뜨면 잘 세팅된 것이다.</p>
+<p><img src="/images/img_e40342b4be8ce7de.png" alt="" /></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/setup/production-environment/tools/kubeadm/install-kubeadm/">https://kubernetes.io/ko/docs/setup/production-environment/tools/kubeadm/install-kubeadm/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223013640738/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] 파드(pod)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223013003825/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] 네임스페이스<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

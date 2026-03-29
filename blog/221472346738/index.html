@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C++] R-Value Reference와 Move Semantic | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221472346738/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C++] R-Value Reference와 Move Semantic">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221472346738/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2019-02-22T00:00:00+00:00">
+    <meta property="article:tag" content="C++">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221472346738/">[C++] R-Value Reference와 Move Semantic</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-02-22T00:00:00+00:00"><time datetime="2019-02-22T00:00:00+00:00">2019.02.22</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="746 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C++</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221472346738" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>R-Value Reference(이하 오른값 참조)는 C++11부터 추가된 아주 복잡하면서도 멋진 녀석이다.</p>
+<p>이게 대체 뭐하는 놈인고 하면, 아주 원론적인 부분까지 접해들어갈 필요가 있다.<br />
+아래 코드를 봐보자.<br />
+<strong>int num;</strong><br />
+<strong>num = 33;</strong><br />
+L: 여기서 num은 왼쪽에 있다. 그리고 이름이 있다. 그리고 표현식이 종료되어도 존재한다. 또한 메모리 셀이므로 주소연산(&amp;)을 사용할 수 있다. 이것이 왼값이다.<br />
+R: 오른쪽에는 33이 있다. 이건 이름이 없다. 그냥 값이 num으로 전달될 뿐이고, 표현식이 끝나면 증발한다. 또한 상수이므로 주소연산을 사용할 수 없다. 이것이 오른값이다.</p>
+<p><strong>const string&amp; s...</strong> 같은,<br />
+이제까지 우리가 사용했던 참조는 왼값참조였다.<br />
+기존에 존재하던 변수(왼값)를 참조했으니까.</p>
+<p>하지만 이제 우리가 접근해볼 오른값 참조는 저런 이름없는 임시 값들마저 참조할 수 있다.<br />
+표기법은 아래와 같이, &amp;대신에 &amp;&amp;를 사용한다.<br />
+int &amp;&amp; ref = 333; //오른값 333을 참조</p>
+<p>왼값도 std::move를 사용하면 오른값 참조에 묶을수 있다.<br />
+std::string s = "text";<br />
+std::string&amp;&amp; ref = std::move(s);<br />
+//이름이 move지만 진짜 이동하는건 아니고 &amp;&amp;참조로 캐스팅만 해줌</p>
+<p>오른값 참조자도 기존의 왼값 참조자처럼 값에 접근해서 이래저래 쓸수 있다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+근데 이게 다라면 이걸 구분해서 쓸 이유가 전혀 없다. 그냥 왼값참조 써도 똑같이 되잖아?</p>
+<br>
+<p>그렇다. 이 오른값 참조로 값이 다른 변수에 전달되고, 그 변수의 타입에 해당하는 이동 생성자(혹은 대입자)가 있다면, **무브 시맨틱(Move Semantic)**이라는 것이 발생한다.<br />
+말 그대로 이동(move)을 수행한다.</p>
+<p>컴퓨터에서 무거운 영상 파일들을 옮겨본 적이 있을것이다.<br />
+파일이 너무 무겁다면 그 파일의 복사하고 붙여넣는(Ctrl+c,v) 속도도 엄청하게 느려진다.<br />
+하지만 파일을 잘라내고 붙일(Ctrl+x,v) 때는 별다른 시간이 소요되지 않고 뚝딱 완료된다. 이것이 파일이 한 군데만 존재할 것을 보장하는 데서 발생하는 일종의 이동이다.<br />
+앞서 언급한 무브시맨틱도 이와 같은 원리라 보면 된다.</p>
+<p>예시를 한번 보자.<br />
+//가정1: s 안에 담긴 문자열은 크기가 크다.<br />
+std::string s = "...";<br />
+//이 시점에서 s는 더이상 필요가 없다.<br />
+//s2에서 옮겨서 s2로만 쓰면 된다.<br />
+std::string s2 = s;</p>
+<p>이러면 s2의 복사생성자가 호출되면서 s의 내부값을 일일이 복사해서 가져간다.<br />
+기존 s의 크기가 클수록 소요되는 시간도 선형적으로 증가할 것이다.</p>
+<p>하지만 이렇게 한다면<br />
+std::string s2 = std::move(s);<br />
+//s를 std::string&amp;&amp;으로 캐스팅<br />
+//s2의 이동생성자 호출</p>
+<p>s의 길이와 상관없이 이 작업은 아주 작은 상수시간에 종료된다.<br />
+그리고 기존의 s는 텅 비게된다.</p>
+<p>그리고 무브시맨틱은 연산중에 발생한 임시객체를 다룰때도 효용을 보인다.<br />
+std::string s = "hello";<br />
+std::string s2 = " world";<br />
+std::string s3 = s+s2;<br />
+옛날 방식대로 생각해보자. 위 코드의 세번째줄에서 s와 s2가 더해져서 둘이 이어진 임시객체 std::string("hello world")가 생성된다. 여기까진 좋다. 그럼<br />
+std::string s3 = std::string("hello world");<br />
+의 형태가 된다.<br />
+그럼 저 임시객체의 값을 복사해가기 위해  복사생성자가 호출되고 저 값들을 전부 복사해갈 것이다.<br />
+당장 저 길이라면 상관없지만, 임시객체가 저것보다 훨씬 크다면 이건 문제가 된다.</p>
+<p>하지만 이제 우리에겐 무브 시맨틱이 있다.<br />
+s+s2의 결과물은 오른값이다.<br />
+그러므로 이동생성자가 호출돼서 s+s2의 결과값이 낭비없이 s3에게 쏙 넘어간다.</p>
+<br>
+<p>그리고 이런 성능의 향상 빼고도, 이 무브시맨틱은 하나의 장점이 또 있다.</p>
+<p>무브시맨틱은 말 그대로 이동이다.<br />
+값이 아래에 있던 것이 위로 가면, 그 값은 위에만 존재한다. 아래에는 존재하지 않는다.<br />
+그러므로 이동의 동작은 의미론적으로 유일성(unique)을 보장한다. 복사와 다르게.</p>
+<p>그래서 스마트포인터 std::unique_ptr 같은 경우는 이런 이동만을 행할 수 있다. 복사는 금지되어있다.<br />
+이 외에도 복사는 금지하고 이동만을 허가하는 클래스들이 꽤 있다.<br />
+auto p = std::make_unique<T>(...);<br />
+std::unique_ptr<T> p2 = p; //에러! 복사 불가<br />
+std::unique_ptr<T> p3 = std::move(p); //p-&gt;p3 이동. p는 null이 됨</p>
+<br>
+<p>아 그리고 오른값참조가 등장하면서 원래 4개였던 클래스의 기본 함수들이, 6개로 늘어났다.<br />
+클래스명이 T일 경우, 기본 함수들은 아래와 같다.<br />
+**T()=default; **<strong>//기본 생성자</strong><br />
+<strong>~T() = default; <strong><strong>//소멸자</strong><br />
+<strong>T(const T&amp;) = default;</strong></strong> //복사생성자</strong><br />
+**T(T&amp;&amp;) = default; **<strong>//이동생성자</strong><br />
+**T&amp; operator=(const T&amp;) = default; **<strong>//복사대입자</strong><br />
+**T&amp; operator=(T&amp;&amp;) = default; **<strong>//이동대입자</strong><br />
+이동생성자와 이동대입자는 구현할 필요가 없다. 복사생성자와 같은 얕은복사의 문제는 없기 때문에 그냥 =default만 해줘도 된다.(컴파일러에게 자동구현시키기)<br />
+그래도 만약 구현하고 싶다면, 아래처럼 하면 된다.<br />
+//가정: 타입 T에는 멤버변수로 a와 b를 가진다.<br />
+//가정: a와 b는 전부 이동이 가능하다.<br />
+T(T&amp;&amp; other) :<br />
+a(std::move(other.a)),<br />
+b(std::move(other.b)<br />
+{}<br />
+T&amp; operator=(T&amp;&amp; other)<br />
+{<br />
+    this-&gt;a=std::move(other.a);<br />
+    this-&gt;b=std::move(other.b);<br />
+    return *this;<br />
+}</p>
+<p>아무튼 오른값 참조는 굉장히 유용하다.<br />
+문제는 자잘한 규칙과 함정이 많고, 복잡하다는 것인데</p>
+<p>가장 헷갈릴만한 것은, 오른값 참조자는 오른값이 아니라는 것이다. 오른값 참조자 자체는 이름도 있고, 주소연산도 가할 수 있으며, 표현식이 종료되어도 생존한다.<br />
+때문에 아래와 같은 경우는 이동이 발생하지 않는다.<br />
+std::string s = "...";<br />
+std::string&amp;&amp; s2 = std::move(s); //s-&gt;s2 이동<br />
+std::string s3 = s2; //s2-&gt;s3 이동 실패. 그냥 복사 생성자 호출</p>
+<p>이동의 과정은 순수하게 오른값으로만 전달되어야 한다.<br />
+아래와 같이 고치면 이동이 수행된다.<br />
+std::string s = "...";<br />
+std::string&amp;&amp; s2 = std::move(s); //s-&gt;s2 이동<br />
+std::string s3 = std::move(s2); //s2-&gt;s3 이동</p>
+<p>그리고 오른값 참조자는 const를 붙이면 안된다.<br />
+에러는 나지 않지만 이동이 실패한다.</p>
+<br>
+<p>더 자세한 사항들은 모던 이펙티브 C++를 참조하길 바란다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221484142375/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C++] 델리게이트 구현<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221453471653/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] Q: 왜 동적배열이 vector가 된건가요?<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

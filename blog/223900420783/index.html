@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] tokio: test | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223900420783/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] tokio: test">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223900420783/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-06-16T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223900420783/">[Rust] tokio: test</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-16T00:00:00+00:00"><time datetime="2025-06-16T00:00:00+00:00">2025.06.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="218 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223900420783" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>비동기 함수가 하나 있고, 그걸 테스트해야 한다고 생각해보자.</p>
+<p><img src="/images/img_c019a61f01f935d0.png" alt="" /></p>
+<p>여기서 문제는, 일반 유닛테스트 컨텍스트는 async가 아니라서 awaiting을 제대로 할 수가 없단 것이다.</p>
+<p><img src="/images/img_8c9f45a3b62e30b0.png" alt="" />
+이걸 동작하게 하려면 직접 tokio 컨텍스트 생성해서 block_on 걸고 하면 되겠지만, 너무 손이 많이 가고 복잡하다.</p>
+<p>그래서 그런걸 해주는게 tokio::test라는 숏컷 매크로다.</p>
+<p><img src="/images/img_e565ab8b6414b530.png" alt="" />
+스레드 몇개 쓸지 정도만 정의해서 대신 박아주면 잘 동작한다.</p>
+<p>스레드 개수나 flavor를 지정하지 않으면 current_thread로 동작한다. 그냥 테스트마다 적당히 별도의 스레드로 뜨도록 하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="sleep-ceori-daeeung-start-paused">Sleep 처리 대응: start_paused</h2>
+<p>비동기 코드들은 속도 제어를 위해서 Sleep 등을 통해서 명시적인 대기를 사용할 때가 많다.<br />
+문제는, 그렇게 붙이다보면 함수 호출 하나하나가 매우 오래 걸릴 수도 있다는 것이다.</p>
+<p><img src="/images/img_bfbfb22e5ecfd602.png" alt="" /></p>
+<p><img src="/images/img_6f32020b4004c2de.png" alt="" />
+이렇게만 해도 한번 돌때마다 10초씩 걸린다.</p>
+<p>시간 대기가 단위테스트에 있어서 유의미한 요소가 아니라면, start_paused 옵션을 사용해서 테스트 속도를 끌어올릴 수 있다.</p>
+<p><img src="/images/img_0c5906fea6002214.png" alt="" />
+이게 뭐냐면, 테스트 컨텍스트에 한해서는 sleep 동작을 씹도록 하는 것이다.</p>
+<p>내부적으로는 런타임 생성시에 저 플래그를 넣어주는 것인데</p>
+<p><img src="/images/img_deff83963816b181.png" alt="" />
+저걸 넣으면 paused 동작, 정확히는 tokio::time::sleep과 tokio::time::Interval::tick가 무시되도록 한다.<br />
+std:🧵sleep이나 다른 함수들에 대해서는 동작하지 않는다. tokio만을 쓴다는 전제 하에서만 유효하다.</p>
+<p>아무튼 딱 이런 테스트 컨텍스트에만 넣을 수 있는 플래그다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.rs/tokio/latest/tokio/attr.test.html">https://docs.rs/tokio/latest/tokio/attr.test.html</a><br />
+<a rel="external" href="https://tokio.rs/tokio/topics/testing">https://tokio.rs/tokio/topics/testing</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223904994113/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Python] lint: pylint<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223899504900/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] OS 이미지 굽기 (gnome)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

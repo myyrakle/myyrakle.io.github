@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] SQL: SELECT | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223929932221/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] SQL: SELECT">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223929932221/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-07-11T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223929932221/">[Clickhouse] SQL: SELECT</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-07-11T00:00:00+00:00"><time datetime="2025-07-11T00:00:00+00:00">2025.07.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="296 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223929932221" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>clickhouse에서 SELECT문으로 데이터를 조회하는 방법을 대강 다뤄보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="kweori-gibon">쿼리 기본</h2>
+<p>SQL들이 통상적으로 제공하는 기본 구문들은 다 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span></span>
+<span class="giallo-l"><span>FROM 테이블</span></span>
+<span class="giallo-l"><span>JOIN</span><span style="color: #94E2D5;"> ...</span><span> ON</span><span style="color: #94E2D5;"> ...</span></span>
+<span class="giallo-l"><span>WHERE</span><span style="color: #94E2D5;"> ...</span></span>
+<span class="giallo-l"><span>OFFSET</span><span style="color: #94E2D5;"> ...</span><span> LIMIT</span><span style="color: #94E2D5;"> ...</span></span>
+<span class="giallo-l"><span>GROUP BY</span><span style="color: #94E2D5;"> ...</span></span>
+<span class="giallo-l"><span>ORDER BY</span><span style="color: #94E2D5;"> ...</span></span></code></pre>
+<p>WHERE절, OFFSET LIMIT 절, ORDER BY 절 등은 다른 DB들과 거의 동등하다.</p>
+<p><img src="/images/img_e15002c9bfb93def.png" alt="" /></p>
+<p><img src="/images/img_64f5c1728bfdf8e8.png" alt="" /></p>
+<p>Group by와 Count 등의 집계 함수를 사용하면 다른 DB들과 마찬가지로 집계 연산을 할 수 있다.</p>
+<p><img src="/images/img_f96921524e73587c.png" alt="" /></p>
+<p><img src="/images/img_02b79ef1d80ef2a4.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="limit-by-jeol">Limit By 절</h2>
+<p>clickhouse에서 유용한 기능 중 하나다.<br />
+그냥 Limit와는 키워드만 같을뿐 완전히 다른 기능이다.</p>
+<p>알다시피 clickhouse에서는 Update나 Unique Key 제약이 잘 안되는 편인데, 그래서 ReplcaingMergeTree 같은걸 쓰더라도 키가 같은 값이 항상 노출될 수 있다.</p>
+<p>그래서 이렇게 키가 같은 값이 보존되는 경우가 빈번한데,</p>
+<p><img src="/images/img_65533a208c75f6b0.png" alt="" /></p>
+<p>ReplacingMergeTree의 Optimize 기능을 사용해서 병합하거나, 직접 삭제하는 것도 방법이지만 그건 대형 테이블에서는 그다지 효율적이지 않다.<br />
+권장되는 방법은 Limit 1 by id를 걸어서, 해당 id를 기준으로 최신 값만 가져오도록 하는 것이다.</p>
+<p><img src="/images/img_c46916d110698d82.png" alt="" /></p>
+<p>문서 참조<br />
+<a rel="external" href="https://clickhouse.com/docs/sql-reference/statements/select/limit-by">https://clickhouse.com/docs/sql-reference/statements/select/limit-by</a></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="sample-jeol">Sample 절</h2>
+<p>데이터 샘플링을 위해 제공되는 기능이다.<br />
+대형 데이터셋에 대해서 대략적인 수치만 빠르게 뽑아내고 싶을때 사용할 수 있다 .</p>
+<p>비율 기반이나 행 개수 기반으로 데이터를 대강 스캔해서 처리하도록 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span></span>
+<span class="giallo-l"><span>FROM table</span></span>
+<span class="giallo-l"><span>SAMPLE</span><span style="color: #FAB387;"> 0.1</span><span style="color: #94E2D5;"> --</span><span style="color: #FAB387;"> 10</span><span style="color: #94E2D5;">%</span><span>만 샘플링</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span></span>
+<span class="giallo-l"><span>FROM table</span></span>
+<span class="giallo-l"><span>SAMPLE</span><span style="color: #FAB387;"> 1000</span><span style="color: #94E2D5;"> --</span><span> 행 1000개만 샘플링</span></span></code></pre>
+<p>참고로 이건 테이블 Setting에 샘플링 키 설정이 되어있어야 사용할 수 있다.</p>
+<p>설정 방법은 다음 문서를 참조한다.<br />
+<a rel="external" href="https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree#sample-by">https://clickhouse.com/docs/engines/table-engines/mergetree-family/mergetree#sample-by</a></p>
+<br>
+<br>
+<br>
+<h2 id="with-jeol">WIth 절</h2>
+<p>clickhorse도 복잡한 쿼리를 단순화하기 위한 용도로 with절을 제공한다.</p>
+<p><img src="/images/img_6cf686e7ba2a6f42.png" alt="" />
+이를 통해 임시 쿼리 결과값을 with으로 바인딩한 이후에 재사용하거나 할 수 있다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/sql-reference/statements/select/limit-by">https://clickhouse.com/docs/sql-reference/statements/select/limit-by</a><br />
+<a rel="external" href="https://clickhouse.com/docs/sql-reference/statements/select">https://clickhouse.com/docs/sql-reference/statements/select</a></p>
+<br>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223934469402/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] 테이블 깨짐 현상<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223926856434/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Clickhouse] Engine: Log<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

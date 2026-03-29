@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] ? 연산자 (question mark operator) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223908197307/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] ? 연산자 (question mark operator)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223908197307/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2025-06-23T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223908197307/">[Rust] ? 연산자 (question mark operator)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-23T00:00:00+00:00"><time datetime="2025-06-23T00:00:00+00:00">2025.06.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="446 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223908197307" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>? 연산자는 Rust 오류 처리 시스템의 핵심을 이루는 syntax sugar 중 하나다.<br />
+오류의 전파(propagation)를 용이하게 하는 수단이라고 할 수 있다.</p>
+<br>
+<br>
+<h2 id="munje">문제</h2>
+<p>알다시피, Rust는 전통적인 try-catch 오류처리 구조를 거부하고, 함수형에서 주로 사용하는 monad 기반의 오류처리를 기본으로 사용한다. Result와 Option 말이다.</p>
+<p><img src="/images/img_cd2a696afbd93101.png" alt="" />
+그래서 만약 이렇게 개별 함수에서 오류를 반환할 수 있는 상황이라면</p>
+<br>
+<p><img src="/images/img_3b0ccc3c5df932d0.png" alt="" />
+호출자 함수도 그 오류를 적절히 받아서 처리를 해줘야 한다.</p>
+<p>근데 이게, 그냥 여기서 처리를 하고 끝내면 좋겠지만, 또 오류를 그 상위로 전파하는게 효율적인 경우일 때가 많다.<br />
+try-catch 시스템에서는 이게 쉽다. 그냥 catch를 하지 않으면 예외가 호출자로 떠넘겨지기 때문이다.</p>
+<p>하지만 Rust 처럼 오류를 명백한 값의 일종으로 다룰 경우에는, 위의 코드처럼 오류에 대해서 매번 번거롭게 분기를 쳐줘야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeonsanja">? 연산자</h2>
+<p>? 연산자는 이런 불필요한 보일러플레이트를 최소화하기 위한 보조 문법이라고 보면 된다.<br />
+위의 번잡한 코드에 ? 연산자를 적용하면, 놀라울 정도로 코드를 간결하게 만들 수 있다.</p>
+<p><img src="/images/img_6440a39e4ee41b51.png" alt="" />
+동작은 방금 코드와 동일하다.<br />
+Result가 오류 상태라면 바로 오류를 반환하고, 오류가 아니라면 unwrap을 해서 그 값을 그대로 반환해주는 것이다. 그걸 저 연산자 하나로 축약한 것이다.</p>
+<p>그리고 유의미한 값이 반환값으로 존재하더라도, 그냥 받아서 쓰면 된다.</p>
+<p><img src="/images/img_9950ba4acd10d584.png" alt="" />
+이렇게 말이다.</p>
+<p>그리고 최상위 레이어-main 함수에서도 사용 가능하다.</p>
+<p><img src="/images/img_f9a67aff4132e8ec.png" alt="" />
+여기서 오류가 발생하면 당연히 프로그램이 뻗는다. 권장되는 사용 방식은 아니다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeonsanjayi-jeogyong-daesang">? 연산자의 적용 대상</h2>
+<p>위에서는 Result만 예시로 들었지만, Option 타입에 대해서도 적용이 가능하다.</p>
+<p><img src="/images/img_205194e223ab39df.png" alt="" /></p>
+<p>? 연산자는 당연히 아무 타입에나 적용되는 것은 아니고, Try 트레잇을 구현하는 타입에 대해서만 동작한다.<br />
+현재로서는 Result, Option 타입에 대해서만 지원이 된다.</p>
+<p><img src="/images/img_ad6d2d3ae9537f6c.png" alt="" />
+다만 현재 시점에서 Try 트레잇의 직접 구현은 nightly이기 때문에, 직접 구현한 래퍼 타입에 대해서는 ? 연산자를 사용할 수 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="munje-option-result-gan-taib-bulilci">문제: Option&lt;&gt;Result 간 타입 불일치</h2>
+<p>? 연산자의 불편한 부분 중 하나는, ? 사용대상 함수의 반환 타입과 현재 함수의 반환타입이 일치하거나, 변환 가능해야 한다는 것이다.</p>
+<p>이게 무슨 말이냐?</p>
+<p><img src="/images/img_14af015c77e1ccb8.png" alt="" /></p>
+<p><img src="/images/img_185b1a80f4f963f2.png" alt="" />
+이런 식으로 Result와 Option을 무작정 섞어쓸 수 없다는 것이다. 사실 당연하다.</p>
+<p>단순 Option&lt;-Result 간 변환이라면 간단한 꼼수로 처리할 수 있긴 하다.<br />
+Result::ok 함수는 값을 Option 형태로 변환한다.</p>
+<p><img src="/images/img_12b4706d0b2b5100.png" alt="" />
+이러면 Result의 오류 정보가 유실되긴 하지만, 넘어가긴 한다.</p>
+<br>
+<p><img src="/images/img_fa96598ff0d8352e.png" alt="" />
+반대로 Option-&gt;Result로 넘길 경우에는 ok_or로 오류 타입을 매핑해주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="munje-resultyi-oryu-gan-taib-bulilci">문제: Result의 오류 간 타입 불일치</h2>
+<p>또 흔히 맞닥뜨리는 문제 중 하나가, 같은 Result 타입이더라도 Error 타입이 호환되지 않으면 ? 연산자가 동작하지 않는다는 것이다.</p>
+<p><img src="/images/img_ca01fb624b44b874.png" alt="" /></p>
+<p><img src="/images/img_a7f50f6f360e98ac.png" alt="" />
+외부 라이브러리를 사용하다보면, 이런 식으로 원본 오류 타입들이 혼재될 경우가 잦다.</p>
+<br>
+<p><img src="/images/img_292f71ae6d42e388.png" alt="" /></p>
+<p><img src="/images/img_00701c4cf7e88576.png" alt="" />
+그럼 당연히 에러가 난다.<br />
+결국 지금 함수에서는 오류가 발생하면 Error 타입으로 반환을 해야하는데, 이상한 오류 타입이 껴있으니 타입이 뻑나는 것이다.</p>
+<p>이 문제는 꽤 간단하게 해결할 수 있다.</p>
+<p><img src="/images/img_12e1e95bb7686ab1.png" alt="" /></p>
+<p><img src="/images/img_f278d299c3feda2d.png" alt="" />
+그냥 From trait 구현을 통해 오류 간 타입변환을 제공해주면 된다.<br />
+그럼 이 정도는 알아서 감지해서 변환처리해준다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223908184749/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] DI: wire<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223905934334/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Python] ruff: lint &amp; formatter<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

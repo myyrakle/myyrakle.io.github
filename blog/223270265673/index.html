@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] health status 구독하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223270265673/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] health status 구독하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223270265673/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2023-11-21T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223270265673/">[AWS] health status 구독하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-11-21T00:00:00+00:00"><time datetime="2023-11-21T00:00:00+00:00">2023.11.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="166 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223270265673" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>AWS는 여타 인프라 서비스들과 마찬가지로 헬스체크용 콘솔을 제공한다.</p>
+<p>아래 링크에 들어가면 글로벌 장애나 업데이트, 혹은 내 계정에서 발생한 특수한 이벤트를 확인할 수 있다.<br />
+<a rel="external" href="https://health.aws.amazon.com/health/status">https://health.aws.amazon.com/health/status</a></p>
+<p><img src="/images/img_317d3abb373ffacd.png" alt="" />
+가끔 들어가서 뭔일 없나 확인해보면 된다.</p>
+<p>근데 이걸 매번 들어가서 보는 것도 일이고, 제대로 활용을 하려면 알림이 오게 하는 편이 좋다.</p>
+<p>AWS는 이거에 대한 뭔가 구독체계가 썩 잘 되어있지는 않아서 직접 구현을 해줘야 한다.<br />
+GCP가 RSS 피드 형태로 구독데이터를 제공하는 것과 상반된다.</p>
+<p>aws 상태 알림은 aws 자체의 이벤트로 수신이 가능하다.<br />
+그래서 eventbridge를 통해 제어할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="slack-gudog-siseutem-guhyeon">Slack 구독 시스템 구현</h2>
+<p>나는 슬랙 웹훅을 사용해서 직접 슬랙 통합을 구현했다.<br />
+Lambda 하나 파고, 적당히 다음과 같이 구현한다.</p>
+<p><img src="/images/img_2a28ab06980f96de.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> axios</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;axios&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 슬랙 웹훅 링크</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> SLACK_URL</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> `https://hooks.slack.com/services/...`</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(event)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> detail</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">?.</span><span>detail</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> status</span><span style="color: #94E2D5;"> =</span><span> detail</span><span style="color: #94E2D5;">?.</span><span>statusCode</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> region</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">?.</span><span>region</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> service</span><span style="color: #94E2D5;"> =</span><span> detail</span><span style="color: #94E2D5;">?.</span><span>service</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> description</span><span style="color: #94E2D5;"> =</span><span> detail</span><span style="color: #94E2D5;">?.</span><span>eventDescription</span><span style="color: #94E2D5;">?.</span><span>[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #94E2D5;">?.</span><span>latestDescription</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> attachments</span><span style="color: #94E2D5;"> =</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;#ff0000&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;pretext&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;AWS 상태 알림&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;title&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Status 콘솔 이동&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;title_link&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;https://health.aws.amazon.com/health/status&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;text&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;AWS 상태 알림&quot;</span><span style="color: #9399B2;">,</span><span>    </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;fields&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;title&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;상태&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span> status</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;short&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;title&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;서비스&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span> service</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;short&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;title&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;리전&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span> region</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;short&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;title&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;내용&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span> description</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;short&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                },</span></span>
+<span class="giallo-l"><span>            ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    ]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">   await</span><span> axios</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">post</span><span>(SLACK_URL</span><span style="color: #9399B2;">, {</span></span>
+<span class="giallo-l"><span>		username</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;Amazon Cloud Service Health Updates&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		attachments</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		channel</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;채널ID&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // TODO implement</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        statusCode</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        body</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #A6E3A1;">&#39;Hello from Lambda!&#39;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>받아서 적당히 파싱하고 슬랙에 쏴주는 로직이다.</p>
+<p>그리고 eventbridge 규칙으로 트리거를 걸어준다.</p>
+<p><img src="/images/img_c3f7899294efba82.png" alt="" /></p>
+<p><img src="/images/img_85997d0779d5e435.png" alt="" /></p>
+<p>소스는 aws.health면 된다.</p>
+<p><img src="/images/img_c93a1961a9c459f2.png" alt="" /></p>
+<p>그리고 방금 만든 람다를 걸어주면 끝이다.</p>
+<p><img src="/images/img_939dc1b7a0c514da.png" alt="" /></p>
+<p>이게 이벤트 발행자가 내가 아니라 aws라서 실제 테스트는 어렵다.<br />
+만약 위의 코드를 가져다 만들었으면 이렇게 뜰 것이다.</p>
+<p><img src="/images/img_12443defca15296a.png" alt="" />
+나는 잘 쓰고있다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223275447559/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>gost v0.11.0<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223266999649/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.74.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C++] 람다 오버헤드 측정 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221408537589/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C++] 람다 오버헤드 측정">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221408537589/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-03-29T16:26:26.889723537+00:00">
+    <meta property="article:published_time" content="2018-11-29T00:00:00+00:00">
+    <meta property="article:tag" content="C++">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221408537589/">[C++] 람다 오버헤드 측정</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2018-11-29T00:00:00+00:00"><time datetime="2018-11-29T00:00:00+00:00">2018.11.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="262 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C++</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221408537589" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>일반 함수와 펑터, 람다의 호출, std::function을 썼을 때의 오버헤드를 측정해보았다.</p>
+<p>자꾸 컴파일러가 최적화를 때려서 최적화는 꺼버렸다.</p>
+<br>
+<p>| 12345678910111213141516171819202122232425262728293031323334353637383940414243444546474849505152535455565758596061626364656667686970717273747576 | #include "stdafx.h"#include "Timer.h"#include <iostream>#include <functional> volatile void func() {} struct Functor{     volatile void operator()() {}}; constexpr auto N = 1LL; //루프 수 using func_t = std::function&lt;volatile void(void)&gt;; int main(){    auto lambda = [\]()-&gt;volatile void {}; //람다    volatile void(*lambda_ptr)(void)= [\]()-&gt;volatile void {};    func_t lambda_f = [\]()-&gt;volatile void {};     auto func_ptr = func; //그냥 함수를 함수포인터로    func_t func_ptr_f = func; //그냥 함수를 function에     auto functor = Functor(); //펑터    Timer timer; timer.start();    for (long long i = 0; i &lt; N; i++)        lambda();timer.stop();auto lambda_time = timer.get_nano(); timer.start();    for (long long i = 0; i &lt; N; i++)        lambda_f();timer.stop();auto lambda_time_f = timer.get_nano(); timer.start();for (long long i = 0; i &lt; N; i++)    lambda_ptr();timer.stop();auto lambda_ptr_time = timer.get_nano(); timer.start();for (long long i = 0; i &lt; N; i++)    func_ptr();timer.stop();auto ptr_time = timer.get_nano(); timer.start();for (long long i = 0; i &lt; N; i++)    func_ptr_f();timer.stop();auto ptr_time_f = timer.get_nano(); timer.start();for (long long i = 0; i &lt; N; i++)    functor();timer.stop();auto functor_time = timer.get_nano();     std::cout &lt;&lt; "반복횟수 : " &lt;&lt; N &lt;&lt; "\n\n";    std::cout &lt;&lt; "auto 람다 수행시간\n" &lt;&lt; lambda_time &lt;&lt; "\n\n";    std::cout &lt;&lt; "function 람다 수행시간\n" &lt;&lt; lambda_time_f &lt;&lt; "\n\n";    std::cout &lt;&lt; "람다 포인터 수행시간\n" &lt;&lt; lambda_ptr_time &lt;&lt; "\n\n";    std::cout &lt;&lt; "함수 포인터 수행시간\n" &lt;&lt; ptr_time &lt;&lt; "\n\n";    std::cout &lt;&lt; "function 함수 수행시간\n" &lt;&lt; ptr_time_f &lt;&lt; "\n\n";    std::cout &lt;&lt; "펑터 수행시간\n" &lt;&lt; functor_time &lt;&lt; "\n\n";     return 0;}  Colored by Color Scripter | cs |</p>
+<br>
+<p>코드는 이렇다.</p>
+<p>컴파일 환경은 릴리즈모드에 x86이다. 단위는 나노초다.</p>
+<br>
+<p>보통 람다가 느리고 펑터가 빠르다고들 하는데, 의외로 비등비등한 편이다.</p>
+<p>그리고 std::functio 은 겁나게 느리다는 걸 알 수 있다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221409715517/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>자료구조의 흐름<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221407503262/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] 카운팅 소트<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>
