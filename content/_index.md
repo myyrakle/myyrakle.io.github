@@ -7,6 +7,3 @@ max_posts = 20
 +++
 
 dev blog (mirror)
-
-- [Source Page](https://blog.naver.com/sssang97)
-- [Github](https://github.com/myyrakle)
