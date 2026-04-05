@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Prometheus] 메모리 사용 구조 및 최적화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223776513738/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Prometheus] 메모리 사용 구조 및 최적화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223776513738/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-02-27T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223776513738/">[Prometheus] 메모리 사용 구조 및 최적화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-27T00:00:00+00:00"><time datetime="2025-02-27T00:00:00+00:00">2025.02.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="692 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223776513738" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Prometheus는 메트릭 관리에 주로 사용되는 특수한 형태의 시계열 데이터베이스다.<br />
+시계열 데이터 삽입 처리량, 통계 쿼리 등에 최적화되어있으나, 특유의 구조 탓에 메모리를 굉장히 비효율적으로 소비한다는 단점이 있다.</p>
+<p><img src="/images/img_183ae19a6ad74519.png" alt="" />
+그냥 이런 식으로 띄우고 좀 때리다보면 메모리가 급격하게 치솟는 것을 쉽게 경험할 수 있다.</p>
+<p>prometheus의 내부 메모리 사용 구조와 대응책에 대해서 한번 정리해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="memori-sayong-gujo">메모리 사용 구조</h2>
+<p><strong>쓰기 버퍼</strong><br />
+이건 시계열 데이터베이스들의 공통점이기도 한데, 대용량 쓰기 처리능력을 얻기 위해서 디스크에 쓰기 전에 메모리 버퍼에 모아놨다가 한번에 디스크에 flush하는 구조를 갖고 있다.<br />
+그래서 쓰기가 대량으로 발생할 시점에는 급격하게 메모리가 튈 수 있다는 단점이 있다.<br />
+Prometheus의 경우에는 tsdb를 기본 백엔드로 사용하고, 2시간 동안 메모리에 쓰기 데이터를 보관하다가 2시간이 지나면 디스크에 쓰는 구조를 가지고 있다.</p>
+<p><img src="/images/img_23159c51dbc2433c.jpeg" alt="" />
+<a rel="external" href="https://devthomas.tistory.com/67">https://devthomas.tistory.com/67</a><br />
+쓰기가 발생했을때 도착하는 최초 지점을 Head라고 부른다.<br />
+이 시점에는 메모리에 데이터를 로드해놓고, 혹시모를 장애상황을 대비해 WAL만을 쌓는다.<br />
+그리고 block duration(기본 2시간)이 지나면 Head 데이터를 디스크인 Block으로 이관하는 것이다.</p>
+<p><strong>레이블과 카디널리티</strong><br />
+각 row의 레이블 값은 메모리 사용량이 비대한 영향을 줄 수 있다.<br />
+빠른 통계 쿼리 기능을 제공하기 위해서 각 레이블들의 고유한 조합을 또 데이터로 저장하고 메모리에도 로드해놓기 때문이다.<br />
+그래서 레이블의 절대적인 갯수가 많거나, 레이블의 값의 종류가 다양하다거나 하면 비상식적인 정도로 메모리 소비가 튈 수 있다.<br />
+여기서 특정 필드 값의 범위 다양성을 카디널리티라고 한다. influxDB 등의 시계열 DB들이 공통적으로 안고 있는 한계점이다.</p>
+<p><strong>GO와 GOGC</strong><br />
+prometheus는 go로 만들어진 데이터베이스다.<br />
+그래서 go가 가진 선천적인 단점도 갖고 있는데, 게으른 메모리 해제로 인한 메모리 누수가 반드시 발생한다는 것이다. tcmalloc이란 끔찍한 allocator를 사용해서 메모리 풀 계층이 2단계라 발생하는 문제다.<br />
+이런 까닭에 gogc로 memory limit을 잡고, gc가 메모리를 해제하더라도 그게 진짜 os에 반납하기까지는 딜레이가 존재한다.<br />
+GO가 인지하는 메모리 사용량과 실제 메모리 사용량이 3배까지 차이나는 것도 흔하다. prometheus pprof 뽑고 호스트 기준에서 측정한 메모리 사용량과 비교해보면 얼마나 대충 처리가 되고 있는지 알 수 있다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="suci-bunseog">수치 분석</h2>
+<p>prometheus는 자체적인 관리용 대시보드를 제공한다.</p>
+<p>여기서 사용량이 많은 레이블을 바로 볼 수도 있다.</p>
+<p><img src="/images/img_c0622280d33c90d7.png" alt="" /></p>
+<p><img src="/images/img_c2dabdf0f76aac6a.png" alt="" />
+여기서 Count가 높을 수록 나쁜 레이블이고, 가급적 제거나 최적화 대상으로 삼는게 좋다.<br />
+예를 들어 값의 범위가 굉장히 다양할 수 있는 response body나 url 같은 저런 필드들은 prometheus에 넣으면 안된다.</p>
+<p>prometheus 자체의 실행 옵션도 볼 수 있다.</p>
+<p><img src="/images/img_2207d1d759522051.png" alt="" />
+그냥 GO 기반의 옵션도 몇개 다.<br />
+GOMEMLIMIT은 기본값으로 현재 시스템의 90%를 잡는다. 근데 사실 누수가 많아서 크게 의미가 없더라. 무시하고 넘겨서 곧잘 터진다.</p>
+<p>또 go 기반의 pprof 데이터도 제공한다.<br />
+많은걸 GO 시스템에 기대서 날로먹는거같다.</p>
+<p><img src="/images/img_a2e1c34f00cd13a0.png" alt="" /></p>
+<p><img src="/images/img_23e0b9007b2c2d99.png" alt="" />
+이러면 그냥 다운되고</p>
+<br>
+<p><img src="/images/img_3e005eb5d07cd3ca.png" alt="" /></p>
+<p><img src="/images/img_6a2effce7ac0cb5f.png" alt="" />
+시각화해서 보면 된다.<br />
+물론 큰 도움이 되기는 어렵다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeonryag-a-label-gaessu-juligi">전략 A. label 갯수 줄이기</h2>
+<p>label이 너무 많다면 그것 자체도 메모리 사용에 지대한 영향을 미칠 수 있다.<br />
+레이블은 가능한 한 필드 자체가 적어야 하고, 레이블의 카디널리티(값 분포도) 또한 낮아야 한다.</p>
+<p>특히 spanmetric 같은걸로 metric을 구성한다면 남용할 여지가 좀더 많기도 하다.</p>
+<p><img src="/images/img_7040ae9a79f31536.png" alt="" />
+적당히 빼고</p>
+<br>
+<p><img src="/images/img_60e6f0a86c5e8df6.png" alt="" />
+기존에 있던것도 좀 지워주자.</p>
+<br>
+<br>
+<br>
+<h2 id="jeonryag-b-block-duration-jojeol">전략 B. Block Duration 조절</h2>
+<p>단시간 내에 매우 많은 데이터가 들어온다면 기본 block-duration(2시간) 안에 너무 많은 데이터가 올라가있어서 메모리가 부풀어오를 수 있다.<br />
+이 값이 2시간인 이유는 사실 쿼리 성능만을 위해서 이렇게 되어있는 것이고, 쿼리가 좀 느려지더라도 안정적인 메모리 사용이 필요하다면 block duration을 좁은 범위로 줄이는게 좋은 방법일 수 있다.</p>
+<p>옵션은 실행할때 인자로 넘기면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">      - --</span><span>storage</span><span style="color: #94E2D5;">.</span><span>tsdb</span><span style="color: #94E2D5;">.</span><span>max</span><span style="color: #94E2D5;">-</span><span>block</span><span style="color: #94E2D5;">-</span><span>duration</span><span style="color: #94E2D5;">=</span><span>30m</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - --</span><span>storage</span><span style="color: #94E2D5;">.</span><span>tsdb</span><span style="color: #94E2D5;">.</span><span>min</span><span style="color: #94E2D5;">-</span><span>block</span><span style="color: #94E2D5;">-</span><span>duration</span><span style="color: #94E2D5;">=</span><span>30m</span></span></code></pre>
+<p><img src="/images/img_8743d8e060b41a18.png" alt="" />
+이래놓고 다시 띄우면 된다.<br />
+나는 이것만으로 절반 정도의 메모리 사용량 절감 효과를 봤다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeonryag-c-gogc-obsyeon-jojeol">전략 C. GOGC 옵션 조절</h2>
+<p>GOGC나 GOMEMLIMIT을 조절하는 것도 하나의 방법이 될 수 있다.</p>
+<p>GOMEMLIMIT의 기본값은 실제 메모리의 90%를 차지하게 하는데, 특유의 누수 패턴으로 인해서 신뢰하기 어렵다.</p>
+<p><img src="/images/img_2207d1d759522051.png" alt="" />
+이걸 임의로 지정하고 싶다면 실행시에 인자를 넘겨주면 된다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">- --</span><span>auto</span><span style="color: #94E2D5;">-</span><span>gomemlimit</span><span style="color: #94E2D5;">.</span><span>ratio</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">0.5</span></span></code></pre>
+<p><img src="/images/img_a5a61e81a62fa266.png" alt="" />
+하드코딩하는 식으로는 안되고, 비율로만 지정이 된다.<br />
+0.5면 시스템 메모리의 절반만 차지하게 하는 것이다.</p>
+<p>근데 이렇게 너무 빡세게 걸면 GC에 리소스 소모하면서 버벅대니까, 적절히 요령껏 잘 잡아야 한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://prometheus.io/docs/prometheus/1.8/storage/">https://prometheus.io/docs/prometheus/1.8/storage/</a><br />
+<a rel="external" href="https://signoz.io/guides/why-does-prometheus-consume-so-much-memory/">https://signoz.io/guides/why-does-prometheus-consume-so-much-memory/</a><br />
+<a rel="external" href="https://prometheus.io/docs/prometheus/latest/command-line/prometheus/">https://prometheus.io/docs/prometheus/latest/command-line/prometheus/</a><br />
+<a rel="external" href="https://grafana.com/blog/2022/03/21/how-relabeling-in-prometheus-works/">https://grafana.com/blog/2022/03/21/how-relabeling-in-prometheus-works/</a><br />
+<a rel="external" href="https://devthomas.tistory.com/67">https://devthomas.tistory.com/67</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223776319012/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana] User 관리<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223776846650/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Grafana Tempo] API 기본<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

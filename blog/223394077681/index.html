@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>pingora로 로드밸런서 직접 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223394077681/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="pingora로 로드밸런서 직접 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223394077681/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-25T00:00:00+00:00">
+    <meta property="article:tag" content="Proxy">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223394077681/">pingora로 로드밸런서 직접 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-25T00:00:00+00:00"><time datetime="2024-03-25T00:00:00+00:00">2024.03.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="816 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/proxy/">Proxy</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223394077681" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>pingora는 Cloudflare가 기존의 프록시/로드밸런서 환경들이 너무 느리다고 Rust로 다시 만든 라이브러리다.<br />
+결과적으로 Cloudflare는 nginx 대비 CPU와 메모리 사용량을 70% 정도 절약할 수 있었고, 그 외에도 많은 성능 향상이나 비용 절감 효과를 많이 봤다고 한다. 인프라 회사이니 더 그럴 것이다.</p>
+<p>이처럼 극적인 비용 효과를 원하고, 직접 인프라를 운영할 능력이 된다면 선택할만한 옵션인 것 같다.<br />
+그냥 웹서버 올리는 정도면 성능은 낮지만 더 좋은 선택지가 많다.</p>
+<p>실행 가능한 바이너리 형태가 아니라 라이브러리 형태로 제공되기 때문에, 사용하려면 Rust를 알아야 한다.<br />
+여기서는 Rust를 안다고 가정하고 넘어가겠다.</p>
+<p>그리고 Linux 환경을 사용하는 것을 권장한다. Linux가 아니라면 제한되는게 있고 좀 열받을 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-seoljeong">기본 설정</h2>
+<p>먼저 아래 crate 2개를 추가해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>async</span><span style="color: #94E2D5;">-</span><span>trait</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;0.1&quot;</span></span>
+<span class="giallo-l"><span>pingora</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;"> &quot;lb&quot;</span><span> ]</span><span style="color: #9399B2;"> }</span></span></code></pre>
+<p>async-trait은 표준에 추가되었기 때문에 아마 향후에는 없어질 것 같다.</p>
+<p>좀 귀찮은 부분인데, 현재 pingora는 cmake에 종속성이 있다. 우선 깔아준다.</p>
+<p><img src="/images/img_ae4c73d729984ea1.png" alt="" />
+왜인지는 모르겠다.</p>
+<p>그리고 다음과 같은 코드를 작성해보자.</p>
+<p><img src="/images/img_483808e55ae6d6a7.png" alt="" />
+이게 가장 기본적인 코드다.<br />
+이걸 실행하면 컴파일은 잘 되겠지만, 아무것도 할 수 없다. 아무것도 없기 때문이다.<br />
+하나씩 채워보자.</p>
+<br>
+<br>
+<br>
+<h2 id="cloudflare-rautinghaebogi">Cloudflare 라우팅해보기</h2>
+<p>Cloudflare는 1.1.1.1 같은 특이한 IP 대역을 독점하고 있는데, 이 IP들을 엔드포인트로 활용해서 로드밸런서를 구성해보겠다.</p>
+<p>이 페이지다.</p>
+<p><img src="/images/img_bed8be5d6c680834.png" alt="" /></p>
+<p>먼저 로드밸런서 타입을 정의한다.</p>
+<p><img src="/images/img_12f526adb3389aa3.png" alt="" />
+밸런싱 알고리즘은 국룰인 라운드 로빈으로 하겠다.</p>
+<p>그리고 async trait인 ProxyHttp를 구현해줘야 한다.<br />
+이게 크다.</p>
+<p><img src="/images/img_252fafa010d6a4d2.png" alt="" /></p>
+<p>upstream_peer는 말 그대로 각 peer, 그러니까 개별 서버에 분배를 해주는 핵심적인 역할을 정의한다.</p>
+<p><img src="/images/img_38346970f9e1225a.png" alt="" />
+원본 객체가 RoundRobin을 구성한 타입이기 때문에, 그냥 빈 문자열로 해시 없이 select해도 라운드 로빈으로 자동 선택이 된다.<br />
+그리고 SNI까지 cloudflare로 선택해서 피어를 반환해줬다. 그러면 클라이언트가 이걸 받아서 처리하는 것이다.</p>
+<br>
+<p><img src="/images/img_611574bbcc136045.png" alt="" />
+cloudflare를 SNI로 쓸때는 위 헤더를 설정해줘야 한다.<br />
+upstream_request_filter는 요청을 보내기 전에 가로채서 조작을 하는 용도로 쓴다.</p>
+<br>
+<p><img src="/images/img_6664082ac0754017.png" alt="" />
+그리고 이런식으로 아이피를 라우팅해서 실행해보자.<br />
+44444 포트로 열리도록 했다.</p>
+<p>curl로 쏴보거나</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #FAB387;"> 0.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.0</span><span>:</span><span style="color: #FAB387;">44444</span><span style="color: #94E2D5;"> -</span><span>svo</span><span style="color: #94E2D5;"> /</span><span>dev</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">null</span></span></code></pre>
+<p><img src="/images/img_6ec2a235d7eeda87.png" alt="" /></p>
+<p>브라우저로 접속해보면</p>
+<p><img src="/images/img_ed50bbf3acebc48c.png" alt="" />
+기대한대로 잘 동작할 것이다.</p>
+<br>
+<p><img src="/images/img_6947caec97c125a8.png" alt="" />
+로그를 보아도 골고루 잘 분배해주는 것을 볼 수 있다.</p>
+<p>아래는 테스트에 사용한 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:Arc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use async_trait</span><span style="color: #9399B2;">:</span><span>:async_trait</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use pingora</span><span style="color: #9399B2;">:</span><span>:prelude</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 로드밸런서 정의</span></span>
+<span class="giallo-l"><span>pub struct</span><span style="color: #89B4FA;font-style: italic;"> LB</span><span>(Arc</span><span style="color: #94E2D5;">&lt;</span><span>LoadBalancer</span><span style="color: #94E2D5;">&lt;</span><span>RoundRobin</span><span style="color: #94E2D5;">&gt;&gt;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[async_trait]</span></span>
+<span class="giallo-l"><span>impl ProxyHttp for LB</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 간단한 예제라서 CTX를 사용하지 않습니다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    type</span><span style="color: #F9E2AF;font-style: italic;"> CTX</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> ();</span></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> new_ctx</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self)</span><span style="color: #94E2D5;"> -&gt;</span><span> ()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        ()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    async fn</span><span style="color: #89B4FA;font-style: italic;"> upstream_peer</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self</span><span style="color: #9399B2;">,</span><span> _session: </span><span style="color: #94E2D5;">&amp;</span><span>mut Session</span><span style="color: #9399B2;">,</span><span> _ctx: </span><span style="color: #94E2D5;">&amp;</span><span style="color: #89B4FA;font-style: italic;">mut</span><span> ())</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>Box</span><span style="color: #94E2D5;">&lt;</span><span>HttpPeer</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 전송할 업스트림 선택</span></span>
+<span class="giallo-l"><span>        let upstream</span><span style="color: #94E2D5;"> =</span><span> self</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">            .0</span></span>
+<span class="giallo-l"><span>            .select(b</span><span style="color: #A6E3A1;">&quot;&quot;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 256</span><span>) </span><span style="color: #9399B2;font-style: italic;">// round robin에서는 해시가 필요없음</span></span>
+<span class="giallo-l"><span>            .unwrap();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 업스트림 정보 로깅</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;upstream peer is: {upstream:?}&quot;</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // Set SNI to one.one.one.one</span></span>
+<span class="giallo-l"><span>        let peer = Box</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">HttpPeer</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">upstream</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> true</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;</span><span style="color: #A6E3A1;font-style: italic;">one.one.one.one</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F9E2AF;font-style: italic;">.to_string(</span><span style="color: #9399B2;">))</span><span>);</span></span>
+<span class="giallo-l"><span>        Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">peer</span><span style="color: #9399B2;">)</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    async fn upstream_request_filter</span><span style="color: #9399B2;">(</span></span>
+<span class="giallo-l"><span>        &amp;</span><span style="color: #EBA0AC;font-style: italic;">self</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #EBA0AC;font-style: italic;">        _session</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">mut Session</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #EBA0AC;font-style: italic;">        upstream_request</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">mut RequestHeader</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #EBA0AC;font-style: italic;">        _ctx</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">mut Self</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">CTX</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    )</span><span> -&gt; Result</span><span style="color: #89DCEB;">&lt;</span><span style="color: #9399B2;">()</span><span style="color: #89DCEB;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // cloudflare 1.1.1.1 요청에는 다음 헤더 설정이 필요합니다.</span></span>
+<span class="giallo-l"><span>        upstream_request</span></span>
+<span class="giallo-l"><span>            .insert_header(</span><span style="color: #A6E3A1;">&quot;Host&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;one.one.one.one&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>            .unwrap();</span></span>
+<span class="giallo-l"><span>        Ok(())</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn main() {</span></span>
+<span class="giallo-l"><span>    let mut my_server = Server</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(None)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 피어 목록 정의</span></span>
+<span class="giallo-l"><span>    let upstreams</span><span style="color: #94E2D5;"> =</span><span> LoadBalancer::</span><span style="color: #89B4FA;font-style: italic;">try_from_iter</span><span>([</span><span style="color: #A6E3A1;">&quot;1.1.1.1:443&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;1.0.0.1:443&quot;</span><span>])</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut lb</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> http_proxy_service</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>my_server</span><span style="color: #94E2D5;">.</span><span>configuration</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> LB</span><span>(Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(upstreams)));</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 엔드포인트 등록</span></span>
+<span class="giallo-l"><span>    lb</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add_tcp</span><span>(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:44444&quot;</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 로드밸런서 등록</span></span>
+<span class="giallo-l"><span>    my_server</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add_service</span><span>(lb);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    my_server</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">run_forever</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="jigjeob-ipe-rautinghaebogi-sni-eobsi">직접 IP에 라우팅해보기 (SNI 없이)</h2>
+<p>이번에는 로컬에다 도커로 서버 몇개 띄워서 라우팅을 해보겠다.<br />
+먼저 다음 명령을 사용해서 서버를 2개 띄운다. 내가 만들어둔 이미지다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo docker run</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #FAB387;"> 44443</span><span>:</span><span style="color: #FAB387;">80</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">3</span></span>
+<span class="giallo-l"><span>sudo docker run</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #FAB387;"> 44445</span><span>:</span><span style="color: #FAB387;">80</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">3</span></span></code></pre>
+<p><img src="/images/img_dfe00891fc159ce9.png" alt="" /></p>
+<p><img src="/images/img_6823fc56cea47fce.png" alt="" /></p>
+<p><img src="/images/img_a4176c6208cc6d45.png" alt="" />
+이렇게 각자 잘 떴다.<br />
+이 두놈한테 라우팅을 해보자.</p>
+<br>
+<p><img src="/images/img_4bfaf459d73e5e63.png" alt="" />
+이번에는 SNI를 적용하지 않을 것이기 때문에 그냥 피어를 바로 전달하고, SNI 옵션을 전부 껐다.</p>
+<br>
+<p><img src="/images/img_afc532db925a0653.png" alt="" />
+그리고 IP를 로컬 IP로 변경해서 넣어줬다.</p>
+<p>그렇게 해서 실행해보면</p>
+<p><img src="/images/img_d957c4d26925df3f.png" alt="" /></p>
+<p><img src="/images/img_e64dd1dec680f9a3.png" alt="" /></p>
+<p><img src="/images/img_2020f158bc48bbd0.png" alt="" />
+잘 실행되고</p>
+<br>
+<p><img src="/images/img_42695cc910b08cd6.png" alt="" />
+분배도 잘 되는 것을 볼 수 있다.</p>
+<p>아래는 전체 예제코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:Arc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use async_trait</span><span style="color: #9399B2;">:</span><span>:async_trait</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use pingora</span><span style="color: #9399B2;">:</span><span>:prelude</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 로드밸런서 정의</span></span>
+<span class="giallo-l"><span>pub struct</span><span style="color: #89B4FA;font-style: italic;"> LB</span><span>(Arc</span><span style="color: #94E2D5;">&lt;</span><span>LoadBalancer</span><span style="color: #94E2D5;">&lt;</span><span>RoundRobin</span><span style="color: #94E2D5;">&gt;&gt;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[async_trait]</span></span>
+<span class="giallo-l"><span>impl ProxyHttp for LB</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 간단한 예제라서 CTX를 사용하지 않습니다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    type</span><span style="color: #F9E2AF;font-style: italic;"> CTX</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> ();</span></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> new_ctx</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self)</span><span style="color: #94E2D5;"> -&gt;</span><span> ()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        ()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    async fn</span><span style="color: #89B4FA;font-style: italic;"> upstream_peer</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self</span><span style="color: #9399B2;">,</span><span> _session: </span><span style="color: #94E2D5;">&amp;</span><span>mut Session</span><span style="color: #9399B2;">,</span><span> _ctx: </span><span style="color: #94E2D5;">&amp;</span><span style="color: #89B4FA;font-style: italic;">mut</span><span> ())</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>Box</span><span style="color: #94E2D5;">&lt;</span><span>HttpPeer</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 전송할 업스트림 선택</span></span>
+<span class="giallo-l"><span>        let upstream</span><span style="color: #94E2D5;"> =</span><span> self</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">            .0</span></span>
+<span class="giallo-l"><span>            .select(b</span><span style="color: #A6E3A1;">&quot;&quot;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 256</span><span>) </span><span style="color: #9399B2;font-style: italic;">// round robin에서는 해시가 필요없음</span></span>
+<span class="giallo-l"><span>            .unwrap();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 업스트림 정보 로깅</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;upstream peer is: {upstream:?}&quot;</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // Set SNI to one.one.one.one</span></span>
+<span class="giallo-l"><span>        let peer = Box</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">HttpPeer</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">upstream</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> false</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #F9E2AF;font-style: italic;">.to_string(</span><span style="color: #9399B2;">))</span><span>);</span></span>
+<span class="giallo-l"><span>        Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">peer</span><span style="color: #9399B2;">)</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn main</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span>    let mut my_server</span><span style="color: #94E2D5;"> =</span><span> Server::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(None)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span>    let upstreams</span><span style="color: #94E2D5;"> =</span><span> LoadBalancer::</span><span style="color: #89B4FA;font-style: italic;">try_from_iter</span><span>([</span><span style="color: #A6E3A1;">&quot;0.0.0.0:44443&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;0.0.0.0:44445&quot;</span><span>])</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut lb</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> http_proxy_service</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>my_server</span><span style="color: #94E2D5;">.</span><span>configuration</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> LB</span><span>(Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(upstreams)));</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    lb.add_tcp(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:44444&quot;</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    my_server.add_service(lb);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    my_server.run_forever();</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="helseucekeu">헬스체크</h2>
+<p>근데 이제까지의 코드에는 문제가 많다. 아무런 보장이나 관리를 하지 않기 때문이다.</p>
+<p>만약 서버가 하나 내려간다면</p>
+<p><img src="/images/img_cdfc1597323bbb25.png" alt="" /></p>
+<p><img src="/images/img_0c8cf240d17506a6.png" alt="" />
+502가 떨어진다.<br />
+그럴 수 있다. 하지만 계속해서 이 상태를 유지해서는 안된다.<br />
+일반적인 범용 로드밸런서는 헬스체크를 통해 유효한 피어와 망가진 피어를 구분하고, 망가진 피어는 분배를 하지 않는다.</p>
+<p>pingora는 이에 대한 기능도 조합형으로 제공을 한다.<br />
+아래와 같이 코드를 약간만 작성해주면 된다.</p>
+<p><img src="/images/img_9632d18207128180.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut my_server </span><span style="color: #94E2D5;">=</span><span> Server::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(None)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    my_server</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">bootstrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut upstreams </span><span style="color: #94E2D5;">=</span><span> LoadBalancer::</span><span style="color: #89B4FA;font-style: italic;">try_from_iter</span><span>([</span><span style="color: #A6E3A1;">&quot;0.0.0.0:44443&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;0.0.0.0:44445&quot;</span><span>])</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // health check 설정</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> hc</span><span style="color: #94E2D5;"> =</span><span> TcpHealthCheck::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    upstreams</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">set_health_check</span><span>(hc)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    upstreams</span><span style="color: #94E2D5;">.</span><span>health_check_frequency</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> Some</span><span>(std::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_secs</span><span>(</span><span style="color: #FAB387;">1</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> background</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> background_service</span><span>(</span><span style="color: #A6E3A1;">&quot;health check&quot;</span><span style="color: #9399B2;">,</span><span> upstreams)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> upstreams</span><span style="color: #94E2D5;"> =</span><span> background</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">task</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut lb </span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> http_proxy_service</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>my_server</span><span style="color: #94E2D5;">.</span><span>configuration</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> LB</span><span>(upstreams))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    lb</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add_tcp</span><span>(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:6188&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // health check 백그라운드 서비스 추가</span></span>
+<span class="giallo-l"><span>    my_server</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add_service</span><span>(background)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    my_server</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add_service</span><span>(lb)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    my_server</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">run_forever</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그러면 피어 목록에 대해서 검증을 다 한다.</p>
+<p>만약 B 서버가 터져도 A가 실행이 되면</p>
+<p><img src="/images/img_c822a1e1eed757a4.png" alt="" /></p>
+<p><img src="/images/img_9d29b4529c459679.png" alt="" />
+그쪽으로 유지를 한다. 44445 포트로의 분배가 없는 것을 볼 수 있다.</p>
+<p>이 상태에서 44445 포트 서버를 다시 되살리면</p>
+<p><img src="/images/img_22109070971ba2ad.png" alt="" /></p>
+<p><img src="/images/img_4129932d237dbef4.png" alt="" />
+헬스체크가 통과되고 다시 분배를 해준다.</p>
+<br>
+<br>
+<br>
+<h2 id="cli-obsyeon-sayonghagi">CLI 옵션 사용하기</h2>
+<p>pingora는 자체적으로 CLI를 통한 옵션 부여 기능을 제공한다.</p>
+<p><img src="/images/img_e61cb703f83960df.png" alt="" />
+설정은 간단하다. 서버 객체에 저거 하나만 넣어주면 된다.</p>
+<p>그러면 이렇게</p>
+<p><img src="/images/img_637f98cae8e03692.png" alt="" />
+플래그를 넘기면서 실행할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="cli-baeggeuraundeu-silhaeng">CLI: 백그라운드 실행</h2>
+<p>-d 옵션을 사용하면 자동으로 백그라운드 실행이 된다.</p>
+<p><img src="/images/img_c2bb4688888fed83.png" alt="" /></p>
+<p><img src="/images/img_4c236e8221ad8bf7.png" alt="" />
+잘 뜬다.</p>
+<p>백그라운드 로드밸런서를 다시 죽이려면 pkill을 사용하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pkill</span><span style="color: #94E2D5;"> -</span><span>SIGTERM 프로세스명</span></span></code></pre>
+<p><img src="/images/img_722c5476c0af0a53.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="cli-seoljeongpail-sayong">CLI: 설정파일 사용</h2>
+<p>pingora는 yaml 설정파일을 통한 구성 부여도 제공한다.<br />
+이런식으로 파일 하나 두고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">---</span></span>
+<span class="giallo-l"><span>version</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>threads</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 2</span></span>
+<span class="giallo-l"><span>pid_file</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>tmp</span><span style="color: #94E2D5;">/</span><span>load_balancer</span><span style="color: #94E2D5;">.</span><span>pid</span></span>
+<span class="giallo-l"><span>error_log</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>tmp</span><span style="color: #94E2D5;">/</span><span>load_balancer_err</span><span style="color: #94E2D5;">.</span><span>log</span></span>
+<span class="giallo-l"><span>upgrade_sock</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>tmp</span><span style="color: #94E2D5;">/</span><span>load_balancer</span><span style="color: #94E2D5;">.</span><span>sock</span></span></code></pre>
+<p><img src="/images/img_a80d7ca1e1489cb0.png" alt="" /></p>
+<p>실행할때 c 옵션으로 넘겨주기만 하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>RUST_LOG</span><span style="color: #94E2D5;">=</span><span>INFO cargo run</span><span style="color: #94E2D5;"> -- -</span><span>c conf</span><span style="color: #94E2D5;">.</span><span>yaml</span><span style="color: #94E2D5;"> -</span><span>d</span></span></code></pre>
+<p><img src="/images/img_23004ce416b5189c.png" alt="" /></p>
+<p>그럼 잘 실행되고</p>
+<p><img src="/images/img_15dab1102bfedc39.png" alt="" /></p>
+<p>설정도 잘 적용되는 것을 볼 수 있다.</p>
+<p><img src="/images/img_d9133c598fb62511.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="mujungdan-gyoce">무중단 교체</h2>
+<p>당연한 말이지만, 로드밸런서는 교체 주기가 잦은 편이다.<br />
+피어는 언제든 추가되거나, 줄어들거나, 교체될 수 있기 때문이다. 근데 그럴때마다 서버 다시 띄운다고 다운타임을 만들 수는 없다.</p>
+<p>때문에 당연히 pingora는 무중단 교체 기능을 제공한다.<br />
+다음과 같이 SIGQUIT 신호로 kill을 날리고, 동시에 재실행을 날리면 무중단으로 교체가 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pkill</span><span style="color: #94E2D5;"> -</span><span>SIGQUIT 프로세스명</span><span style="color: #94E2D5;"> &amp;&amp;</span><span>\</span></span>
+<span class="giallo-l"><span>RUST_LOG</span><span style="color: #94E2D5;">=</span><span>INFO cargo run</span><span style="color: #94E2D5;"> -- -</span><span>c conf</span><span style="color: #94E2D5;">.</span><span>yaml</span><span style="color: #94E2D5;"> -</span><span>d</span><span style="color: #94E2D5;"> -</span><span>u</span></span></code></pre>
+<p><img src="/images/img_50d3c53cd081a66c.png" alt="" />
+이 명령은 다음의 과정을 통해 무중단을 달성한다.</p>
+<ol>
+<li>여기서 -SIGQUIT을 받은 old 프로세스는 listening sockets을 닫지 않은 채로 일단 실행을 한다.</li>
+<li>예전에 받은 요청은 old 프로세스가 처리한다.</li>
+<li>새로 뜬 new 프로세스는 old 프로세스에게서 listening sockets을 전달받는다.</li>
+<li>이때부터는 new 프로세스가 새로운 요청들을 받아서 처리한다.</li>
+<li>old 프로세스가 맡은 요청들을 전부 끝냈다면, old 프로세스는 종료된다.</li>
+</ol>
+<p>교체되는 찰나의 순간에는 약간의 버벅임이 있을 수도 있겠지만, listening sockets이 닫히지 않고 유지되기 때문에 client의 입장에서는 완벽한 무중단으로 보인다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://blog.cloudflare.com/pingora-open-source">https://blog.cloudflare.com/pingora-open-source</a><br />
+<a rel="external" href="https://github.com/cloudflare/pingora/blob/main/docs/quick_start.md">https://github.com/cloudflare/pingora/blob/main/docs/quick_start.md</a><br />
+<a rel="external" href="https://blog.cloudflare.com/how-we-built-pingora-the-proxy-that-connects-cloudflare-to-the-internet">https://blog.cloudflare.com/how-we-built-pingora-the-proxy-that-connects-cloudflare-to-the-internet</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223395308589/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Python] venv, virtualenv<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223395222025/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] PostGIS: 기본 사용법<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

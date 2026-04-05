@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Diesel.rs] select 정리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222282646522/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Diesel.rs] select 정리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222282646522/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-03-21T00:00:00+00:00">
+    <meta property="article:tag" content="개발노트">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222282646522/">[Diesel.rs] select 정리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-03-21T00:00:00+00:00"><time datetime="2021-03-21T00:00:00+00:00">2021.03.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="464 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/gaebalnoteu/">개발노트</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222282646522" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/221836332593">https://blog.naver.com/sssang97/221836332593</a><br />
+diesel에서 테이블의 값을 select하는 방법에 대해서 다시 개괄적으로 정리해본다.</p>
+<p>테스트할 테이블 구조는 다음과 같이 간단하다.</p>
+<p><img src="/images/img_0109fbb9c58593ea.png" alt="" /></p>
+<p><img src="/images/img_3c031fe1ad1cc277.png" alt="" /></p>
+<p>아래는 데이터 매핑용 구조체 타입이다.</p>
+<p><img src="/images/img_42a0e5120e853ffa.png" alt="" /></p>
+<br>
+<br>
+<h2 id="silhaenghaneun-bangbeob">실행하는 방법</h2>
+<p>일단 select는 table! 매크로로 자동 생성된 test::dsl의 테이블 값 test에서 다음의 메서드들을 호출하는 것으로 수행할 수 있다.</p>
+<p><img src="/images/img_a9e2ce86dbf19310.png" alt="" /></p>
+<p><img src="/images/img_c2f4028b195ebb81.png" alt="" />
+load와 get_results는 완전히 동일한 메서드인데, 배열 형태로 select값들을 가져와준다.<br />
+get_result와 first는 기능상 거의 동일하게 하나만 가져오는데, first는 limit 1를 달아줘서 대체로 성능은 조금 더 빠를 것이다.</p>
+<p>그리고 당연히 이런 전체 select만으로는 제대로 데이터를 사용할 수가 없다.<br />
+저 테이블 객체는 QueryDsl이란 트레잇을 구현하는데, 여기에는 filter, limit, order 등의 select에 부가적으로 다는 문장들을 지원한다.<br />
+<a rel="external" href="https://docs.diesel.rs/diesel/query_dsl/trait.QueryDsl.html">https://docs.diesel.rs/diesel/query_dsl/trait.QueryDsl.html</a><br />
+그리고 이 메서드들은 Self를 다시 반환하므로 체이닝 형식으로 연달아 사용할 수 있다.<br />
+이런 식으로 말이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>test</span><span style="color: #9399B2;">:</span><span>:dsl</span><span style="color: #9399B2;">:</span><span>:test</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">fiter</span><span>(</span><span style="color: #94E2D5;">...</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">order_by</span><span>(</span><span style="color: #94E2D5;">...</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">limit</span><span>(</span><span style="color: #FAB387;">3</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">load</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre><br>
+<br>
+<h2 id="filter-jogeonjeol">filter: 조건절</h2>
+<p>filter는 sql에서 정확하게 where절에 해당한다.<br />
+보통 dsl의 컬럼으로 표현식 생성을 위한 함수를 호출하고 그 값을 인자로 전달한다.<br />
+동등 연산자인 =의 경우에는 eq 함수를 사용한다.<br />
+아래는 id=3인 값을 읽어오는 쿼리다.</p>
+<p><img src="/images/img_656a9926841af54e.png" alt="" /></p>
+<p><img src="/images/img_0fc9f5329fd36ff5.png" alt="" /></p>
+<p>여러 조건을 달려면 filter를 연속해서 호출하면 된다.<br />
+그리고 아래에서는 &lt; 연산자의 lt, &gt; 연산자의 gt를 사용했다.</p>
+<p><img src="/images/img_4c72243563234fa0.png" alt="" /></p>
+<p><img src="/images/img_72a9f05ba9bcea3a.png" alt="" /></p>
+<p>당연히 between 같은것도 있다.</p>
+<p><img src="/images/img_7d505b7d1b278155.png" alt="" /></p>
+<p><img src="/images/img_1e1ad0b11bb8aefd.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="order-sunseo-buyeo">order: 순서 부여</h2>
+<p>이건 SQL의 order by에 대응된다.<br />
+인자로는 dsl 컬럼에 asc나 desc를 호출한 값을 넘겨주면 된다.<br />
+아래는 id로 내림차순 정렬을 수행한 쿼리다.</p>
+<p><img src="/images/img_9a26066897364d82.png" alt="" /></p>
+<p><img src="/images/img_67df498ff39896f5.png" alt="" /></p>
+<p>여러 정렬조건을 주고 싶다면 튜플로 묶어서 주면 된다.</p>
+<p><img src="/images/img_0129de7d72008740.png" alt="" /></p>
+<p><img src="/images/img_85d0b1a6e6b608b1.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="offset-limit-jareugi">offset&amp;limit: 자르기</h2>
+<p>이것도 SQL의 offset, limit와 완전 대응된다.<br />
+특별한게 있지는 않다. offset은 조회할 목록 중에서 자르기 시작할 인덱스를 받고, limit는 총 몇개까지 잘라올지를 선택한다.</p>
+<p><img src="/images/img_809874a124ecf142.png" alt="" /></p>
+<p><img src="/images/img_a0c0535ed5642278.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="select-keolreom-jijeong">select: 컬럼 지정</h2>
+<p>따로 뭘 걸지 않고 데이터를 읽어오려면 위처럼 그냥 컬럼 전체를 다 가져와버린다.<br />
+일부 컬럼만 가져오고 싶다면 select로 dsl 컬럼을 지정하면 된다.</p>
+<p><img src="/images/img_0212d88014f44abf.png" alt="" /></p>
+<p><img src="/images/img_b171741d00d64238.png" alt="" /></p>
+<p>여러개의 컬럼을 가져오고 싶다면 컬럼들을 튜플로 묶어서 던진다.</p>
+<p><img src="/images/img_36682596396857a6.png" alt="" /></p>
+<p><img src="/images/img_b6786324feeb1b81.png" alt="" /></p>
+<p>그리고 select를 할때 어느정도 값의 가공을 할 수도 있다.<br />
+그럴때는 컬럼 dsl 값의 메서드들을 사용할 수가 있겠다.<br />
+아래의 concat은 문자열을 연결해주는 함수다. ||로 변환될 것이다.</p>
+<p><img src="/images/img_73d9960d4f7acae1.png" alt="" /></p>
+<p><img src="/images/img_d9a9b3816b126199.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="jibgyehagi-count-sum">집계하기: count, sum, ...</h2>
+<p>count, sum 등의 집계함수는 다음과 같이 사용할 수 있다.<br />
+group은 나중에 해보고 일단 전체집계만 해보겠다.</p>
+<p>count는 다음과 같이 할 수 있다. count는 컬럼을 지정해서 집계, count_start는 count(*)다.</p>
+<p><img src="/images/img_a3a5fa781d895e92.png" alt="" /></p>
+<p><img src="/images/img_219929331ca52565.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="select-seobeukweori">select 서브쿼리</h2>
+<p>서브쿼리도 쓸 수 있다. diesel::dsl에 이런 곳에 사용할 수 있는 함수들이 제공된다.<br />
+만약 exists로 존재여부를 체크하고 싶다면 이렇게 하면 된다.</p>
+<p><img src="/images/img_3f655ade978f6f3e.png" alt="" /></p>
+<p><img src="/images/img_fdc5afc80c929fb5.png" alt="" /></p>
+<br>
+<p>group은 나중에 따로 정리해보겠다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.diesel.rs/diesel/query_dsl/trait.QueryDsl.html">https://docs.diesel.rs/diesel/query_dsl/trait.QueryDsl.html</a><br />
+<a rel="external" href="https://docs.diesel.rs/diesel/query_dsl/trait.RunQueryDsl.html">https://docs.diesel.rs/diesel/query_dsl/trait.RunQueryDsl.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222287463695/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[TypeORM] Start with Nest<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222276285480/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Git] 커밋 취소하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

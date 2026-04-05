@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Qdrant] Multi Vector와 Named Vector | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224109421433/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Qdrant] Multi Vector와 Named Vector">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224109421433/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-12-14T00:00:00+00:00">
+    <meta property="article:tag" content="qdrant">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224109421433/">[Qdrant] Multi Vector와 Named Vector</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-14T00:00:00+00:00"><time datetime="2025-12-14T00:00:00+00:00">2025.12.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="348 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/qdrant/">qdrant</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224109421433" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Qdrant는 단일 컬렉션에 여러개의 벡터를 집어넣는 것을 지원한다.</p>
+<p>방식은 2가지다. 동작이나 사용 방식이 완전히 달라서 사용사례에 맞춰서 잘 선택해야 한다.</p>
+<ol>
+<li>
+<p>multi vector: 벡터의 벡터를 동적으로 넣는 형태 (2차원 벡터)</p>
+</li>
+<li>
+<p>named vector: 이름이 붙은 벡터를 별도로 넣는 형태</p>
+</li>
+</ol>
+<br>
+<br>
+<br>
+<br>
+<br>
+<h2 id="multi-vector">Multi Vector</h2>
+<p>multi vector는 동일한 차원을 가진 벡터를 여러개 넣어서 사용할 수 있게 해주는 기능이다.<br />
+들어갈 수 있는 벡터의 개수는 정해져있지 않다. 넣고 싶은대로 넣을 수 있다.</p>
+<p>생성 방식은 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>PUT collections</span><span style="color: #94E2D5;">/</span><span>foods</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;vectors&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;size&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;distance&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Euclid&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;multivector_config&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;comparator&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;max_sim&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_05fd6d15de690991.png" alt="" />
+여기서 중요한 것은 comparator라는 옵션이다. 현재는 max_sim라는 단일 옵션만 제공한다.</p>
+<p>아무튼 저게 벡터가 여러개가 되니까 유사도 방식을 어떻게 정의할지를 지정하는 것인데, max_sim은 한 point에 들어있는 벡터 중에서 가장 큰 값을 최종 유사도로 사용하겠다는 것이다.</p>
+<p>예를 들어 [A, B] 벡터 쌍을 현재 검색 쿼리와 비교할 경우, (A, 쿼리), (B, 쿼리) 유사도를 각각 계산한 다음에, B의 유사도가 더 크다면 A의 유사도를 버리고 B를 최종 유사도로 사용하는 것이다.</p>
+<p>사용 방식 자체는 그렇게 복잡할 것은 없다.<br />
+집어넣을 때는 벡터를 원하는 만큼 구겨넣을 수 있다.</p>
+<p><img src="/images/img_e07023641f01baa6.png" alt="" />
+이런 식으로 2개, 3개 지그재그로 넣을 수 있다.</p>
+<p>쿼리를 날리는 방식 자체는 특별할 것이 없다.</p>
+<p><img src="/images/img_3af614345ba3f85a.png" alt="" />
+max_sim 유사도를 계산해서 판단하는 것은 내부적으로 알아서 처리한다.</p>
+<br>
+<br>
+<br>
+<h2 id="named-vector">Named Vector</h2>
+<p>named vector는 좀 다른 사용사례를 위한 옵션이다.<br />
+이건 독립적인 벡터 여러가지를 정의해서 사용할 수 있게 해준다.</p>
+<p>예를 들어 상품에 이미지 속성 기반의 임베딩과 텍스트 속성 기반의 임베딩을 둘 다 넣어서 활용해야 하고, 2가지의 벡터 차원/유사도가 다르다면 named vector를 사용해야 한다.</p>
+<p>multi vector와는 다르게 차원이나 유사도 매커니즘이 완전히 다른 벡터들을 단일 point에 집어넣을 수 있는데, 대신 단일 쿼리로 여러개의 벡터를 동시에 활용해서 검색을 하는 것은 불가능하다. 당연하다.<br />
+유사도/차원이 다 다를 수 있는게 어떻게 하겠나?</p>
+<p>컬렉션 정의는 다음과 같이 할 수 있다.<br />
+key:value 쌍으로 별도의 벡터 config를 정의하면 된다.</p>
+<p><img src="/images/img_65414e5a2873008b.png" alt="" /></p>
+<p>값을 넣을 때도 정의한 벡터 값을 전부 넣어줘야 한다.</p>
+<p><img src="/images/img_a3bb42d06e297f61.png" alt="" /></p>
+<p>검색할 때는 조금 사용 방식이 달라진다.<br />
+using 플래그로 어떤 벡터에 대해 검색을 할지 지정해야 한다.</p>
+<p><img src="/images/img_8d8cb4bcd6f582e5.png" alt="" /></p>
+<p>단일 쿼리에서는 한가지의 벡터만 사용해서 검색할 수 있지만, 하이브리드 쿼리를 사용하면 여러개의 벡터를 동시에 활용해서 쿼리를 날리는 것이 가능하다.<br />
+이건 다음 포스트에 정리해본다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://qdrant.tech/documentation/concepts/vectors/">https://qdrant.tech/documentation/concepts/vectors/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224108955120/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>40억개의 if문.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224109436743/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Docker Hub 대규모 해킹 발생.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

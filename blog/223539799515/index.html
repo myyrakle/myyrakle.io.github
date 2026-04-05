@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] GC 튜닝: OOM(Out of Memory) 방지하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223539799515/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] GC 튜닝: OOM(Out of Memory) 방지하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223539799515/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-08-07T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223539799515/">[Go] GC 튜닝: OOM(Out of Memory) 방지하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-08-07T00:00:00+00:00"><time datetime="2024-08-07T00:00:00+00:00">2024.08.07</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="604 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223539799515" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Go는 좀 써보니까, 규모 좀 있는 데이터 처리에 있어서는 극악의 효율을 보여준다.</p>
+<p>굳이 빅데이터까지 가지 않더라도 JSON 상하차 같은거 할때 사이즈가 크면 쓰레기 메모리가 금방 쌓인다.<br />
+io.Read 자체에서 쌓이는 것도 있고, Go 특유의 리플렉션 떡칠, 포인터 할당으로 인해 쌓이는 것도 있다.<br />
+내 사용사례의 경우에는 실제 메모리 사용량과 누적된 메모리가 7배쯤 차이가 났다.</p>
+<p>Go fanboy들은 코드를 잘못짜서 그런거라는 주장을 하곤 하던데, 그냥 유즈케이스가 그랬다. 내가 할당 관련해서 코드 수준 리팩토링을 할만큼 했는데도 이정도였던거고, 언어 자체가 이런 사례에 잘 맞지 않았던 것이다.</p>
+<p>하여튼 문제는 이런 상황에서는 호스트든 컨테이너든 OOM으로 비명횡사할 수 있다는 것이다.<br />
+C/C++, Rust 같은 언어들과는 다르게 메모리 해제가 GC에 의해 비동기적으로 실행되다보니, 실제 사용량은 얼마 되지도 않는데, GC 제거 대기상태의 쓰레기 메모리들로 인해서 OOM이 뜰 때가 잦다.</p>
+<p><img src="/images/img_e0d7f79c6a7e4239.png" alt="" />
+<a rel="external" href="https://weaviate.io/blog/gomemlimit-a-game-changer-for-high-memory-applications">https://weaviate.io/blog/gomemlimit-a-game-changer-for-high-memory-applications</a></p>
+<br>
+<br>
+<br>
+<h2 id="sanghwang-jaehyeon">상황 재현</h2>
+<p>전체 코드는 다음 레포에서 확인할 수 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/golab">https://github.com/myyrakle/golab</a></p>
+<p>코드는 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;runtime/debug&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 1.5gb 정도</span></span>
+<span class="giallo-l"><span>	memorySize</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 1500</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1024</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	for</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		var</span><span> bytes [][]byte</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Printf</span><span>(</span><span style="color: #A6E3A1;">&quot;%d번째 메모리 할당 (%d Byte)</span><span style="color: #F5C2E7;">\n</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">,</span><span> i</span><span style="color: #9399B2;">,</span><span> memorySize)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		chunkSize</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 1000000</span></span>
+<span class="giallo-l"><span>		for j</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;"> &lt;</span><span> chunkSize</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			bytes</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> append</span><span>(bytes</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>([]byte</span><span style="color: #9399B2;">,</span><span> memorySize</span><span style="color: #94E2D5;">/</span><span>chunkSize))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(bytes[</span><span style="color: #89B4FA;font-style: italic;">len</span><span>(bytes)</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1</span><span>][</span><span style="color: #FAB387;">0</span><span>])</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		i</span><span style="color: #94E2D5;"> +=</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>1.5기가어치의 메모리를 매 루프마다 할당하고 해제하도록 했다.<br />
+그리고 GC 자체가 좀 느려지게 만들려고 할당을 청크단위로  복잡하게 했다. 실제로는 저거보다 복잡하게 할당되는 경우가 더 많을 것이다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>FROM golang</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">1.20</span><span style="color: #94E2D5;">-</span><span>alpine3</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">16</span><span> AS builder</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>WORKDIR</span><span style="color: #94E2D5;"> /</span><span>app</span></span>
+<span class="giallo-l"><span>ADD</span><span style="color: #94E2D5;"> . /</span><span>app</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>RUN apk add alpine</span><span style="color: #94E2D5;">-</span><span>sdk</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>RUN go build</span><span style="color: #94E2D5;"> -</span><span>o bin</span><span style="color: #94E2D5;">/</span><span>app cmd</span><span style="color: #94E2D5;">/</span><span>memoryeater</span><span style="color: #94E2D5;">/</span><span>main</span><span style="color: #94E2D5;">.</span><span>go</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>FROM alpine</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>WORKDIR</span><span style="color: #94E2D5;"> /</span><span>app</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>COPY</span><span style="color: #94E2D5;"> --</span><span>from</span><span style="color: #94E2D5;">=</span><span>builder</span><span style="color: #94E2D5;"> /</span><span>app</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>app</span><span style="color: #94E2D5;"> /</span><span>app</span><span style="color: #94E2D5;">/</span><span>app</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CMD [</span><span style="color: #A6E3A1;">&quot;sh&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;-c&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;/app/app&quot;</span><span>]</span></span></code></pre>
+<p>빌드하고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker build</span><span style="color: #94E2D5;"> -</span><span>f docker</span><span style="color: #94E2D5;">/</span><span>Dockerfile</span><span style="color: #94E2D5;">.</span><span>memory</span><span style="color: #94E2D5;"> -</span><span>t memoryeater</span><span style="color: #94E2D5;"> .</span></span>
+<span class="giallo-l"><span>docker run</span><span style="color: #94E2D5;"> -</span><span>m 2048m</span><span style="color: #94E2D5;"> --</span><span>memory</span><span style="color: #94E2D5;">-</span><span>swap</span><span style="color: #FAB387;"> 0</span><span style="color: #94E2D5;"> --</span><span>memory</span><span style="color: #94E2D5;">-</span><span>reservation</span><span style="color: #FAB387;"> 0</span><span> memoryeater</span></span></code></pre>
+<p>적당히 2기가 주고 실행하면</p>
+<br>
+<p><img src="/images/img_32eedd3086e02072.png" alt="" />
+좀 돌다가 뻗는다.<br />
+쓰레기가 쌓여서 압사한 것이다.</p>
+<br>
+<p><img src="/images/img_8eb5c3aad1c56c02.png" alt="" /></p>
+<p><img src="/images/img_eff2182b60e79fa3.png" alt="" />
+Exit Code도 OOM을 나타내는 137번으로 나왔다.</p>
+<p>이제 문제를 해결해보자.</p>
+<br>
+<br>
+<br>
+<h2 id="kodeu-sujunyi-gaeseon">코드 수준의 개선</h2>
+<p>할당 코드들을 먼저 수정하는게 우선이 되어야 한다.<br />
+빈번한 할당과 해제를 유도하는 패턴의 코드를 최소화하는 것이 중요하다. 이건 별도 포스트를 참조한다.</p>
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223232328524">https://blog.naver.com/sssang97/223232328524</a></p>
+<p>하지만 순수하게 GC의 한계로 인해서 메모리 병목이 생기는 경우도 꽤 빈번하게 발생한다. 이 포스트에서는 GC의 문제를 개선하는 방향을 주로 다룬다.</p>
+<br>
+<br>
+<br>
+<h2 id="jigjeob-freehagi-bicuceon">직접 Free하기 (비추천)</h2>
+<p>문제가 되는 할당과 해제 시점을 명확하게 추정할 수 있다면 아예 직접 트리거하는게 나을 수도 있다.<br />
+물론 복잡한 구조를 가진 시스템에서는 사용하기 어렵고, 위 예제와 같이 명확하고 선형적인 메모리 사용 패턴을 가진 경우에나 사용하기 적절할 것이다.</p>
+<p><img src="/images/img_15f9323fb2c3b97a.png" alt="" /></p>
+<p>그럼 이것도 안정적으로 동작한다.</p>
+<p><img src="/images/img_3c318732d9bdb28d.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gogc-bigweonjang">GOGC (비권장)</h2>
+<p>GOGC는 GC가 도는 주기를 조정할 수 있게 해주는 환경변수 옵션이다.<br />
+이건 비율 기반으로 동작하는데, 마지막 수단으로만 남겨두는걸 권장하고 싶다.</p>
+<p>GOGC의 기본값은 100으로, 메모리가 100%만큼(2배) 증가할때마다 GC를 트리거하겠다는 의미다.<br />
+그래서 200%으로 설정하면 메모리가 3배 늘때마다 GC가 실행되고, 50%으로 설정하면 메모리가 1.5배로 늘때마다 GC가 실행된다.<br />
+그래서 50%으로 설정하면 GC가 더 빈번하게 도니까 좀더 컴팩트하게 쓰레기가 정리될 수 있겠으나, GC 자체의 부하가 늘어서 CPU 사용량이 늘 수 있다.</p>
+<p>코드에서 SetGCPercent를 통해 설정하거나</p>
+<p><img src="/images/img_2a0272ad85d10359.png" alt="" /></p>
+<p>환경변수로 넘겨서 활성화시킬 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker build</span><span style="color: #94E2D5;"> -</span><span>f docker</span><span style="color: #94E2D5;">/</span><span>Dockerfile</span><span style="color: #94E2D5;">.</span><span>memory</span><span style="color: #94E2D5;"> -</span><span>t memoryeater</span><span style="color: #94E2D5;"> .</span></span>
+<span class="giallo-l"><span>docker run</span><span style="color: #94E2D5;"> -</span><span>m 2048m</span><span style="color: #94E2D5;"> --</span><span>memory</span><span style="color: #94E2D5;">-</span><span>swap</span><span style="color: #FAB387;"> 0</span><span style="color: #94E2D5;"> --</span><span>memory</span><span style="color: #94E2D5;">-</span><span>reservation</span><span style="color: #FAB387;"> 0</span><span style="color: #94E2D5;"> -</span><span>e GOGC</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">50</span><span> memoryeater</span></span></code></pre>
+<p><img src="/images/img_a996acfee6a304f0.png" alt="" />
+좀더 빈번하게 도니까 전보다 안정적으로 돌긴 한다.<br />
+근데 이건 메모리가 심하게 차지 않은 상황에서도 과한 부하를 줄 수 있기 때문에 대신 GOMEMLIMIT 같은걸 쓰기를 권장한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gomemlimiteul-tonghan-memory-limit-guseong">GOMEMLIMIT을 통한 Memory Limit 구성</h2>
+<p>GOMEMLIMIT은 1.19에 추가된 GC 튜닝용 플래그다.<br />
+이건 Golang GC 자체에 대해서 Soft한 Memory Limit을 설정하게 해준다.</p>
+<p>이게 뭔 소리나면, 이걸 1gb로 설정해놓으면, 메모리가 1gb 차면 바로 GC를 실행시킨다는 것이다.<br />
+그래서 GOGC 조정보다는 훨씬 명확하고 안정성이 있다.</p>
+<p>이것도 debug 모듈을 통해 직접 코드에서 변경하거나</p>
+<p><img src="/images/img_ae3b9dd637c3bdbc.png" alt="" /></p>
+<p>환경변수를 통해 주입할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker build</span><span style="color: #94E2D5;"> -</span><span>f docker</span><span style="color: #94E2D5;">/</span><span>Dockerfile</span><span style="color: #94E2D5;">.</span><span>memory</span><span style="color: #94E2D5;"> -</span><span>t memoryeater</span><span style="color: #94E2D5;"> .</span></span>
+<span class="giallo-l"><span>docker run</span><span style="color: #94E2D5;"> -</span><span>m 2048m</span><span style="color: #94E2D5;"> --</span><span>memory</span><span style="color: #94E2D5;">-</span><span>swap</span><span style="color: #FAB387;"> 0</span><span style="color: #94E2D5;"> --</span><span>memory</span><span style="color: #94E2D5;">-</span><span>reservation</span><span style="color: #FAB387;"> 0</span><span style="color: #94E2D5;"> -</span><span>e GOMEMLIMIT</span><span style="color: #94E2D5;">=</span><span>1000MiB memoryeater</span></span></code></pre>
+<p><img src="/images/img_2be52e505993547b.png" alt="" />
+그러면 GC 때문에 좀 느려지긴 하지만 안정적으로 동작한다.<br />
+1기가가 쌓일때마다 GC를 트리거하기 때문이다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://weaviate.io/blog/gomemlimit-a-game-changer-for-high-memory-applications">https://weaviate.io/blog/gomemlimit-a-game-changer-for-high-memory-applications</a><br />
+<a rel="external" href="https://johngrib.github.io/wiki/java/gc/death-spiral/">https://johngrib.github.io/wiki/java/gc/death-spiral/</a><br />
+<a rel="external" href="https://tech.kakao.com/posts/618">https://tech.kakao.com/posts/618</a><br />
+<a rel="external" href="https://blog.twitch.tv/en/2019/04/10/go-memory-ballast-how-i-learnt-to-stop-worrying-and-love-the-heap/">https://blog.twitch.tv/en/2019/04/10/go-memory-ballast-how-i-learnt-to-stop-worrying-and-love-the-heap/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223541452707/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Cloudflare] Page: 프로덕션 브랜치 변경<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223538564888/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] noexcept는 성능에 도움이 될수도 아닐수도 있음.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

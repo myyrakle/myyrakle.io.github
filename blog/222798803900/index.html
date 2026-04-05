@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Next.js 환경 구축하기 (Serverless) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222798803900/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Next.js 환경 구축하기 (Serverless)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222798803900/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-07-03T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222798803900/">[AWS] Next.js 환경 구축하기 (Serverless)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-07-03T00:00:00+00:00"><time datetime="2022-07-03T00:00:00+00:00">2022.07.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="503 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222798803900" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>본 포스트에서는 AWS 환경에서 Nextjs 환경을 구축하는 법에 대해 다룬다.</p>
+<p>일반적인 정적페이지는 S3+Cloudfront 만으로 충분히 구현 가능하나, nextjs는 서버가 필요하다.<br />
+그래서 여기에서는 Lambda Edge가 추가로 사용될 것이다.</p>
+<p>그래서 보통 아래와 같은 구조를 가진다.</p>
+<p><img src="/images/img_67a29a4e534ef93e.png" alt="" />
+출처 <a rel="external" href="https://registry.terraform.io/modules/dealmore/next-js/aws/latest">https://registry.terraform.io/modules/dealmore/next-js/aws/latest</a><br />
+하나하나 직접 세팅하려면 번거로운게 한두개가 아니라서, 본 포스트에서는 자동화된 도구 serverless를 사용해서 배포를 해보도록 한다.</p>
+<p>관련 서비스들을 써보지 않았다면, 한번쯤 먼저 봐두면 괜찮겠다.</p>
+<p>참조<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222567479583">https://blog.naver.com/sssang97/222567479583</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/222395985480">https://blog.naver.com/sssang97/222395985480</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/222504226420">https://blog.naver.com/sssang97/222504226420</a></p>
+<br>
+<br>
+<br>
+<h2 id="next-js-peurojegteu-saengseong">Next.js 프로젝트 생성</h2>
+<p>git 레포지토리 파주고, npx를 사용해서 프로젝트를 생성해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>npx create</span><span style="color: #94E2D5;">-</span><span>next</span><span style="color: #94E2D5;">-</span><span>app@latest</span><span style="color: #94E2D5;"> --</span><span>typescript</span><span style="color: #94E2D5;"> .</span></span></code></pre>
+<p>타입스크립트가 싫다면 --typescript 플래그를 제거하면 되고, 별도 디렉터리로 생성하고 싶다면 경로값 .를 제거하면 된다.</p>
+<br>
+<p><img src="/images/img_d172573bcf3e541b.png" alt="" /></p>
+<p><img src="/images/img_ee93eaf5edd20d30.png" alt="" />
+이렇게 생성되면 잘 된 것이다.</p>
+<p>.gitignore에도 이걸 좀 추가해주면 좋겠다.<br />
+.env를 제외하고는 serverless에서 뱉는 찌꺼기다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">.</span><span>env</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">.</span><span>serverless</span><span style="color: #94E2D5;">/</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">.</span><span>serverless_nextjs</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">.</span><span>swc</span><span style="color: #94E2D5;">/</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="s3-beokis-saengseong">S3 버킷 생성</h2>
+<p>정적페이지를 저장해놓고 렌더링시킬 버킷을 생성한다.</p>
+<p><img src="/images/img_25ef2fc0ce181239.png" alt="" /></p>
+<p><img src="/images/img_1192b52f04838ab4.png" alt="" />
+특별히 뭘 설정할건 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="cloudfront-baepo-saengseong">cloudfront 배포 생성</h2>
+<p>그리고 저 버킷을 기반으로 하는 cloudfront를 생성해준다.</p>
+<p><img src="/images/img_7d1eb869ee551961.png" alt="" /></p>
+<p>그리고 나오는 저 배포 번호 E3E54UMBLWT141를 좀 있다가 사용할 것이다.</p>
+<p><img src="/images/img_fa3acbd72159aa64.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="seobeoriseu-seoljeong">서버리스 설정</h2>
+<p>serverless는 기존의 프레임워크들을 aws lambda에 맞게 말아서 배포해주는 편리한 보조도구다.<br />
+먼저 아래 버전으로 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span> npm install</span><span style="color: #94E2D5;"> --</span><span>save</span><span style="color: #94E2D5;">-</span><span>dev serverless@</span><span style="color: #FAB387;">2.72</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">2</span></span></code></pre>
+<p>3.0 버전도 있긴 있는데.. 뭐가 좀 잘 안되는게 있다.</p>
+<p>그리고 next용 serverless 컴포넌트를 추가로 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>npm install</span><span style="color: #94E2D5;"> --</span><span>save</span><span style="color: #94E2D5;">-</span><span>dev</span><span style="color: #FAB387;"> @</span><span>sls</span><span style="color: #94E2D5;">-</span><span>next</span><span style="color: #94E2D5;">/</span><span>serverless</span><span style="color: #94E2D5;">-</span><span>component</span><span style="color: #FAB387;">@3.7</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0</span></span></code></pre>
+<p>그리고 서버리스용 설정파일을 프로젝트 루트경로에 만들어준다.</p>
+<p><img src="/images/img_6ae8807c1d15ff11.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>awsNestJs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  component</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;./node_modules/@sls-next/serverless-component&quot;</span></span>
+<span class="giallo-l"><span>  inputs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>	  bucketName</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;myyrakle-nextjs&#39;</span></span>
+<span class="giallo-l"><span>	  cloudfront</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>	    distributionId</span><span style="color: #9399B2;">:</span><span> E3E54UMBLWT141</span></span>
+<span class="giallo-l"><span>	  name</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>	    defaultLambda</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;next-js-default&#39;</span></span>
+<span class="giallo-l"><span>	    apiLambda</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;nextjs-api&#39;</span></span></code></pre>
+<p>만들어놓은 버킷 이름과 Cloudfront 배포 번호를 넣고, 생성할 람다 이름을 적절히 써넣어준다.<br />
+해당 이름의 함수가 있다면 있는대로 쓰고, 없다면 자동으로 만들어준다.</p>
+<p>여기서는 기본적인 설정값만 넣었지만, 다른것도 많다.<br />
+자세한건 문서를 참조하길 바란다.<br />
+<a rel="external" href="https://github.com/serverless-nextjs/serverless-next.js/">https://github.com/serverless-nextjs/serverless-next.js/</a></p>
+<p>그리고 serverless에서 내 AWS에 접속할 수 있도록 인증키를 환경변수에 넣어준다.</p>
+<p><img src="/images/img_235eb3732bd8ad02.png" alt="" /></p>
+<p>계정을 만들고 키를 받는건 다음 포스트를 참조하면 된다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222503738493">https://blog.naver.com/sssang97/222503738493</a></p>
+<p>루트계정이라면 상관없지만, 추가로 만든 계정이라면 꽤나 많은 권한을 부여해줘야 한다.<br />
+배포에 필요한 권한은 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #A6E3A1;">  &quot;acm:DescribeCertificate&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // only for custom domains</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;acm:ListCertificates&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">    // only for custom domains</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;acm:RequestCertificate&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">  // only for custom domains</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:CreateCloudFrontOriginAccessIdentity&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:CreateDistribution&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:CreateInvalidation&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:GetDistribution&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:GetDistributionConfig&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListCloudFrontOriginAccessIdentities&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListDistributions&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListDistributionsByLambdaFunction&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListDistributionsByWebACLId&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListFieldLevelEncryptionConfigs&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListFieldLevelEncryptionProfiles&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListInvalidations&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListPublicKeys&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListStreamingDistributions&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:UpdateDistribution&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:TagResource&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">         // for adding tags</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:UntagResource&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">       // for adding tags</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cloudfront:ListTagsForResource&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // for adding tags</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:AttachRolePolicy&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:CreateRole&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:CreateServiceLinkedRole&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:GetRole&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:PutRolePolicy&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:PassRole&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:CreateFunction&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:EnableReplication&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:DeleteFunction&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">            // only for custom domains</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:GetFunction&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:GetFunctionConfiguration&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:PublishVersion&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:UpdateFunctionCode&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:UpdateFunctionConfiguration&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:ListTags&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">                  // for tagging lambdas</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:TagResource&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">               // for tagging lambdas</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:UntagResource&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">             // for tagging lambdas</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;route53:ChangeResourceRecordSets&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // only for custom domains</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;route53:ListHostedZonesByName&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;route53:ListResourceRecordSets&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // only for custom domains</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:CreateBucket&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:GetAccelerateConfiguration&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:GetObject&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">                     // only if persisting state to S3 for CI/CD</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:ListBucket&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:PutAccelerateConfiguration&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:PutBucketPolicy&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:PutObject&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:PutBucketTagging&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">              // for tagging buckets</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;s3:GetBucketTagging&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">              // for tagging buckets</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:ListEventSourceMappings&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;lambda:CreateEventSourceMapping&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:UpdateAssumeRolePolicy&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;iam:DeleteRolePolicy&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;sqs:CreateQueue&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // SQS permissions only needed if you use Incremental Static Regeneration. Corresponding SQS.SendMessage permission needed in the Lambda role</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;sqs:DeleteQueue&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;sqs:GetQueueAttributes&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;sqs:SetQueueAttributes&quot;</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="baepo">배포</h2>
+<p>이제 배포를 해보자.<br />
+package.json에 배포 명령을 추가해주고</p>
+<p><img src="/images/img_cb0b119c3558d61f.png" alt="" /></p>
+<p>명령을 사용한다.</p>
+<p><img src="/images/img_dd04625a8c47e212.png" alt="" />
+그럼 보통 5분 이상은 걸린다.</p>
+<p>그러고 나서 보면 요소들이 생성되어있을 것이고</p>
+<p><img src="/images/img_8b59d1178b896535.png" alt="" /></p>
+<p>배포도 잘 되어있을 것이다.</p>
+<p><img src="/images/img_197909a90c576d02.png" alt="" />
+어렵지 않다.<br />
+이게 다다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/serverless-nextjs/serverless-next.js/">https://github.com/serverless-nextjs/serverless-next.js/</a><br />
+<a rel="external" href="https://falsy.me/%EC%83%88%EB%A1%9C%EC%9A%B4-%EB%B2%84%EC%A0%84-serverless-framework%EB%A5%BC-%EC%82%AC%EC%9A%A9%ED%95%98%EC%97%AC-nextjs-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%EB%A5%BC-aws-lambda%EB%A5%BC-%ED%86%B5/">https://falsy.me/%EC%83%88%EB%A1%9C%EC%9A%B4-%EB%B2%84%EC%A0%84-serverless-framework%EB%A5%BC-%EC%82%AC%EC%9A%A9%ED%95%98%EC%97%AC-nextjs-%ED%94%84%EB%A1%9C%EC%A0%9D%ED%8A%B8%EB%A5%BC-aws-lambda%EB%A5%BC-%ED%86%B5/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222800083915/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Azure] Cloud Shell<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222795695312/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.62.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

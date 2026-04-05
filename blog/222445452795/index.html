@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] EC2: 불사조 인스턴스 만들기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222445452795/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] EC2: 불사조 인스턴스 만들기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222445452795/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-07-25T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222445452795/">[AWS] EC2: 불사조 인스턴스 만들기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-07-25T00:00:00+00:00"><time datetime="2021-07-25T00:00:00+00:00">2021.07.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="372 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222445452795" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>EC2로 이런저런 작업을 하되, 뭔가 문제가 생길때마다 인스턴스를 재부팅해야 할 경우가 많다.<br />
+원체 EC2 인스턴스가 잘 죽기도 하고... 관리형 서비스가 아니다보니 이런저런 일이 생길때가 많기 때문이다.</p>
+<p>작업환경은 Node.js다.<br />
+다른 언어들로도 가능하지만, node가 자료도 좀 더 풍부하고 나은 편인 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="dansun-jaebuting">단순 재부팅</h2>
+<p>일단, EC2에 대한 제어는 기본적으로 인스턴스 ID를 통해서 처리할 수 있다.</p>
+<p><img src="/images/img_42b2b222fe66ba1e.png" alt="" />
+저기 있는 저 이상한 문자+숫자열이다.</p>
+<p>저걸 갖다가 이런식으로 호출해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> AWS</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> ec2</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #FAB387;"> AWS</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">EC2</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 재부팅!</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">await</span><span> ec2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">rebootInstances</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    InstanceIds</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">         &quot;...&quot;</span><span style="color: #9399B2;font-style: italic;"> //여기에 인스턴스 ID</span></span>
+<span class="giallo-l"><span>    ]</span><span style="color: #9399B2;">,</span><span>        </span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그러면 직접 인스턴스 재부팅을 시켜주는 것과 동일하게 동작할 것이다.</p>
+<p>보통 이런경우에 재부팅을 시켜주는 주체는 다른 인스턴스로 두는 경우가 많다.<br />
+A 인스턴스에 뭔가 이상이 생긴다면, B 인스턴스에서 그걸 감지해서 A 인스턴스를 재부팅시켜주는 형태다.</p>
+<br>
+<br>
+<br>
+<h2 id="wanjeon-jaebuting-jungdan-hu-sijag">완전 재부팅 (중단 후 시작)</h2>
+<p>근데 가끔 그냥 리부트로도 해결되지 않는 경우가 있을 수도 있다.<br />
+IP나 하드웨어적 문제 같은 경우는 아예 물리적 컴퓨터부터가 바뀌어야 하기 때문이다.</p>
+<p>그럴 때는 이런식으로 아예 인스턴스를 중단시킨 다음에 시작을 해줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> AWS</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> ec2</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #FAB387;"> AWS</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">EC2</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> restart</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">instanceId</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 인스턴스 중단</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> ec2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stopInstances</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        InstanceIds</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span>             instanceId</span></span>
+<span class="giallo-l"><span>        ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 완전히 중단될떄까지 대기</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> ec2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">waitFor</span><span>(</span><span style="color: #A6E3A1;">&#39;instanceStopped&#39;</span><span style="color: #9399B2;">, {</span></span>
+<span class="giallo-l"><span>        InstanceIds</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span>             instanceId</span></span>
+<span class="giallo-l"><span>        ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 인스턴스 재시작</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> ec2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">startInstances</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        InstanceIds</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span>            instanceId</span></span>
+<span class="giallo-l"><span>        ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">await</span><span style="color: #89B4FA;font-style: italic;"> restart</span><span>(instanceId)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이러면 하드웨어적 문제도 리셋되고, IP도 바뀌면서 재시작된다.</p>
+<br>
+<br>
+<br>
+<h2 id="nayi-sayongsarye">나의 사용사례</h2>
+<p>내 경우에는 인스턴스로 프로세스를 돌리되, 그 프로세스에서 필요하다고 판단되면 재실행시켜서 IP를 재할당시킬 필요가 있었다.</p>
+<p>그래서 일단 재실행을 시켜주는 녀석을 람다로 작성해뒀다.<br />
+관리가 편하고, 호출이 잦지 않다면 훨씬 저렴할 것이기 때문이었다.</p>
+<p>소스는 아래와 같이 짰었다.<br />
+인스턴스에게서 자신의 인스턴스ID를 전달받아 껐다 켜주는 형태다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> AWS</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> ec2</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #FAB387;"> AWS</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">EC2</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> restart</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">instanceId</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 인스턴스 중단</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> ec2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stopInstances</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        InstanceIds</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span>             instanceId</span></span>
+<span class="giallo-l"><span>        ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 완전히 중단될떄까지 대기</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> ec2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">waitFor</span><span>(</span><span style="color: #A6E3A1;">&#39;instanceStopped&#39;</span><span style="color: #9399B2;">, {</span></span>
+<span class="giallo-l"><span>        InstanceIds</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span>             instanceId</span></span>
+<span class="giallo-l"><span>        ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 인스턴스 재시작</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> ec2</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">startInstances</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        InstanceIds</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span>            instanceId</span></span>
+<span class="giallo-l"><span>        ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 매개변수로 인스턴스 ID 받음</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> instanceId</span><span style="color: #94E2D5;"> =</span><span> event[</span><span style="color: #A6E3A1;">&#39;instanceId&#39;</span><span>]</span><span style="color: #94E2D5;"> ??</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(event)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span>(instanceId)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        instanceId</span><span style="color: #94E2D5;"> =</span><span> instanceId</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">replace</span><span>(</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #F5C2E7;">\n</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        await</span><span style="color: #89B4FA;font-style: italic;"> restart</span><span>(instanceId)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        statusCode</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        body</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #A6E3A1;">&#39;SUCCESS&#39;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>켜줘야 할놈이 좀 많고, 유동적으로 생겼다 없어질 수 있기 때문에 유연하게 동작할 수 있도록 구성했다.<br />
+그리고 이건 어차피 외부에서는 호출이 불가능해서 보안적으로도 큰 문제는 없다고 판단했다.</p>
+<p>실행시간은 조금 늘여놨다.<br />
+인스턴스가 중단되는데 한 20-30초는 걸리기 때문에 그걸 기다리기 위함이다.</p>
+<p><img src="/images/img_42942c7f3f53dffe.png" alt="" /></p>
+<p>람다에 EC2 제어 권한도 달아준다.</p>
+<p><img src="/images/img_4de2a16cec45dea8.png" alt="" /></p>
+<p>그리고 재부팅이 필요한 인스턴스에서는 다음과 같이 호출했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> aws</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &quot;aws-sdk&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span><span> readFileSync</span><span style="color: #9399B2;"> }</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &quot;fs&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> restartEc2</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span>    aws</span><span style="color: #94E2D5;">.</span><span>config</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">update</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        region</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ap-northeast-2&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        accessKeyId</span><span style="color: #94E2D5;">: ...</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        secretAccessKey</span><span style="color: #94E2D5;">: ...</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 자신의 인스턴스ID 획득 (아마존 리눅스 기준)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> instanceId</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> String</span><span>(</span><span style="color: #89B4FA;font-style: italic;">readFileSync</span><span>(</span><span style="color: #A6E3A1;">&quot;/var/lib/cloud/data/instance-id&quot;</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> lambda</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Lambda</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> lambda</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">invoke</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            FunctionName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;재부팅용 함수명&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            Payload</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>                instanceId</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">await</span><span style="color: #89B4FA;font-style: italic;"> restartEc2</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그래서 그냥 이런 구조다.<br />
+관리도 편하고 별거없다.</p>
+<p><img src="/images/img_b8d817a95759cb43.png" alt="" />
+아직까진 만족스럽게 사용하고 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="geuoe">그외</h2>
+<p>나는 아주 단순하게 인스턴스 자신이 소생요청을 하는 식으로 구현을 했지만, 일반적으로 이런 구성이 필요할 경우는 많지 않을 것이다.</p>
+<p>보통 재부팅은 컴퓨터나 뭐 프로세스가 몽땅 죽을 때 필요한 건데, 이미 죽은놈이 어떻게 살려달라는 요청을 하겠는가.</p>
+<p>그래서 보통 상태를 감시하는 인스턴스같은걸 띄워놓고 죽으면 재깍재깍 리부트해주는 식으로 많이 한다고 한다.</p>
+<p>단점은 감시용 인스턴스가 죽을 경우에는 방법이 없다는 것인데...</p>
+<p>여기에 대한 가장 괜찮아보이는 해결책은, 같은 동작을 하는 인스턴스 3개 이상 띄워놓고 서로서로 감시해서 재부팅해주는 것이었다.<br />
+필요한 작업도 똑같이 하면서 서로서로 살려주는 역할도 하니, 웬만하면 다 죽을 일이 없다.<br />
+전설의 피닉스 데몬이라고 부르더라.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/EC2.html">https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/EC2.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222450356554/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.54.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222436808012/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Elasticsearch] 형태소 분석기 Nori (with Elastic Cloud)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

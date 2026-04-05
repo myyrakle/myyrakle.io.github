@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 13 =&gt; 18 마이그레이션 노트 (AWS RDS) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224166966253/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 13 => 18 마이그레이션 노트 (AWS RDS)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224166966253/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-01-31T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224166966253/">[PostgreSQL] 13 =&gt; 18 마이그레이션 노트 (AWS RDS)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-01-31T00:00:00+00:00"><time datetime="2026-01-31T00:00:00+00:00">2026.01.31</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="391 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224166966253" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>AWS RDS에서 PostgreSQL 13 버전의 기술지원이 종료됨에 따라 최신 버전으로의 마이그레이션을 단행하게 되었다.<br />
+그간 버전들에서 I/O 관련 최적화나 Vacuum 개선 등이 많이 들어가서 전체적인 성능 향상도 될 것이라고 기대하면서 업그레이드를 했다.</p>
+<p>PostgreSQL이 일반적인 경우에서는 하위호환을 대체로 잘 지켜주는 편이라서 큰 문제는 없지만, 신경써야 하는 부분이 몇가지 있기는 했다.</p>
+<p>호환성에 영향을 주는 전체 세부사항들은 릴리즈 노트들을 참고하는 것이 좋다. 양이 제법 많다.<br />
+14 버전 <a rel="external" href="https://www.postgresql.org/docs/release/14.0/">https://www.postgresql.org/docs/release/14.0/</a><br />
+15 버전 <a rel="external" href="https://www.postgresql.org/docs/release/15.0/">https://www.postgresql.org/docs/release/15.0/</a><br />
+16 버전 <a rel="external" href="https://www.postgresql.org/docs/release/16.0/">https://www.postgresql.org/docs/release/16.0/</a><br />
+17 버전 <a rel="external" href="https://www.postgresql.org/docs/release/17.0/">https://www.postgresql.org/docs/release/17.0/</a><br />
+18 버전 <a rel="external" href="https://www.postgresql.org/docs/release/18.0/">https://www.postgresql.org/docs/release/18.0/</a><br />
+기존 함수들의 미묘한 동작들을 명확하게 바꾼다거나 하는 자잘한 변경사항들이 꽤 많긴 한데, 이런건 실제로 해당하는 경우가 드물 것이다.<br />
+그래서 내가 겪은 주요하고 일반적인 부분만 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="ssl-obsyeon-gangje-aws-rds">SSL 옵션 강제 (AWS RDS)</h2>
+<p>이건 클라우드 서비스마다 다른데, AWS RDS의 경우에는 15 버전부터 SSL 옵션이 강제가 된다.</p>
+<p>그래서 연결시에 SSL을 켜지 않으면, 다음과 같은 오류가 발생한다.</p>
+<p><img src="/images/img_3d221d7177287b44.png" alt="" /></p>
+<p>이걸 해결하려면 서버 측에서 이런 식으로 넘겨야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>postgresql</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//username:password@hostname:port/database?sslmode=require</span></span></code></pre>
+<p>이건 구버전에서도 사용할 수 있으나 필수가 아니었을 뿐이라서, 미리 적용해서 선조치를 해놓으면 되는 부분이다.</p>
+<br>
+<br>
+<br>
+<h2 id="wal-logical-replication-hawihohwan-bulga">WAL Logical Replication 하위호환 불가</h2>
+<p>WAL 레벨에서는 호환성이 거의 보장되지 않는다. 그래서 WAL Logical Repliaction을 쓰는 경우에는 업그레이드가 불가능하며, 기존 구성을 삭제해야 한다.</p>
+<p>이건 보통 CDC를 구현할때 주로 사용되는 기능이라서, 서드파티와 동기화를 걸어놓은 상황이라면 매우 높은 확률로 이걸 쓰고 있다고 생각하면 된다. 아무튼 그래서 CDC를 걸어놓고 쓰는 경우에는 리스크를 감안해야 한다.</p>
+<p>RDS는 Replication을 사용중일 경우 업그레이드시에 다음과 같은 오류를 발생시킨다.</p>
+<p><img src="/images/img_870890c1f8cde5f8.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">------------------------------------------------------------------</span></span>
+<span class="giallo-l"><span>Upgrade could not be run on Fri Jan</span><span style="color: #FAB387;"> 30 05</span><span>:</span><span style="color: #FAB387;">15</span><span>:</span><span style="color: #FAB387;">34 2026</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">------------------------------------------------------------------</span></span>
+<span class="giallo-l"><span>The instance could not be upgraded from</span><span style="color: #FAB387;"> 13.22</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">R2</span><span> to</span><span style="color: #FAB387;"> 18.1</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">R1</span><span> because</span><span style="color: #CBA6F7;"> of</span><span> following reasons</span><span style="color: #94E2D5;">.</span><span> Please take appropriate action on databases that have usages incompatible</span><span style="color: #CBA6F7;"> with</span><span> requested major engine version upgrade and</span><span style="color: #CBA6F7;"> try</span><span> again</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">-</span><span> The instance could not be upgraded because it has one or more logical replication slots</span><span style="color: #94E2D5;">.</span><span> Please drop all logical replication slots and</span><span style="color: #CBA6F7;"> try</span><span> again</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">-----------------------</span><span> END OF LOG</span><span style="color: #94E2D5;"> ----------------------</span></span></code></pre>
+<p>지우라는 것이다.</p>
+<p>시키는대로 다 찾아서 지워주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>select</span><span style="color: #94E2D5;"> *</span><span> from pg_replication_slots</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #89B4FA;font-style: italic;"> pg_drop_replication_slot</span><span>(</span><span style="color: #A6E3A1;">&#39;이름&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>당연히 이 방식은 복제의 중단을 발생시킨다. 그래서 업그레이드 후에 다시 만들더라도 그 사이에 발생한 Write에 대해서는 WAL 로그 읽기가 불가능하다.<br />
+그 누락건들에 대해서는 알아서 잘 찾아서 처리를 해주거나, 전체 동기화를 하거나 해야 할 것이다.</p>
+<br>
+<p>그래서 부침이 좀 있긴 했지만 업그레이드 자체는 완수를 했다.</p>
+<p><img src="/images/img_47eccc46069b4f15.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="seongneung-hyangsang">성능 향상</h2>
+<p>PostgreSQL 17/18 버전 즈음해서 성능 향상에 대한 바이럴을 많이 봤던지라 막연한 기대를 좀 했었는데, 의외로 눈에 띄는 성능 개선이 보이지는 않았다.</p>
+<p><img src="/images/img_c8b9ffd835b9582a.png" alt="" /></p>
+<p><img src="/images/img_e1839ad4f78f013d.png" alt="" />
+01/30부터 바뀌었는데, 레이턴시는 별다른 차이가 없었다.<br />
+스루풋이나 기타 성능 지표에서도 별반 차이가 느껴지는 부분은 없었다.</p>
+<p>기존에 auto vacuum으로 인한 성능 병목을 느꼈거나, 동시 read로 인한 병목지점에 존재한 경우가 아니라면, 막 체감될 정도로 개선되지는 않는 것 같다.</p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224167982196/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k3s] Traefik Ingress Controller<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224164747915/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] SES: 이메일 수신 서버 구성하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

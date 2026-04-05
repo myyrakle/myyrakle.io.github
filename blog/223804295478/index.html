@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Algorithm] R-Tree | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223804295478/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Algorithm] R-Tree">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223804295478/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-03-21T00:00:00+00:00">
+    <meta property="article:tag" content="자료구조&#x2F;알고리즘">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223804295478/">[Algorithm] R-Tree</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-03-21T00:00:00+00:00"><time datetime="2025-03-21T00:00:00+00:00">2025.03.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="298 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/jaryogujo-algorijeum/">자료구조&#x2F;알고리즘</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223804295478" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>R-Tree는 B-Tree의 변종이라고 할 수 있는 자료구조다.<br />
+R은 Rectangle의 축약이다.</p>
+<p>이건 지리적인 좌표 평면 기반으로 근접한 요소들을 찾는 것에 최적화되어있다.<br />
+쉽게 예를 들자면, "현재 위치에서 50km 이내의 식당을 전부 빠르게 찾아오는" 기능 같은 것을 구현하는 데에 쓴다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-weonri">기본 원리</h2>
+<p>공간에 최소 경계 사각형(MBR, Minimum Bounding Rectangle)이라는 사각형 영역을 정의하고, 이를 통해 인접 영역을 판별한다.</p>
+<p><img src="/images/img_3c11c4f6ad2bafc8.png" alt="" />
+각각의 MBR은 다른 MBR에 속하거나 겹칠 수 있고, 이를 통해 포함이나 교차, 인접 연산을 빠르게 수행할 수 있다.<br />
+이것도 루트 노드에서 아래로 내려가면서 일치하거나 가까운 상세 좌표 값을 찾아가는 형태로 동작한다.</p>
+<p>그리고 B-Tree와 마찬가지로, Tree level은 탐색을 위한 중간 단계일 뿐이고 모든 실제 데이터는 leaf 노드에만 위치한다. 그래서 캐시를 잘 타는 편이다.</p>
+<p>B-Tree처럼 밸런스 관리도 기본으로 해야한다.<br />
+그래서 삽입/삭제시마다 Split/Merge가 빈번하게 일어난다.</p>
+<p><strong>복잡도</strong><br />
+애초에 요구사항 자체가 비대하다보니 B-Tree 처럼 빠른 성능 (O(log N)) 보장은 안된다.<br />
+탐색 성능은 평균 O(log N), 최악 O(N)이다. 삽입도 최악 O(N)이다.</p>
+<br>
+<br>
+<br>
+<h2 id="byeonhyeong">변형</h2>
+<p>R-Tree의 단점을 개선한 변형 알고리즘으로 R+Tree, R*트리가 있다.<br />
+이름 짓는 꼬라지가 왜 이런건지</p>
+<br>
+<br>
+<br>
+<h2 id="sayongsarye">사용사례</h2>
+<p>많은 좌표 검색 알고리즘들이 R-Tree나 R-Trer의 변형을 사용한다. GIS 계열들은 거의 다 그렇다.</p>
+<p>일부 데이터베이스는 공간 기반 검색을 위해 R-Tree 타입 인덱스를 지원한다.<br />
+PostgreSQL은 기본 인덱스 타입으로 R-Tree를 지원한다.<br />
+MySQL의 Spatial Index은 공간 검색을 위한 R-Tree 기반 인덱스다.</p>
+<p>대표적인 좌표 검색 환경인 PostgreSQL/PostGIS도 R-Tree 기반의 GIS 구현체다.</p>
+<br>
+<p>역주<br />
+<a rel="external" href="https://en.m.wikipedia.org/wiki/R-tree">https://en.m.wikipedia.org/wiki/R-tree</a><br />
+<a rel="external" href="https://www.postgresql.org/docs/8.1/indexes-types.html">https://www.postgresql.org/docs/8.1/indexes-types.html</a><br />
+<a rel="external" href="https://gis.stackexchange.com/questions/263370/postgis-r-tree-why-does-it-exist-when-postgresql-already-implements-its-r-tree">https://gis.stackexchange.com/questions/263370/postgis-r-tree-why-does-it-exist-when-postgresql-already-implements-its-r-tree</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223805485454/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[SQLite] SQLite Viewer (in VSCode)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223802994977/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] pgvector: 벡터 인덱스 다루기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

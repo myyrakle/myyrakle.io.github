@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[ArgoCD] 리소스 Sync 순서 보정 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224238043686/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[ArgoCD] 리소스 Sync 순서 보정">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224238043686/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-04-02T02:18:28.600636+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224238043686/">[ArgoCD] 리소스 Sync 순서 보정</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-04-02T02:18:28.600636+00:00"><time datetime="2026-04-02T02:18:28.600636+00:00">2026.04.02</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="125 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224238043686" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>ArgoCD는 리소스를 생성할 때 정해진 순서 없이 무작위로 생성한다.<br />
+이건 보통은 문제가 없지만, 처리의 순서가 중요한 경우에는 문제가 생길 수 있다.</p>
+<p><img src="/images/img_644f43992faa1b3e.png" alt="" />
+대표적으로 GateKeeper처럼, 템플릿 -&gt; 인스턴스를 생성하는 형태의 순서가 필수적인 경우에 더 그렇다.<br />
+이건 그냥 한번에 시도해서 뻑난 경우다.</p>
+<p>sync-wave 어노테이션을 사용하면 각 리소스 실행 순서를 지정할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>argocd</span><span style="color: #94E2D5;">.</span><span>argoproj</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>sync</span><span style="color: #94E2D5;">-</span><span>wave</span></span></code></pre>
+<p><img src="/images/img_800d989cd443c5a4.png" alt="" /></p>
+<p><img src="/images/img_385aa95cd56eda67.png" alt="" />
+이런 식으로 지정하면, 0 웨이브에 있는 리소스를 먼저 생성한 다음에 1 웨이브 리소스를 생성한다.</p>
+<br>
+<br>
+<br>
+<h2 id="dryrun-musi">DryRun 무시</h2>
+<p>그런데, 생성 시점 외에도 argocd는 dry-run를 돌리는데, 이번 경우처럼 리소스 정의 자체가 기존에는 존재하지 않던 경우에는 여기서도 순서가 뻑날 수 있다.</p>
+<p>리소스 템플릿과 그 템플릿의 리소스를 동시에 만드는데, DryRun 시점에는 당연히 아무것도 만들지 않았으니 템플릿이 존재하지 않기 때문이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>argocd</span><span style="color: #94E2D5;">.</span><span>argoproj</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>sync</span><span style="color: #94E2D5;">-</span><span>options</span><span style="color: #9399B2;">:</span><span> SkipDryRunOnMissingResource</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span></span></code></pre>
+<p><img src="/images/img_d3a51e9087a5035e.png" alt="" />
+그럴 때는 이렇게 적당히 스킵 옵션을 넣어주면 된다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224239622799/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] S3에 백업 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224237280478/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] GateKeeper를 통한 리소스 제약조건 설정<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

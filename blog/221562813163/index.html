@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Java] 자바의 메모리 관리(번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221562813163/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Java] 자바의 메모리 관리(번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221562813163/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-06-15T00:00:00+00:00">
+    <meta property="article:tag" content="Java">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221562813163/">[Java] 자바의 메모리 관리(번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-06-15T00:00:00+00:00"><time datetime="2019-06-15T00:00:00+00:00">2019.06.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="784 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/java/">Java</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221562813163" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://www.dynatrace.com/resources/ebooks/javabook/how-garbage-collection-works/">https://www.dynatrace.com/resources/ebooks/javabook/how-garbage-collection-works/</a></p>
+<p>자바의 메모리 관리는 내장된 가비지 컬렉션으로 처리되는데요. 이 언어의 가장 훌륭한 업적 중 하나라 할 수 있겠습니다. 이건 개발자들이 메모리에 대한 할당과 제거를 신경쓰지 않고도 새 객체를 만들수 있게 해줍니다. 가비지컬렉션이 메모리의 재사용을 위해 알아서 정리해주니까요.<br />
+이건 더 적은 보일러플레이트 코드로 더 빠른 개발을 가능하게 해주죠. 메모리 누수와 다른 메모리 관련 문제들을 제거해서요. (적어도 이론상으로는)<br />
+#역주<br />
+보일러 플레이트: 재사용 가능한. 여러곳에서  필수적으로 사용되는 코드</p>
+<p>아이러니하게도, 너무 많은 객체를 생성하고 제거해도 자바 가비지컬렉션은 매우 잘 작동하는 것처럼 보이는데요.<br />
+대부분의 메모리 운영 이슈가 해결이 되긴 합니다.</p>
+<p>그런데 종종 생성 비용에 심각한 성능 문제가 보이기도 합니다.<br />
+모든 상황에 적합한 가비지컬렉션은 복잡하고 최적화가 어려운 시스템이 되었거든요...<br />
+가비지 컬렉션에 대해 머리를 싸매기 위해서는, 먼저 자바 가상머신에서 메모리 운영이 어떻게 동작하는지를 이해해야합니다.</p>
+<br>
+<p><strong>가비지컬렉션은 정말 어떻게 동작하나요?</strong><br />
+많은 사람들이 가비지컬렉션(이하 GC)이 죽은 객체들을 수집해서 제거한다고 생각하는데요.<br />
+사실, 자바의 GC는 이와는 반대로 동작합니다!<br />
+살아있는 객체들은 계속 추적되고 나머지 것들이 쓰레기로 지정됩니다. 보다시피, 이러한 근본적 오해는 많은 성능 문제로 이어질 수 있습니다.</p>
+<p>힙에 대해서 한번 살펴볼까요? 힙은 동적으로 할당돼서 사용되는 메모리 영역입니다.<br />
+대부분의 구성에서는 운영체제가 JVM이 프로그램을 실행할 동안 운영할 양만큼 힙을 할당해주는데요. 이건 두가지의 중요한 영향을 야기합니다.</p>
+<p>첫째, 모든 단독 객체가 운영체제와의 전역 동기화를 필요로 하진 않으니까, 객체 생성이 더 빨라질 수 있습니다.<br />
+할당은 메모리 배열의 일부를 요구하고 오프셋 포인터를 앞으로 이동시킵니다. 그림 2.1에서 보이듯이요.<br />
+그다음 할당은 이 오프셋에서 시작해서 그 배열의 다음부분을 또 요구합니다.</p>
+<p>둘째. 객체가 더이상 쓰이지 않을때, 가비지컬렉터는 메모리를 회수해서 미래의 객체 할당에 재사용할수 있도록 합니다.<br />
+이건 명시적인 삭제가 없고, 메모리를 운영체제로 돌려주지 않는다는걸 뜻합니다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+그림2.1: 새로운 객체들이 사용된 힙의 끝부분에서부터 할당된다.</p>
+<p>모든 객체들은 JVM이 관리하는 힙 영역에 할당됩니다.<br />
+개발자가 사용하는 모든 아이템은 이런 방식으로 처리되죠. 클래스 객체나, 정적변수나 기타등등 이런저런 코드 요소들이요.<br />
+객체가 참조되고있는 동안은, JVM은 그게 살아있다고 생각합니다.<br />
+As long as an object is being referenced, the JVM considers it alive.<br />
+객체가 더이상 참조되지 않고 응용 프로그램의 코드에 의해 도달할수 없게 된다면, 가비지컬렉터는 그걸 제거해서 재사용 가능하 메모리로 만듭니다.<br />
+되게 단순하게 들릴 수도 있는데요. 이런 질문을 해볼수도 있겠습니다. "트리에서 첫번째 참조는 무엇인가?"</p>
+<br>
+<p><strong>Garbage-Collection Roots—The Source of All Object Trees</strong><br />
+모든 객체 트리는 하나 이상의 루트 객체들을 가집니다. 어플리케이션이 그 루트에 도달할 수 있는 동안은, 그 tree는 도달할 수 있다고 봅니다.<br />
+하지만 그 루트 객체들은 언제 도달가능하다고 판단되는걸까요?<br />
+가비지컬렉션 루트라고 불리는, 언제나 도달 가능한 특별한 객체들이 있습니다. 자세한건 그림 2.2를 보시고요...<br />
+여튼 자체 루트에 가비지컬렉션 루트를 가지는 객체도 있습니다.<br />
+자바에서 GC 루트는 4가지 종류가 있습니다.</p>
+<p>1.지역변수<br />
+지역변수들은 스레드 내 스택에 의해 생명을 유지하는데요. 이건 진짜 객체에 대한 가상 참조가 아니라 표시는 하지 않습니다.<br />
+모든 의도와 목적을 위해, 지역변수들은 GC 루트입니다.<br />
+-&gt;For all intents and purposes, local variables are GC roots.</p>
+<p>2.액티브 자바 스레드<br />
+액티브 자바 스레드들은 항상 살아있는 객체로 간주되는 GC 루트입니다. 이건 실상 스레드-로컬 변수를 위한 기능이죠</p>
+<p>3.정적변수<br />
+정적변수들은 그 클래스에 의해 참조됩니다. 이게 GC 루트가 되는 이유죠.<br />
+클래스 자체는 가비지컬렉션될 수 있는데요. 이건 참조되는 모든 정적변수를 제거합니다.<br />
+이건 어플리케이션 서버나 <a rel="external" href="http://www.wikipedia.com/osgi">OSGi containers</a>, 클래스 로더를 사용할때 특별히 중요합니다.<br />
+이와 관련된 문제들은 Problem Patterns 섹션에서 논의합니다.</p>
+<p>4.JNI 레퍼런스<br />
+JNI 레퍼런스는 네이티브 코드가 JNI 호출의 일부로 생성한 자바 객체입니다.<br />
+이 객체들은 JVM이 네이티브 코드에서의 참조 여부를 알지 못하기 때문에 특별히 생성하는건데요.<br />
+이런 객체들은 매우 특별한 형태의 GC 루트로 구성되닌데요. 자세한 설명은 아래의 Problem Patterns 섹션에서 다룰겁니다.</p>
+<p>역주<br />
+JNI: 자바 네이티브 인터페이스. 자바에서 네이티브 프로그램을 돌릴수 있도록 해주는 기능</p>
+<br>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+그림 2.2: GC 루트들은 JVM에서 참조하는 객체이므로, 다른 객체들이 가비지컬렉트되지 않게끔 유지한다.</p>
+<br>
+<p>간단한 자바 어플리케이션은 다음과 같은 GC 루트들을 가집니다.</p>
+<p>1.메인 메서드 내의 지역변수들<br />
+2.메인스레드<br />
+3.메인 클래스 내의 정적변수들</p>
+<br>
+<p><strong>마크앤스윕으로 가비지 정리하기</strong><br />
+객체가 더이상 쓰이지 않는지를 확정하기 위해서, JVM은 간헐적으로 마크앤스윕 알고리즘을 호출합니다.<br />
+뭐 그렇게 복잡한건 아니에요. 다음과 같이 2단계 프로세스를 가집니다.</p>
+<p>1.GC 루트부터 시작해서 모든 객체 참조를 탐색하고, 객체를 찾을때마다 살아있다고 표시(mark)합니다.</p>
+<p>2.객체로 마킹되지 못한 힙 메모리는 전부 할당이 해제됩니다. free로 표시를 해놓고, 사용되지 않는 객체로 sweep한거죠.</p>
+<br>
+<p>여튼 그래서 가비지 컬렉션은 고전적인 메모리 누수를 예방할 수 있습니다. 도달이 불가능하지만 삭제되지 않는 객체들이요.<br />
+그런데, 이건 '고전적인' 메모리 누수에 대해서만 작동합니다. 그냥 개발자가 참조를 깜빡해서 도달이 여전히 가능한 미사용객체는 여전히 갖고있을거란 거죠. 이런 객체들은 가비지컬렉트되지 않아요.<br />
+더 나쁜 소식은, 논리적 메모리 누수는 소프트웨어에 의해서 탐지될 수 없다는겁니다. (그림2.3을 참고해보세요.)<br />
+가장 좋은 분석 소프트웨어도 의심스러운 객체만 강조표시해주는것에 그칩니다.<br />
+아래의 메모리 사용률 검토 및 가비지컬렉션 섹션에서 메모리 누수 분석을 조사해볼겁니다.<br />
+<a rel="external" href="https://www.dynatrace.com/resources/ebooks/javabook/impact-of-garbage-collection-on-performance/">https://www.dynatrace.com/resources/ebooks/javabook/impact-of-garbage-collection-on-performance/</a></p>
+<br>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+그림 2.3: 객체들은 GC 루트에서 직간접적으로 참조가 불가능해지면 지워진다. 여기에 고전적인 메모리 누수는 없다.<br />
+분석은? 진짜 메모리 누수를 확인하진 못한다. 의심스러운 것만 지적할 뿐이다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221562721267/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Javascript] 자바스크립트의 배열.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221562150324/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Javascript] 차트 라이브러리.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

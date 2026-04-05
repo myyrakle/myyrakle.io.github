@@ -1,0 +1,882 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - iOS</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/ios/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2023-01-20T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/ios/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[iOS] 애플 로그인 구현하기 (SSO)</title>
+        <published>2023-01-20T00:00:00+00:00</published>
+        <updated>2023-01-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222989348233/"/>
+        <id>https://myyrakle.github.io/blog/222989348233/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222989348233/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_dd5222bcc5acf3db.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+아이폰 앱을 배포할때 맞닥뜨리는 장벽 중 하나가 바로 애플 로그인이다.&lt;&#x2F;p&gt;
+&lt;p&gt;애플 이외에도 플랫폼 로그인 연동 서비스들은 많다.&lt;br &#x2F;&gt;
+구글, 페이스북, 네이버, 깃헙, 카카오, 등등...&lt;br &#x2F;&gt;
+하지만 그중에서도 가장 특별한 녀석을 꼽으라면 애플이 나올 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;다른 서비스들은 써도 그만 안써도 그만이지만, 애플은 그 강제성 때문에 사용하는 경우가 잦기 때문이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;joheunga&quot;&gt;좋은가?&lt;&#x2F;h2&gt;
+&lt;p&gt;서비스를 제공하는 입장에서는 전혀 좋지가 않다.&lt;br &#x2F;&gt;
+개발용 가이드 문서도 개판이요. 인증 시스템 자체도 짜증나고 번거롭게 되어있다.&lt;br &#x2F;&gt;
+관리도 개판으로 하는지 이상한 쓰레기 값도 잔뜩 주고.. 뭔지 모르겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;게다가 다른 서비스들은 이름이나 이메일 등의 다양한 정보를 받아와서 연동을 할 수 있는데, 애플은 가져올 수 있는게 거의 없다시피하다.&lt;&#x2F;p&gt;
+&lt;p&gt;애플에서 사용자값을 가져올때 확실하게 받아올 수 있는 값은 오로지 그 사용자의 고유 ID 뿐이다!&lt;br &#x2F;&gt;
+32글자 16진수 문자열 양쪽에 10진수 하나씩 붙어있는 의미없는 값이다. 그냥 말 그대로 고유성만 체크할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이메일도 가져올 수 있기는 하지만, private email로 받아올 때도 잦고, 아예 안오기도 하더라.&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다고 전화번호나 이메일 같은 정보를 받으려고 가입프로세스에 정보 적는칸을 추가하면, 그런거 다 하지말라고 반려하더라. 뭐 어쩌자는 것이지..?&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;geureom-igeol-waesseuneunga&quot;&gt;그럼 이걸 왜쓰는가?&lt;&#x2F;h2&gt;
+&lt;p&gt;아이폰 앱 심사할때 이걸로 딴지를 걸기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;아이폰 앱을 배포할때 항상 애플로그인을 붙여야 하는 것은 아니다.&lt;br &#x2F;&gt;
+하지만 카카오나 구글 등의 다른 SSO를 사용한다면, 애플로그인을 붙여야만 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 그냥 일반 로그인만 구현해서 올리면 문제가 없지만, 만약 앱에 카카오 로그인만 붙여서 앱을 제출한다면 무조건 반려를 당한다.&lt;&#x2F;p&gt;
+&lt;p&gt;애플의 짜증나는 깡패짓 중 하나다. 좀 맞아야하는데.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;injeung-peuroseseu&quot;&gt;인증 프로세스&lt;&#x2F;h2&gt;
+&lt;p&gt;대충 이런식으로 프로세스가 진행될 것이다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;앱이나 브라우저에서 애플 계정으로 로그인을 한다.&lt;&#x2F;li&gt;
+&lt;li&gt;그럼 애플에서 code라는 일회용 인증토큰을 준다. 한번만 써도 소멸하고, 수명은 5분이다.&lt;&#x2F;li&gt;
+&lt;li&gt;code를 서버에 보내서 서버가 유효한 애플사용자인지를 검증한다.&lt;&#x2F;li&gt;
+&lt;li&gt;검증하고 나면 애플사용자에 대한 고유값을 받아올 수 있다. 그걸로 된 계정이 있다면 그걸로 로그인시켜주고, 없으면 가입시킨다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;여기서 토큰은 한번씩밖에 쓰지 못하므로, 로그인만 토큰을 받아서 appleID를 반환해주고, 회원가입에서는 토큰을 받지 않고 appleID만 받는 식으로 구현했다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;seting&quot;&gt;세팅&lt;&#x2F;h2&gt;
+&lt;p&gt;애플 개발자 계정에 들어가서 이래저래 추가하고 리다이렉트 URI도 깔아줘야 한다.&lt;br &#x2F;&gt;
+스크린샷은 나중에 다시 할일이 있다면 추가하겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;peuronteuceug-ceori-beuraujeo&quot;&gt;프론트측 처리 (브라우저)&lt;&#x2F;h2&gt;
+&lt;p&gt;브라우저에서 처리하는 방법은 그렇게 어렵다거나 할건 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;이거 추가해주고&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;script&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;text&#x2F;javascript&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; src&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;https:&#x2F;&#x2F;appleid.cdn-apple.com&#x2F;appleauth&#x2F;static&#x2F;jsapi&#x2F;appleid&#x2F;1&#x2F;en_US&#x2F;appleid.auth.js&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&amp;lt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;script&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;이런식으로 써준다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;html&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;    &amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;head&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;    &amp;lt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;head&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;    &amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;body&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;        &amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;script&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;text&#x2F;javascript&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; src&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;https:&#x2F;&#x2F;appleid.cdn-apple.com&#x2F;appleauth&#x2F;static&#x2F;jsapi&#x2F;appleid&#x2F;1&#x2F;en_US&#x2F;appleid.auth.js&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&amp;lt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;script&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;        &amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;div&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;appleid-signin&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; data-color&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;black&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; data-border&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;true&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; data-type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;sign in&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&amp;lt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;div&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;        &amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;script&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;&quot;&gt; type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;text&#x2F;javascript&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            AppleID.auth.init(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                clientId : &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;[CLIENT_ID]&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                scope : &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;[SCOPES]&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                redirectURI : &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;[REDIRECT_URI]&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                state : &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;[STATE]&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                nonce : &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;[NONCE]&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                usePopup : &lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;true&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;            }&lt;&#x2F;span&gt;&lt;span&gt;);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;        &amp;lt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;script&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;    &amp;lt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;body&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;html&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;client id는 애플 개발자 관리 페이지에서 가져올 수 있고, redirect url은 애플 연동시에 어느 링크로 리다이렉트를 시켜줄 것인지를 정한다. 이 과정에서 리다이렉트 링크에 code 값을 넣어준다.&lt;br &#x2F;&gt;
+그걸 또 프론트에서 적절히 받아다가 서버에 넘겨주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;sign_in_with_apple&#x2F;sign_in_with_apple_js&#x2F;configuring_your_webpage_for_sign_in_with_apple&quot;&gt;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;sign_in_with_apple&#x2F;sign_in_with_apple_js&#x2F;configuring_your_webpage_for_sign_in_with_apple&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;seobeoceug-ceori-node-js-typescript&quot;&gt;서버측 처리 (Node.js - Typescript)&lt;&#x2F;h2&gt;
+&lt;p&gt;예시 코드는 Typescript다.&lt;br &#x2F;&gt;
+키를 들고있다가 프론트에서 리다이렉트로 받은 code를 받아서 정보를 가져오면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;import&lt;&#x2F;span&gt;&lt;span&gt; appleSignin&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; from&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;apple-signin-auth&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;const&lt;&#x2F;span&gt;&lt;span&gt; privateKey&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; `-----BEGIN PRIVATE KEY-----&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;...키값...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;-----END PRIVATE KEY-----`&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;export async function&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; checkAppleCode&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #EBA0AC;font-style: italic;&quot;&gt;code&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; string&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;) {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;	const&lt;&#x2F;span&gt;&lt;span&gt; clientSecret&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; appleSignin&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;getClientSecret&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		clientID&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;...&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt; &#x2F;&#x2F; Apple Client ID&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		teamID&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;...&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt; &#x2F;&#x2F; Apple Developer Team ID.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		privateKey&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; privateKey&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt; &#x2F;&#x2F; private key associated with your client ID. -- Or provide a `privateKeyPath` property instead.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		keyIdentifier&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;...&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt; &#x2F;&#x2F; identifier of the private key.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;	}&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;	const&lt;&#x2F;span&gt;&lt;span&gt; options&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		clientID&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;...&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt; &#x2F;&#x2F; Apple Client ID&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		redirectUri&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;...&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt; &#x2F;&#x2F; use the same value which you passed to authorisation URL.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		clientSecret&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; clientSecret&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;	}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;	try&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;		const&lt;&#x2F;span&gt;&lt;span&gt; tokenResponse&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; await&lt;&#x2F;span&gt;&lt;span&gt; appleSignin&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;getAuthorizationToken&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;			code&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;			options&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;		const&lt;&#x2F;span&gt;&lt;span&gt; idToken&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; tokenResponse&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;?.&lt;&#x2F;span&gt;&lt;span&gt;id_token&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;		if&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;!&lt;&#x2F;span&gt;&lt;span&gt;idToken)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;			return null&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;		}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;        &#x2F;&#x2F; 받아온 id_token 값으로 원본 사용자 정보 획득! 한번만 사용 가능&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;		const&lt;&#x2F;span&gt;&lt;span&gt; decoded&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; await&lt;&#x2F;span&gt;&lt;span&gt; appleSignin&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;verifyIdToken&lt;&#x2F;span&gt;&lt;span&gt;(idToken)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;		return&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;span&gt; appleId&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; decoded&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;?.&lt;&#x2F;span&gt;&lt;span&gt;sub&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; email&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; decoded&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;?.&lt;&#x2F;span&gt;&lt;span&gt;email&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; decoded&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;	}&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; catch&lt;&#x2F;span&gt;&lt;span&gt; (err)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;		console&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;error&lt;&#x2F;span&gt;&lt;span&gt;(err)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;		return null&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;	}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;내용이나 설명이 많이 부실하다.&lt;br &#x2F;&gt;
+예전에 구현하면서 개발새발 썼던 것인데, 일단 올려놓고 나중에 다시 보완하려 한다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS] 앱스토어 배포 팁</title>
+        <published>2022-12-18T00:00:00+00:00</published>
+        <updated>2022-12-18T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222958909464/"/>
+        <id>https://myyrakle.github.io/blog/222958909464/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222958909464/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f2cb0e62a122ad99.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+애플은 소비자한테만 갑질을 하는게 아니라 개발자한테도 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;안드로이드에 비해 애플 앱스토어는 검수가 빡세고 짜증나는 것으로 유명하다.&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다고 또 뭔가 규칙을 잘 세워서 하느냐 하면 그것도 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;대충 해보면서 알았던 것들을 대충 정리해본다.&lt;br &#x2F;&gt;
+계속 더해나갈 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;2022.12.18 작성&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;1-yeosjangsu-maeumdaero&quot;&gt;1. 엿장수 마음대로&lt;&#x2F;h2&gt;
+&lt;p&gt;완전히 같은 기능에 코드, UI라도 검수하는 사람의 취향에 따라 그때그때 허가가 날 수도 있고 반려를 당할 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;몇번 당해봤다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;2-aepeul-rogeuin-yeondong&quot;&gt;2. 애플 로그인 연동&lt;&#x2F;h2&gt;
+&lt;p&gt;만약 구글이나 네이버 로그인을 연동해야 한다면, 애플도 무조건 연동을 해야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 SSO가 없다면 아예 안넣어도 되지만, SSO가 있다면 애플로그인도 무조건 넣어줘야 한다는 그런 깡패마인드다.&lt;&#x2F;p&gt;
+&lt;p&gt;게다가 애플로그인을 붙일때도 요구사항과 제약이 엄청나게 많다.&lt;br &#x2F;&gt;
+가입할때 뭔 개인정보 입력도 받으면 안되고 그냥 원클릭으로 바로 가입이 돼서 사용이 가능해야 한단다. 이거때문에 골머리를 앓은 적이 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gyeolron&quot;&gt;결론&lt;&#x2F;h2&gt;
+&lt;p&gt;가장 좋은 방법은 ios 앱을 올리지 않거나, 아싸리 웹앱이나 코드푸시로 올리고 나서 잠수함패치를 돌리는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;안그러면 피곤해진다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] Text</title>
+        <published>2022-07-12T00:00:00+00:00</published>
+        <updated>2022-07-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222808543248/"/>
+        <id>https://myyrakle.github.io/blog/222808543248/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222808543248/">&lt;p&gt;Text는 말 그대로 텍스트를 표시해주는 가장 기본적인 형태의 뷰다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;기본적은 사용법은 간단하다. 문자열만 하나 넘기면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c0051b646a4106e0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이렇게 정직하게 표시될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6276aa4aa2543d65.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;ponteu-saijeu-seoljeong&quot;&gt;폰트, 사이즈 설정&lt;&#x2F;h2&gt;
+&lt;p&gt;폰트와 사이즈는 이런식으로 넣어줄 수 있다.&lt;br &#x2F;&gt;
+체이닝 메서드 형태다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e713460a428779e2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;font&quot;&gt;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;font&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jagan&quot;&gt;자간&lt;&#x2F;h2&gt;
+&lt;p&gt;자간을 주고 싶다면 kerning 메서드를 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_59e8f3e7cd02b9a1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f17b8824520e0255.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;geuljasaeg&quot;&gt;글자색&lt;&#x2F;h2&gt;
+&lt;p&gt;글자에 색을 넣으려면 foregroundColor에 Color 객체값을 넣어주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2005cc9da1182b34.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e43f0a56347d13d3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;배경색은 background다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f9b09a75c1254816.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e979df0a221412b3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;geulja-gonggan-jojeolhagi&quot;&gt;글자 공간 조절하기&lt;&#x2F;h2&gt;
+&lt;p&gt;글자에게 부여되는 공간 자체를 제한시키고 싶을 경우가 있다.&lt;br &#x2F;&gt;
+그럴때는 frame 메소드를 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7bc23d03f9aa52c8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c106b872c95476d1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 글자가 너무 많을 경우에는 자동으로 생략 처리를 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gonggane-geulja-keugi-majcugi&quot;&gt;공간에 글자 크기 맞추기&lt;&#x2F;h2&gt;
+&lt;p&gt;근데 또, 생략시키지 않고 싶을 수도 있다.&lt;br &#x2F;&gt;
+minimumScaleFactor를 사용하면 공간에 맞춰서 글자 크기를 줄여준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_63d05c70b737d8f3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_09d361ab4bd6c7c5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;huniroom.tistory.com&#x2F;entry&#x2F;SwiftUI-Text-%EB%B7%B0-%EC%8B%AC%ED%99%94-%EC%A0%95%EB%A6%AC-1?category=824174&quot;&gt;https:&#x2F;&#x2F;huniroom.tistory.com&#x2F;entry&#x2F;SwiftUI-Text-%EB%B7%B0-%EC%8B%AC%ED%99%94-%EC%A0%95%EB%A6%AC-1?category=824174&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 레이아웃: Frame</title>
+        <published>2022-07-12T00:00:00+00:00</published>
+        <updated>2022-07-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222808575685/"/>
+        <id>https://myyrakle.github.io/blog/222808575685/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222808575685/">&lt;p&gt;Frame은 레이아웃을 배치할때 사용되는 주요 기능이다.&lt;br &#x2F;&gt;
+영역의 크기를 담당한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;frame&quot;&gt;Frame&lt;&#x2F;h2&gt;
+&lt;p&gt;frame은 View의 기본 메서드로, 뷰의 크기를 정해줄 때 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런식으로 크기를 주지 않고 뷰를 만든다면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c1563dd15aaa2177.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;가능한 전체 영역을 전부 사용하고 만다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_48cdca922a3446cc.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이럴때는 frame으로 사이즈를 지정해줄 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bb1d0c35b31bba08.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_050b4b1cb3130d4e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;bumowa-jasig&quot;&gt;부모와 자식&lt;&#x2F;h2&gt;
+&lt;p&gt;그런데 이걸 쓸때 좀 신경써야 하는 부분이 있다.&lt;br &#x2F;&gt;
+보통 부모와 자식 뷰가 있으면, 부모가 작을 경우에 자식도 자동으로 작게 맞출 것이라고 기대를 하는데, 이건 그렇지 않다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 다음과 같이 VStack을 더 작게 주면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4fea363f47e0c5aa.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 자식놈이 그걸 무시하고 삐쳐나와버린다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5fef4b310052ec6e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+frame은 기본적으로 &quot;자식부터&quot; 계산해서 처리하기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런 경우까지 대응하고 싶다면 고정값이 아니라 min max로 가로와 세로를 지정하면 된다.&lt;br &#x2F;&gt;
+그럼 부모 크기에 맞춰서 최대한으로 맞춰줄 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_39d3a56544d677f4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_14f097000f043c52.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;bumoege-ddeoneomgigi&quot;&gt;부모에게 떠넘기기&lt;&#x2F;h2&gt;
+&lt;p&gt;min을 0으로, max를 무한대로 준다면 그냥 부모 프레임에 맞춰서 알아서 나눠 쓰게 할 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4e90fc56475407b4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 알아서 균등하게 분배한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b04e92ed75db3bce.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;medium.com&#x2F;hcleedev&#x2F;swift-frame-padding-spacer%EC%99%80-%EA%B7%B8-%ED%99%9C%EC%9A%A9-241f2c7bacbe&quot;&gt;https:&#x2F;&#x2F;medium.com&#x2F;hcleedev&#x2F;swift-frame-padding-spacer%EC%99%80-%EA%B7%B8-%ED%99%9C%EC%9A%A9-241f2c7bacbe&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 레이아웃: Padding</title>
+        <published>2022-07-12T00:00:00+00:00</published>
+        <updated>2022-07-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222808590591/"/>
+        <id>https://myyrakle.github.io/blog/222808590591/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222808590591/">&lt;p&gt;패딩은 말 그대로 여백을 주는 기능이다.&lt;&#x2F;p&gt;
+&lt;p&gt;숫자값을 넣어주면, 그만큼의 여백을 안쪽에 집어넣는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c94fae4521fe3406.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_04053476815a6f65.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이런식으로 말이다.&lt;br &#x2F;&gt;
+기본값은 상하좌우에 전부 다 넣는다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;yeobaeg-banghyang-jijeonghagi&quot;&gt;여백 방향 지정하기&lt;&#x2F;h2&gt;
+&lt;p&gt;.top, .bottom, .leading, .trailing 값을 첫번째 인자로 넣어주면 해당 방향으로만 여백을 넣어준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5dda65fcdf09dbd2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bc37af5794d8f2fa.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게&lt;&#x2F;p&gt;
+&lt;p&gt;상하, 좌우를 묶어서 처리할 수도 있다.&lt;br &#x2F;&gt;
+.horizontal과 .vertical이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c0e46d733b237bec.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_554cfd6b35c24271.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;medium.com&#x2F;hcleedev&#x2F;swift-frame-padding-spacer%EC%99%80-%EA%B7%B8-%ED%99%9C%EC%9A%A9-241f2c7bacbe&quot;&gt;https:&#x2F;&#x2F;medium.com&#x2F;hcleedev&#x2F;swift-frame-padding-spacer%EC%99%80-%EA%B7%B8-%ED%99%9C%EC%9A%A9-241f2c7bacbe&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;huniroom.tistory.com&#x2F;entry&#x2F;iOSSwiftUI-padding-%EC%A0%95%EB%A6%AC&quot;&gt;https:&#x2F;&#x2F;huniroom.tistory.com&#x2F;entry&#x2F;iOSSwiftUI-padding-%EC%A0%95%EB%A6%AC&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 레이아웃: Spacer</title>
+        <published>2022-07-12T00:00:00+00:00</published>
+        <updated>2022-07-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222808609364/"/>
+        <id>https://myyrakle.github.io/blog/222808609364/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222808609364/">&lt;p&gt;Spacer는 여백을 넣어주는 간단한 뷰 컴포넌트다.&lt;&#x2F;p&gt;
+&lt;p&gt;공간을 차지하기만 하는 보이지 않는 뷰라고 할 수 있다.&lt;br &#x2F;&gt;
+다른 뷰에 영향을 주지 않는 선에서 최대한 많은 공간을 차지하려고 노력한다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 이런 형태의 뷰가 있을 때&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3e50ad429cce62c1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_140c987981d1ede4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;저기다 Spacer를 넣는다면, 최대한 공간을 차지하고 나머지를 밀어버리게 될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_36b0b053ead3995f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4b1eac0aeac778cb.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게.&lt;&#x2F;p&gt;
+&lt;p&gt;이것만 보면 별 쓸모가 없어보일지도 모르지만, 은근히 좀 쓴다고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;특히 다른 뷰들을 한 방향이나 양쪽 방향으로 밀어버릴 때 자주 쓰이는듯하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;medium.com&#x2F;hcleedev&#x2F;swift-frame-padding-spacer%EC%99%80-%EA%B7%B8-%ED%99%9C%EC%9A%A9-241f2c7bacbe&quot;&gt;https:&#x2F;&#x2F;medium.com&#x2F;hcleedev&#x2F;swift-frame-padding-spacer%EC%99%80-%EA%B7%B8-%ED%99%9C%EC%9A%A9-241f2c7bacbe&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;kasroid.github.io&#x2F;posts&#x2F;ios&#x2F;20200731-swiftui-basics-stacks-spacer&#x2F;&quot;&gt;https:&#x2F;&#x2F;kasroid.github.io&#x2F;posts&#x2F;ios&#x2F;20200731-swiftui-basics-stacks-spacer&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS UIKit] 시작하기</title>
+        <published>2022-07-12T00:00:00+00:00</published>
+        <updated>2022-07-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222808703382/"/>
+        <id>https://myyrakle.github.io/blog/222808703382/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222808703382/">&lt;p&gt;UIKit은 iOS 개발에서 기본이 되는 프레임워크다.&lt;&#x2F;p&gt;
+&lt;p&gt;SwiftUI도 UIKit에 인터페이스만 추가된 것이라고 한다.&lt;br &#x2F;&gt;
+SwiftUI가 상태를 중심으로 동작한다면, UIKit은 이벤트를 중심으로 돌아간다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 Swift와 Objective-C 둘다 사용 가능하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;peurojegteu-saengseong&quot;&gt;프로젝트 생성&lt;&#x2F;h2&gt;
+&lt;p&gt;XCode가 있어야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;없으면 먼저 깔고, 프로젝트 생성을 눌러 APP을 선택한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_366cfb9553a6c8db.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;다음 페이지에서는 이름을 짓고, 인터페이스는 스토리보드로 하고, 언어는 취향대로 고른다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cdaf19e54247c27a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+난 Swift로 했지만, 하고싶다면 ObjC로 해도 된다..&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이런식으로 프로젝트가 구성될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9bcadbe14fba44b5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;다른건 신경쓰지말고 저기 재생버튼을 눌러서 빌드해보자&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8e831d740a5f63fb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 가상머신이 잘 뜨면, 성공한 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_180c30463ae39442.png&quot; alt=&quot;&quot; &#x2F;&gt;
+다음 포스트부터 기본구조와 컴포넌트를 추가하는 법 등을 다뤄보겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;kyungminleedev.github.io&#x2F;notes&#x2F;Tutorial-UIKit-1-UIKit-Essentials&#x2F;&quot;&gt;https:&#x2F;&#x2F;kyungminleedev.github.io&#x2F;notes&#x2F;Tutorial-UIKit-1-UIKit-Essentials&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.zehye.kr&#x2F;swiftui&#x2F;2021&#x2F;12&#x2F;29&#x2F;swiftui_what_different_uikit&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.zehye.kr&#x2F;swiftui&#x2F;2021&#x2F;12&#x2F;29&#x2F;swiftui_what_different_uikit&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS UIKit] 기본 구조 및 사용법</title>
+        <published>2022-07-12T00:00:00+00:00</published>
+        <updated>2022-07-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222808808882/"/>
+        <id>https://myyrakle.github.io/blog/222808808882/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222808808882/">&lt;p&gt;손을 댄게 없다면 기본적으로 아래와 같은 디렉터리 구조를 가질 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_805af19a23e3d56f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여기서 주로 건들게 될 것은 ViewController와 Main일 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;Main이란 파일은 스토리보드라는 UIKit만의 고유한 설정파일이다.&lt;br &#x2F;&gt;
+스토리보드는 UI를 다음과 같은 형태로 관리하게 해준다. 안드로이드에서 xml을 쓰는 것과 비스무리하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e4292615142cd273.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;컨트롤러는 실제 로직적인 부분을 구현하는 부분이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a079c8416a4f096b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+버튼을 클릭할때의 로직 등을 여기서 구현하고, 스토리보드에서 버튼과 로직을 연결하는 식으로 작업이 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;reibeul-cugahaebogi&quot;&gt;레이블 추가해보기&lt;&#x2F;h2&gt;
+&lt;p&gt;스토리보드에 컴포넌트를 추가해보자.&lt;br &#x2F;&gt;
+저기 우상단의 + 버튼을 클릭하면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cb84274a2e488d9b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 컴포넌트를 선택할 수 있는 창이 나온다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0d167f2e3e1fbd60.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저걸 드래그해서 화면에 던지면&lt;&#x2F;p&gt;
+&lt;p&gt;스토리보드에 다음과 같이 추가될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ad14f64871494fe1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 드래그해서 옮긴다든지, 크기를 변경하거나, 텍스트를 변경하는 등의 작업이 가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;오른쪽에 뜨는 설정창을 건드리면 더 많은 옵션을 설정할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fe4737caf9b8476c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;beoteun-cugahaebogi&quot;&gt;버튼 추가해보기&lt;&#x2F;h2&gt;
+&lt;p&gt;이번엔 버튼을 추가해보자.&lt;br &#x2F;&gt;
+마찬가지로 버튼을 골라서, 스토리보드에 드래그하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bf889690302a908d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;그리고 버튼 액션을 구현한다.&lt;br &#x2F;&gt;
+다음과 같은 형태를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ffd39a98ad821c4f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;label-ausres-yeongyeol&quot;&gt;Label 아웃렛 연결&lt;&#x2F;h2&gt;
+&lt;p&gt;나는 버튼을 누를때마다 레이블의 텍스트가 바뀌게 하려고 한다.&lt;br &#x2F;&gt;
+그러려면 컨트롤러로 해당 뷰를 끌고와야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 이게.. 사용법이 은근히 불편하다.&lt;br &#x2F;&gt;
+스토리보드와 컨트롤러 소스가 동시에 보이게 띄워놓고, 컨트롤키를 누른 상태에서 스토리보드의 레이블을 드래그, 컨트롤러에 놓으면 이렇게 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5ed6e272fb3f1b29.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여기서 변수명을 넣어주면&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0836f1d60bbe5572.png&quot; alt=&quot;&quot; &#x2F;&gt;
+자동완성을 해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이제 저걸로 텍스트를 토글해주는 로직을 구현해보자.&lt;br &#x2F;&gt;
+이런식으로 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0a636bfbf4ec7e12.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;beoteun-aegsyeon-yeongyeol&quot;&gt;버튼 액션 연결&lt;&#x2F;h2&gt;
+&lt;p&gt;그럼 이번에는 버튼과 액션을 연결할 차례다.&lt;br &#x2F;&gt;
+마찬가지로 버튼을 드래그해서 액션 함수에 놓으면, 연결이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c030f1005bc75cdb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a6d467dcef068670.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그러고 실행하면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c2414dc9122872c9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0fe7ff123c22ac80.png&quot; alt=&quot;&quot; &#x2F;&gt;
+잘 토글될 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;greendreamtrre.tistory.com&#x2F;282&quot;&gt;https:&#x2F;&#x2F;greendreamtrre.tistory.com&#x2F;282&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;http:&#x2F;&#x2F;yoonbumtae.com&#x2F;?p=2160&quot;&gt;http:&#x2F;&#x2F;yoonbumtae.com&#x2F;?p=2160&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 레이아웃: VStack, HStack</title>
+        <published>2022-07-11T00:00:00+00:00</published>
+        <updated>2022-07-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222807138429/"/>
+        <id>https://myyrakle.github.io/blog/222807138429/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222807138429/">&lt;p&gt;VStack와 HStack은 기본 레이아웃 요소다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;vstack&quot;&gt;VStack&lt;&#x2F;h2&gt;
+&lt;p&gt;V는 Vertical이다.&lt;br &#x2F;&gt;
+VStack은 세로로 컴포넌트를 쌓는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c16e9c0cad2483c5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이런식으로 렌더링이 될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5f86e05cfbbd7005.png&quot; alt=&quot;&quot; &#x2F;&gt;
+간단하다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 요소간에 간격을 주고, 왼쪽정렬을 하고 싶다면 다음과 같이 옵션값을 줄 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b029b54310ce1d2f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+leading은 왼쪽정렬, spacing이 간격값이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이렇게 바뀌어 보일 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1faff4b66a97fe6a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;alignment 값은 이렇게 3가지가 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;extension HorizontalAlignment&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the leading edge of the view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; leading&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; HorizontalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the horizontal center of the view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; center&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; HorizontalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the trailing edge of the view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; trailing&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; HorizontalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;문서&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;vstack&quot;&gt;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;vstack&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;hstack&quot;&gt;HStack&lt;&#x2F;h2&gt;
+&lt;p&gt;H는 horizontal의 H다.&lt;br &#x2F;&gt;
+HStack은 가로로 요소를 배열한다는 것만 빼면 VStack과 거의 동일하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4273b124f6edaaf8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1571df54fe5efe98.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;만약 내부 요소들의 크기가 다를때, 전부 아래로 깔게 하고 싶다면 bottom 옵션을 주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_db39f7b7914b692f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_03c068a301a9cd62.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;정렬 옵션값은 이렇게 제공된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;extension VerticalAlignment&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the top edge of the view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; top&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; VerticalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the vertical center of the view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; center&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; VerticalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the bottom edge of the view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; bottom&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; VerticalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the topmost text baseline view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; firstTextBaseline&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; VerticalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F;&#x2F; A guide marking the bottom-most text baseline in a view.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    public static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; let&lt;&#x2F;span&gt;&lt;span&gt; lastTextBaseline&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; VerticalAlignment&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;문서&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;hstack&quot;&gt;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;hstack&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;huniroom.tistory.com&#x2F;entry&#x2F;SwiftUI-alignment-%EC%A0%95%EB%A6%AC&quot;&gt;https:&#x2F;&#x2F;huniroom.tistory.com&#x2F;entry&#x2F;SwiftUI-alignment-%EC%A0%95%EB%A6%AC&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 레이아웃: ZStack</title>
+        <published>2022-07-11T00:00:00+00:00</published>
+        <updated>2022-07-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222807144761/"/>
+        <id>https://myyrakle.github.io/blog/222807144761/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222807144761/">&lt;p&gt;ZStack은 요소들을 겹쳐 쌓을 수 있게 해주는 레이아웃 컴포넌트다.&lt;&#x2F;p&gt;
+&lt;p&gt;앞뒤로 중첩되는 뷰를 만들때 쓰기 좋다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들어 이런식으로 해두면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ec6bdd719aed85e4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;순서대로 앞으로 쌓아준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e160c5d69b81b48f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+아 근데 이건 글씨뿐이라서 뭐가 앞이고 뭐가 뒤인지 식별이 잘 안되는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;다시 색종이를 겹쳐쌓아보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eb4c426db4a03b12.png&quot; alt=&quot;&quot; &#x2F;&gt;
+빨간색을 먼저, 파란색을 나중에 넣었다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이런식으로 겹쳐줄 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_615a203468e7f4c4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;문서&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;vstack&quot;&gt;https:&#x2F;&#x2F;developer.apple.com&#x2F;documentation&#x2F;swiftui&#x2F;vstack&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;eunjin3786.tistory.com&#x2F;169&quot;&gt;https:&#x2F;&#x2F;eunjin3786.tistory.com&#x2F;169&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 레이아웃: Form</title>
+        <published>2022-07-11T00:00:00+00:00</published>
+        <updated>2022-07-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222807516296/"/>
+        <id>https://myyrakle.github.io/blog/222807516296/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222807516296/">&lt;p&gt;Form은 뷰를 섹션별로 나눠서 관리할 수 있게 해주는 레이아웃 컴포넌트다.&lt;br &#x2F;&gt;
+Form은 여러개의 Section 컴포넌트를 내부에 가질 수 있는데, Section은 또 여러개의 뷰를 묶어준다.&lt;&#x2F;p&gt;
+&lt;p&gt;실제 동작을 보는게 이해가 빠를 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런식으로 Section을 각각 정의해서 안에 컴포넌트들을 넣어주면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f9a865730b70f80b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이런식으로 렌더링된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_93970f24570f82a5.png&quot; alt=&quot;&quot; &#x2F;&gt;
+설정화면 등에서 흔히 보는 그 디자인이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.hohyeonmoon.com&#x2F;blog&#x2F;swiftui-tutorial-form&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.hohyeonmoon.com&#x2F;blog&#x2F;swiftui-tutorial-form&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 레이아웃: Group</title>
+        <published>2022-07-11T00:00:00+00:00</published>
+        <updated>2022-07-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222807524854/"/>
+        <id>https://myyrakle.github.io/blog/222807524854/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222807524854/">&lt;p&gt;VStack를 비롯한 HStack, LazyVStack, LazyHStack들에는 꽤나 심각한 기능적 결함이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fd7fd48aebc717ca.png&quot; alt=&quot;&quot; &#x2F;&gt;
+내부 요소가 10개를 초과할 수 없다는 것이다.&lt;br &#x2F;&gt;
+왜 이따위로 만들었는지는 잘 모르겠지만, Group은 이 문제를 땜빵하기 위한 요소라고 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;Group을 사용해서 10개 단위로 자른다음에 넣어주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c67ac582b01874f5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 잘 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eff3196742d01923.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] NavigationView</title>
+        <published>2022-07-11T00:00:00+00:00</published>
+        <updated>2022-07-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222807601654/"/>
+        <id>https://myyrakle.github.io/blog/222807601654/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222807601654/">&lt;p&gt;NavigationViews는 이동과 관련된 뷰 컴포넌트다.&lt;&#x2F;p&gt;
+&lt;p&gt;다음과 같이 NavigationView를 통해 링크와 그 안의 뷰를 정의한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c851f0862faaac59.png&quot; alt=&quot;&quot; &#x2F;&gt;
+NavigationLink 내부의 View가 클릭했을때 창이 올라갈 내용이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 저대로 실행한다면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8f82eccfa16278c6.png&quot; alt=&quot;&quot; &#x2F;&gt;
+클릭했을 때 새 창이 뜰 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f098c018178f7625.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;taiteul&quot;&gt;타이틀&lt;&#x2F;h2&gt;
+&lt;p&gt;타이틀도 추가할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a4c90df2a963177b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 메인화면에도 뜨고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_57fc06d36750c429.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b2f996afb0ad2b8d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Back도 타이틀 텍스트로 바뀔 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;tulba&quot;&gt;툴바&lt;&#x2F;h2&gt;
+&lt;p&gt;툴바는 상단의 그.. 도구모음이다.&lt;br &#x2F;&gt;
+말 그대로 위에다가 이런저런 버튼 등을 추가할 수 있게 해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런식으로 달 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e7fd1a483fbcd1e5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이렇게 추가될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7ee644eec58cd808.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.hohyeonmoon.com&#x2F;blog&#x2F;swiftui-tutorial-navigation&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.hohyeonmoon.com&#x2F;blog&#x2F;swiftui-tutorial-navigation&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 시작하기</title>
+        <published>2022-07-10T00:00:00+00:00</published>
+        <updated>2022-07-10T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222805883714/"/>
+        <id>https://myyrakle.github.io/blog/222805883714/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222805883714/">&lt;p&gt;xcode가 먼저 있어야 한다.&lt;br &#x2F;&gt;
+없다면 appstore에서 설치한다.&lt;&#x2F;p&gt;
+&lt;p&gt;유의할 점은, appstore에서 받으면 다운로드만 하는데 3-4시간이 넘게 걸릴 수도 있다는 점이다.&lt;br &#x2F;&gt;
+도대체 어떻게 만들면 그렇게 되는지는 잘 모르겠지만, 나는 그냥 사이트에서 압축파일 받아다가 직접 까는걸 추천한다. 그게 훨씬 빠르더라.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developer.apple.com&#x2F;download&#x2F;all&#x2F;&quot;&gt;https:&#x2F;&#x2F;developer.apple.com&#x2F;download&#x2F;all&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;peurojegteu-saengseong&quot;&gt;프로젝트 생성&lt;&#x2F;h2&gt;
+&lt;p&gt;프로젝트 생성 버튼을 누르고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3445c11da0dec327.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;ios 탭에서 앱을 선택한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c6c252d35ad8f1ad.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이름을 적절히 지어주고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_253aa149d72d7547.png&quot; alt=&quot;&quot; &#x2F;&gt;
+생성하면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;peurojegteu-gibongujo&quot;&gt;프로젝트 기본구조&lt;&#x2F;h2&gt;
+&lt;p&gt;프로젝트가 생성되었다면, 아마 다음과 같은 파일 2개가 있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_390807ae903ad620.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;하나는 main 함수에 해당되는 엔트리 소스파일이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2cb60f7d861373b3.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그렇게 어렵지는 않을 것이다.&lt;br &#x2F;&gt;
+@main 데코레이터로 main 엔트리 포인트임을 명시하고, App을 상속받는다.&lt;br &#x2F;&gt;
+그리고 body 값을 통해 어떤 것을 보여줄지를 명시하고 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;다른 파일은 저 ContentView에 대한 정의다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a0a896fbdb632da1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+2개의 구조체가 있는 것을 볼 수 있다.&lt;br &#x2F;&gt;
+중요한건 위의 부분이다.&lt;br &#x2F;&gt;
+View 객체를 상속받으며, 텍스트에 패딩만 넣는 간단한 구조를 이루고 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;지금으로서는 저게 실제로 @main 구조체를 통해 렌더링되는 부분이라 할 수 있겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 아래의 ContentView_Previews는 말 그대로 프리뷰용 객체다.&lt;br &#x2F;&gt;
+저걸 써두면 안에 있는 로직대로 프리뷰를 이렇게 띄워준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9aefc286ab8d1f24.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;emyulreiteo-silhaenghaebogi&quot;&gt;에뮬레이터 실행해보기&lt;&#x2F;h2&gt;
+&lt;p&gt;에뮬레이터를 띄우는건 어렵지 않다.&lt;br &#x2F;&gt;
+위에서 원하는 디바이스를 선택하고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cdd33447156df1a8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;여기서 맨 위 오른쪽의 재생버튼을 클릭하면, 빌드와 동시에 에뮬레이터로 실행을 해준다.&lt;br &#x2F;&gt;
+실제 iOS 기기가 연결되어있다면 해당 기기로도 띄울 수 있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1a45f0cdb09eed8e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a7047950b61564f9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[iOS SwiftUI] 버튼 추가와 가변성(State)</title>
+        <published>2022-07-10T00:00:00+00:00</published>
+        <updated>2022-07-10T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222806356527/"/>
+        <id>https://myyrakle.github.io/blog/222806356527/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222806356527/">&lt;p&gt;이전 포스트에서 이어진다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222806354886&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222806354886&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;본 포스트에서는 버튼을 추가해서 리스트에 항목을 추가해보는 것을 구현해보도록 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;먼저, 동적으로 바뀔 수 있는 요소에 대해서는 @State 어노테이션을 달아줘야 한다.&lt;br &#x2F;&gt;
+그래야 값이 바뀔때마다 화면에 반응을 해주게 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_dde8ca47ae195e41.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 버튼을 추가한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_52098ec2ec0ead45.png&quot; alt=&quot;&quot; &#x2F;&gt;
+VStack은 레이아웃 컴포넌트인데 자세한건 나중에 다루도록 하고.&lt;&#x2F;p&gt;
+&lt;p&gt;버튼은 버튼 텍스트와 action 값을 기본으로 받는다.&lt;br &#x2F;&gt;
+action의 클로저가 버튼이 눌렸을때 동작할 트리거 로직이 된다.&lt;br &#x2F;&gt;
+여기서는 리스트에 항목을 추가하도록 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 끝이다.&lt;&#x2F;p&gt;
+&lt;p&gt;실행하면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8075f01c7d159b5a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;버튼을 누를때마다 항목이 바로 추가될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8dc9572517352d26.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

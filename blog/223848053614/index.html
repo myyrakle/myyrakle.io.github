@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Milvus] 성능 벤치마크 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223848053614/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Milvus] 성능 벤치마크">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223848053614/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-04-27T00:00:00+00:00">
+    <meta property="article:tag" content="milvus">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223848053614/">[Milvus] 성능 벤치마크</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-27T00:00:00+00:00"><time datetime="2025-04-27T00:00:00+00:00">2025.04.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="247 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/milvus/">milvus</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223848053614" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>VectorDB를 도입하게 돼서 데이터베이스들을 대상으로 좀 공격적인 벤치마크를 해봤다.</p>
+<p>공통적으로 cpu 1개, 메모리 8기가 정도만 주고 돌려봤었고, milvus도 그렇게 해보려고 했다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223840387576">https://blog.naver.com/sssang97/223840387576</a><br />
+하지만 처음부터 큰 난관에 부딪혔다.</p>
+<p>결론부터 서두에 써놓자면, 리소스 효율성이 끔찍하고, 가용성 수준이 심각하게 낮다.<br />
+데이터베이스로서의 기본적인 부분들도 갖추지 못했다고 말할 수 있다.</p>
+<p>게다가 클러스터 구성도 불필요하게 복잡한 편이라서 관리포인트도 어지럽다.<br />
+어지간해서는 추천하지 않는다.</p>
+<p>그나마의 장점을 꼽자면, 레이턴시가 좀 낮은 편이었다는 것 정도다.</p>
+<br>
+<br>
+<br>
+<h2 id="danjeom-jeongsinnagan-memori-sayongryanggwa-jeogayongseong">단점: 정신나간 메모리 사용량과 저가용성</h2>
+<p>다른 데이터베이스들과 동일한 조건으로 1000만개 삽입 테스트를 먼저 돌렸다.<br />
+그냥 데이터 넣는건 pgvector, elasticsearch, qdrant 등 다른 DB들도 좀 오래 걸릴지언정 잘 감당했던 작업이라서, 이것도 별 문제가 없을줄 알았다.</p>
+<p>근데 아니었다.</p>
+<p><img src="/images/img_509a2922c9a52bee.png" alt="" /></p>
+<p><img src="/images/img_76fba7a67e4710b4.png" alt="" />
+DB가 OOM으로 뻗어버렸다.<br />
+DB가 OOM으로 죽었다는 말을 들어본 적이 있나? 나는 지금 처음 보는거같다.</p>
+<p>대개 디스크 DB들은 메모리가 부족하면 느려지는 한이 있어도 디스크에 자원을 몰아놓고 메모리를 아끼는 자린고비 생활을 하는데, 이건 그런 기초적인 처리조차 해놓지 않고 몽땅 메모리에 올려버린다는 소리다.</p>
+<p>그래서 16기가로 늘리고 다시 돌려봤는데</p>
+<p><img src="/images/img_28271062c6b31590.png" alt="" />
+또 터졌다.</p>
+<p>그래서 32기가까지 올렸더니</p>
+<p><img src="/images/img_962cc284ceeb4a9d.png" alt="" /></p>
+<p><img src="/images/img_58b7b6dfe5c3cfdf.png" alt="" />
+그제서야 좀 버텼다.</p>
+<p>이게 뭐하는 짓인지...<br />
+내 시스템에는 절대 도입하고 싶지 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="jangjeom-bbareun-reiteonsi">장점: 빠른 레이턴시</h2>
+<p>그나마의 장점을 꼽자면, 처리속도가 꽤 빨랐다는 것이다.<br />
+사실 이만큼 리소스를 독식하는데도 느리면 그게 더 큰 문제이긴 하지만 말이다.</p>
+<p><img src="/images/img_448ac2149e1fc60e.png" alt="" /></p>
+<p><img src="/images/img_901fc4d3c242785c.png" alt="" />
+웬만하면 100ms 미만으로 처리가 됐다.</p>
+<p>동일스펙으로 qdrant를 띄워서 테스트해봤을 때도 꽤 차이가 났다.</p>
+<p><img src="/images/img_7f6a53937265f43c.png" alt="" /></p>
+<p><img src="/images/img_c7af98874e5d1d3f.png" alt="" />
+max 레이턴시는 별 차이가 없었지만, 평균 레이턴시는 milvus가 더 좋았다.<br />
+하지만 평상시의 메모리 사용량은 qdrant가 훨씬 적다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223849337491/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>벡터 데이터베이스 가이드<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223845582216/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Qdrant] 벡터 검색과 필터<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

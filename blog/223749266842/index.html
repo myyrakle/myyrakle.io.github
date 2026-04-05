@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] osm2pgsql | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223749266842/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] osm2pgsql">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223749266842/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-02-06T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223749266842/">[PostgreSQL] osm2pgsql</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-06T00:00:00+00:00"><time datetime="2025-02-06T00:00:00+00:00">2025.02.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="434 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223749266842" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223746834114">https://blog.naver.com/sssang97/223746834114</a></p>
+<p>osm2pgsql은 OSM을 PostgreSQL에 부어서 사용할 수 있게 해주는 converter다.</p>
+<p>이거 자체가 독립적인 시스템은 아니고, 이걸로 데이터만 Postgres에 집어넣고 PostGIS를 통해 좌표 쿼리를 쏘는 식으로 응용한다.</p>
+<p>그래서 이걸 쓰려면 PostGIS에 대한 사전지식이 있고, 설치도 되어있어야 한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223381620061">https://blog.naver.com/sssang97/223381620061</a></p>
+<br>
+<br>
+<br>
+<h2 id="pbf-pail-junbi">PBF 파일 준비</h2>
+<p>가장 먼저 지도 파일이 필요하다.</p>
+<p>전세계의 전체 지도가 필요하다면 다음 미러 사이트에서 적당히 받으면 된다.<br />
+79gb 정도 되니까 넉넉히 100gb 정도는 여유공간을 둬야 한다.<br />
+<a rel="external" href="https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf">https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf</a></p>
+<p>특정 국가들만 있어도 된다면 다음 사이트에서 부분집합들만 받을 수도 있다.<br />
+<a rel="external" href="https://download.geofabrik.de/">https://download.geofabrik.de/</a></p>
+<p>일단 나는 한국측 데이터만 받았다. 미러 사이트들 성능이 좋지 않아서 작은걸로 받아도 꽤 오래걸린다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>wget</span><span style="color: #94E2D5;"> -</span><span>O data</span><span style="color: #94E2D5;">.</span><span>pbf https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//download.geofabrik.de/asia/south-korea-latest.osm.pbf</span></span></code></pre>
+<p><img src="/images/img_3079b8f87990adc2.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="osm2pgsql-seolcihagi-in-linux">osm2pgsql 설치하기 (in Linux)</h2>
+<p>이제 직접 설치해서 돌려보자.</p>
+<p>먼저 cli를 설치하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get install osm2pgsql</span></span></code></pre>
+<p><img src="/images/img_1ac4c5650cf2a3bb.png" alt="" /></p>
+<p>실행이 되면 잘 깔린 것이다.</p>
+<p><img src="/images/img_cd200999aff63327.png" alt="" /></p>
+<p>저장 대상으로 쓸 postgres에 예정과 extension을 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> -</span><span>u postgres createuser osmuser</span></span>
+<span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> -</span><span>u postgres createdb</span><span style="color: #94E2D5;"> --</span><span>encoding</span><span style="color: #94E2D5;">=</span><span>UTF8</span><span style="color: #94E2D5;"> --</span><span>owner</span><span style="color: #94E2D5;">=</span><span>osmuser osm</span></span>
+<span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> -</span><span>u postgres psql osm</span><span style="color: #94E2D5;"> --</span><span>command</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;CREATE EXTENSION postgis;&#39;</span></span>
+<span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> -</span><span>u postgres psql osm</span><span style="color: #94E2D5;"> --</span><span>command</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;CREATE EXTENSION hstore;&#39;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> -</span><span>u postgres psql osm</span><span style="color: #94E2D5;"> --</span><span>command</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;ALTER USER osmuser WITH PASSWORD &#39;</span><span>q1w2e3r4</span><span style="color: #A6E3A1;">&#39;;&#39;</span></span></code></pre>
+<p><img src="/images/img_fbcdd49867e87704.png" alt="" />
+저기다가 넣을 것이다.</p>
+<p>그리고 지도 파일을 osm2pgsql를 통해 가공해서 postgres에 업로드하면 끝이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>osm2pgsql</span><span style="color: #94E2D5;"> --</span><span>database</span><span style="color: #94E2D5;">=</span><span>osm</span><span style="color: #94E2D5;"> --</span><span>user</span><span style="color: #94E2D5;">=</span><span>osmuser</span><span style="color: #94E2D5;"> --</span><span>password</span><span style="color: #94E2D5;">=</span><span>q1w2e3r4</span><span style="color: #94E2D5;"> ./</span><span>data</span><span style="color: #94E2D5;">.</span><span>pbf</span></span></code></pre>
+<p><img src="/images/img_936daa5ad25a87b9.png" alt="" /></p>
+<p><img src="/images/img_c0728f109d15b88d.png" alt="" />
+메모리를 잔뜩 먹고 도는거라 실행속도 자체는 괜찮다. 금방 돌았다.</p>
+<p>그리고 db에 들어가면</p>
+<p><img src="/images/img_093ac03d7b650c06.png" alt="" />
+뭐가 이래저리 생겨있을 것이다.<br />
+planet_osm_point가 각각의 도시, 마을 등에 대한 좌표값.<br />
+planet_osm_polygon이 영역에 대한 다각형 값.<br />
+planet_osm_lint이 선, planet_osm_roads가 길 등이다.</p>
+<p>저기 들어가있는 데이터로 쿼리 날리면서 거리측정이나 좌표값 가져오고 그런걸 하면 된다.</p>
+<p>먼저 현재 위치에서 가까운 도시나 마을을 찾는거부터 해보자.<br />
+planet_osm_point은 place라는 값을 통해 각 지점들의 특성을 분류해놨다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>select distinct place from planet_osm_point</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_245827dadd38d0ef.png" alt="" />
+city가 일반적인 도시, 시, 광역시다.<br />
+town이 리, 동, 면 등의 하위 행정구역이고, 이래저래 뭐 있다.</p>
+<p>먼저 위도/경도 기반으로 검색을 한번 해보겠다.<br />
+osm2pgsql은 위도/경도가 아니라 Pseudo-Mercator라는 조금 변형 좌표법을 사용한다. 구글맵이나 OSM 등등 많이 쓰는 방식이다.</p>
+<p>지도에서 적당히 좌표를 찾거나</p>
+<p><img src="/images/img_638a09a784d6fd18.png" alt="" /></p>
+<p>데이터 기반으로 추출해도 된다.</p>
+<p><img src="/images/img_2a065736b7d6dda9.png" alt="" /></p>
+<p>그리고 해당 좌표에서 가장 가까운 도시를 가져오는 쿼리를 작성해봤다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT name</span></span>
+<span class="giallo-l"><span>FROM planet_osm_point</span></span>
+<span class="giallo-l"><span>WHERE place</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;city&#39;</span></span>
+<span class="giallo-l"><span>ORDER BY</span><span style="color: #89B4FA;font-style: italic;"> ST_Distance</span><span>(</span></span>
+<span class="giallo-l"><span>    way</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    ST_Transform</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">      ST_SetSRID</span><span>(</span><span style="color: #89B4FA;font-style: italic;">ST_Point</span><span>(</span><span style="color: #FAB387;">127.255188</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 37.429084</span><span>)</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 4326</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">      3857</span></span>
+<span class="giallo-l"><span>    )</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>LIMIT</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>좀 번거롭긴 한데, 좌표 값을 위도/경도 값으로 초기화한 다음에(SRID=4326), 자체 좌표법으로 변환하는(SRID=3857) 과정을 거쳤다.<br />
+그리고 ST_Distance로 거리를 재서 가장 가까운 위치의 도시를 가져오도록 했다.</p>
+<br>
+<p><img src="/images/img_a7166a5ea11e94c6.png" alt="" />
+잘 동작하는 것을 확인할 수 있다.</p>
+<p>이건 단순한 예시일 뿐이고, 실제 사용례에서는 적절하지 않을 수 있다.</p>
+<p>기준 좌표가 도시 경계라면, 해당 도시 중앙보다 더 가까운 다른 도시로 잡혀버릴 수도 있고, 인덱스도 잘 타지 않을 것이다. 사용사례에 맞춰서 최적화를 하면 된다.</p>
+<p>아무튼 이런 식으로 응용하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://osm2pgsql.org/doc/manual.html">https://osm2pgsql.org/doc/manual.html</a><br />
+<a rel="external" href="https://hub.docker.com/r/iboates/osm2pgsql">https://hub.docker.com/r/iboates/osm2pgsql</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/52180005/retrieve-closest-road-when-given-lat-long-using-osm-in-postgres-with-postgis">https://stackoverflow.com/questions/52180005/retrieve-closest-road-when-given-lat-long-using-osm-in-postgres-with-postgis</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223754128458/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C++] 21세기의 C++.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223746817865/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] hello async book.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

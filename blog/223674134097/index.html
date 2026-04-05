@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] 인터페이스의 기묘한 동작 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223674134097/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] 인터페이스의 기묘한 동작">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223674134097/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-11-27T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223674134097/">[Go] 인터페이스의 기묘한 동작</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-27T00:00:00+00:00"><time datetime="2024-11-27T00:00:00+00:00">2024.11.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="206 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223674134097" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Go의 인터페이스는 동작 방식이 좀 기묘한 편이다.<br />
+기본적으로 인터페이스는 원본 객체를 가리키는 포인터 값이나, 경우에 따라서는 아닐 수도 있다는 것이다.</p>
+<br>
+<p>일단 간단한 예제코드를 깔고 시작해보겠다.</p>
+<p><img src="/images/img_f4dac51c4e33aad4.png" alt="" />
+큰 의미없는 인터페이스 하나 두고</p>
+<br>
+<p><img src="/images/img_b36876c4ea960467.png" alt="" />
+구현체 둘만 적당히 뒀다.</p>
+<br>
+<p><img src="/images/img_f23ee31342323348.png" alt="" />
+그리고 실행하면, 각 구현체대로 잘 동작할 것이다.<br />
+여기까지가 약간 일반적인 사용 패턴이다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeoe-ripeulregsyeon">예외: 리플렉션</h2>
+<p>Go에서는 리플렉션 떡칠을 통해서 문제를 해결하는 경우가 매우 많다.<br />
+그러다보면 이런 문제에 종종 부닥칠 수 있다.</p>
+<p>방금 사용한, 인터페이스를 받는 함수에서 인터페이스 객체의 리플렉션 정보를 사용한다고 가정해보자.<br />
+수정이나 요소 값 획득이나 이것저것 다양한 것을 할 수 있겠지만, 여기서는 타입 정보만 획득해보겠다.</p>
+<p><img src="/images/img_d3de120714767b93.png" alt="" />
+명시적으로 객체의 포인터를 넘겨서 인터페이스로 전달했을 경우에는, TypeOf를 쓰면 원본 객체의 포인터 타입을 기대한 대로 가리키는 것을 확인할 수 있다.</p>
+<p>그런데 사실, 인터페이스에는 포인터가 들어가지 않을 수도 있다.<br />
+포인터가 아닌 객체를 넣어도 인터페이스로의 변환-전달이 가능하며,</p>
+<p><img src="/images/img_e472884ce1771cf2.png" alt="" />
+이런 경우에는 포인터가 아니다.<br />
+이건 단순히 타입 정보에 국한되는 것이 아니라, 실제로도 포인터로 전달되지 않기 때문에 값 수정도 불가능하며, 내부 필드 정보를 조회하거나 하는 것도 접근 단계가 달라진다.<br />
+포인터가 들어오는 것을 가정하고 작성했는데, 값이 들어온다면 뻗을 수 있는 것이다.</p>
+<p>그래서 리플렉션을 통해서 동적으로 내부 요소에 접근하는 레이어가 있다면 유의해서 사용할 필요가 있다.</p>
+<p>난 이걸 강타입 언어라고 불러야 하는건지 잘 모르겠다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223674126524/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 파라미터 트릭<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223671739406/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>쿠키는 지뢰밭.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

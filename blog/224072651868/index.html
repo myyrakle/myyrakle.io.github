@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Qdrant] GPU 가속 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224072651868/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Qdrant] GPU 가속">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224072651868/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-11-11T00:00:00+00:00">
+    <meta property="article:tag" content="qdrant">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224072651868/">[Qdrant] GPU 가속</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-11-11T00:00:00+00:00"><time datetime="2025-11-11T00:00:00+00:00">2025.11.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="475 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/qdrant/">qdrant</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224072651868" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Qdrant는 GPU를 통해 검색 속도를 가속하는 기능을 제공한다.</p>
+<p>벡터-벡터간 비교가 핵심 연산이다보니, GPU를 활용한 병렬처리에서 이점을 많이 얻을 수 있는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jehansahang">제한사항</h2>
+<p>1.13버전부터 사용 가능하며, 현 시점에서는 다음과 같은 제한사항이 있다.</p>
+<ul>
+<li>Qdrant Cloud에서 사용 불가능 (향후 지원 예정)</li>
+<li>Linux amd64 아키텍쳐에서만 사용 가능. (arm64 미지원)</li>
+<li>GPU는 nvidia와 amd만 사용 가능.</li>
+</ul>
+<p>이외에도 세그먼트 크기 제한 등이 존재한다.<br />
+참조 <a rel="external" href="https://qdrant.tech/documentation/guides/running-with-gpu/#known-limitations">https://qdrant.tech/documentation/guides/running-with-gpu/#known-limitations</a></p>
+<br>
+<br>
+<br>
+<h2 id="sayanggwa-seongneung">사양과 성능</h2>
+<p>굳이 고성능 GPU를 쓸 필요는 없다.<br />
+여기서 쓰는 병렬연산이라고 해봐야 그렇게 헤비한게 아니라서, 적당히 엔트리급의 GPU를 써도 충분하다.</p>
+<p>그리고 벡터의 길이가 길수록 성능 향상 효과를 더 잘 느낄 수 있다. 벡터/벡터 비교를 병렬화하는 것이기 때문이다.</p>
+<p>공개한 벤치마크에 따르면 2-3배 이상도 빨라질 수 있다고 한다.<br />
+근데 이건 벡터의 크기에 따라서 많이 달라질 것 같다. 벡터의 크기가 크지 않다면 그냥 CPU만 쓰는 것과 성능 차이가 별로 없을 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gpureul-hwalseonghwahaebogi">GPU를 활성화해보기</h2>
+<p>당연히 GPU와 그 드라이버 세팅은 되어있어야 한다.<br />
+내 경우에는 엔비디아 2080이다.</p>
+<p><img src="/images/img_d5068fb510f7ccd6.png" alt="" /></p>
+<p>일단 이 기능은 기존 서버로는 사용할 수도 없다.<br />
+소스에서 빌드한다면 별도 옵션을 줘야 하고, docker도 gpu 버전 이미지가 따로 있다.</p>
+<p><img src="/images/img_16a34d4d92bb5849.png" alt="" />
+이 gpu 버전을 받아서 실행하면 된다.</p>
+<p>그냥 docker로 실행하려면 이렇게 하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker run \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	--</span><span>rm \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	--</span><span>gpus</span><span style="color: #94E2D5;">=</span><span>all \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	-</span><span>p</span><span style="color: #FAB387;"> 16333</span><span>:</span><span style="color: #FAB387;">6333</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	-</span><span>p</span><span style="color: #FAB387;"> 16334</span><span>:</span><span style="color: #FAB387;">6334</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">	-</span><span>e QDRANT__GPU__INDEXING</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span><span> \</span></span>
+<span class="giallo-l"><span>	qdrant</span><span style="color: #94E2D5;">/</span><span>qdrant</span><span style="color: #9399B2;">:</span><span>v1</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">15</span><span style="color: #94E2D5;">-</span><span>gpu</span><span style="color: #94E2D5;">-</span><span>nvidia</span></span></code></pre>
+<p>docker compose 예시는 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>  qdrant</span><span style="color: #94E2D5;">-</span><span>gpu</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> qdrant</span><span style="color: #94E2D5;">/</span><span>qdrant</span><span style="color: #9399B2;">:</span><span>v1</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">15</span><span style="color: #94E2D5;">-</span><span>gpu</span><span style="color: #94E2D5;">-</span><span>nvidia</span></span>
+<span class="giallo-l"><span>    container_name</span><span style="color: #9399B2;">:</span><span> qdrant</span><span style="color: #94E2D5;">-</span><span>gpu</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;16333:6333&quot;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;16334:6334&quot;</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> qdrant_gpu</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span>qdrant</span><span style="color: #94E2D5;">/</span><span>storage</span></span>
+<span class="giallo-l"><span>    environment</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> QDRANT__GPU__INDEXING</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>    ulimits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      nofile</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 65535</span></span>
+<span class="giallo-l"><span>    deploy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        reservations</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          devices</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> driver</span><span style="color: #9399B2;">:</span><span> nvidia</span></span>
+<span class="giallo-l"><span>              count</span><span style="color: #9399B2;">:</span><span> all</span></span>
+<span class="giallo-l"><span>              capabilities</span><span style="color: #9399B2;">:</span><span> [gpu]</span></span>
+<span class="giallo-l"><span>        limits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          cpus</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;4&quot;</span></span>
+<span class="giallo-l"><span>          memory</span><span style="color: #9399B2;">:</span><span> 16192M</span></span></code></pre>
+<p>당연히 사용할 GPU에 대한 드라이버 설정, 드라이버-컨테이너 설치는 사전에 되어있어야 한다.</p>
+<p>그렇게 실행해서</p>
+<p><img src="/images/img_83c6b2605c7de74e.png" alt="" />
+위와 같이 GPU 관련 실행 로그가 뜨면 적용은 잘 된 것이다.</p>
+<br>
+<p><img src="/images/img_7603f70012646f33.png" alt="" />
+사용 프로세스 목록에도 추가됐다.</p>
+<br>
+<br>
+<br>
+<h2 id="seongneung-bencimakeu">성능 벤치마크</h2>
+<p>대충 256과 512 벡터를 1000만개씩 넣고 때리면서 비교해봤다.<br />
+벤치마크에 사용한 코드는 깃헙에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/benchmarks/tree/master/qdrant_benchmark">https://github.com/myyrakle/benchmarks/tree/master/qdrant_benchmark</a></p>
+<p>이건 GPU 사용 전 INSERT 속도</p>
+<p><img src="/images/img_68a93c64f69574ad.png" alt="" /></p>
+<p><img src="/images/img_84261b370e0fe0bb.png" alt="" /></p>
+<p>GPU 사용 전 READ 처리량 - 동시 쿼리 20개</p>
+<p><img src="/images/img_8a302778b3fb5f98.png" alt="" />
+256은 초당 235개 정도의 쿼리를 처리하고, 레이턴시는 100ms 정도 됐다.<br />
+512는 초당 92개 정도밖에 처리하지 못했고, 레이턴시는 200ms. 실패도 좀 발생했다. 벡터 크기가 커질수록 성능 안정성이 많이 떨어지는 것 같다.</p>
+<p>GPU 사용 전 READ 처리량 - 동시 쿼리 100개</p>
+<p><img src="/images/img_70923ac6724ef5c2.png" alt="" />
+동시 쿼리를 늘린다고 눈에 띄게 처리량이 늘진 않았다. 512의 경우에는 실패율이 생겼다.</p>
+<p>그럼 GPU 모드로 찌르면 어떨까? 경천동지할 성능 향상이 있을까?<br />
+동시 쿼리 20개 정도만 밀어넣어봤다.</p>
+<p><img src="/images/img_eb1db78f86d43d03.png" alt="" />
+일단 256의 경우에는 성능 향상이 있긴 한데 미미하다.<br />
+TPS가 235 =&gt; 284니까 대충 20% 정도는 향상이 된 것이다.</p>
+<br>
+<p><img src="/images/img_a56a9af6c215da9e.png" alt="" /></p>
+<p><img src="/images/img_e29e4f0e46815ca9.png" alt="" />
+근데 512는 좀 이상했다.<br />
+처리도 엄청 느리고, 동시 처리량도 블락이 걸린것처럼 다 막히고 뻗었다.</p>
+<p>뭔가 버그가 좀 있는 것 같았다.<br />
+똑같은 조건으로 256과 512를 전부 초기화했는데도 한쪽에만 이런 증상이 나왔다.</p>
+<p>아직 안정화되었다고 보기는 이른듯...</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://qdrant.tech/documentation/guides/running-with-gpu/">https://qdrant.tech/documentation/guides/running-with-gpu/</a><br />
+<a rel="external" href="https://qdrant.tech/blog/qdrant-1.13.x/">https://qdrant.tech/blog/qdrant-1.13.x/</a><br />
+<a rel="external" href="https://whatap.io/ko/blog/qdrant-vector-db-batch-search-optimization">https://whatap.io/ko/blog/qdrant-vector-db-batch-search-optimization</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224071740640/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Git] branch 관리: merge vs rebase<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224070418992/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>LLM과 에이전트 개발에 대한 소고<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

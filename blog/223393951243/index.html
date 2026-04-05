@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Zig] 포인터와 동적 할당 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223393951243/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Zig] 포인터와 동적 할당">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223393951243/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-24T00:00:00+00:00">
+    <meta property="article:tag" content="Zig">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223393951243/">[Zig] 포인터와 동적 할당</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-24T00:00:00+00:00"><time datetime="2024-03-24T00:00:00+00:00">2024.03.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="185 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/zig/">Zig</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223393951243" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Zig는 C와 동일한 수준의 포인터를 지원한다. C를 사용해본 경험이 있다면 어려움 없이 사용할 수 있을 것이다.</p>
+<p>&amp;로 주소를 따올 수 있으며, *T나 *const T의 형태로 타입이 표현된다.<br />
+그리고 .*의 형태로 역참조를 할 수 있다.</p>
+<p>아래 코드는 그에 대한 간단한 예제 코드다.</p>
+<p><img src="/images/img_46efa259e5de04a9.png" alt="" />
+주소를 따서 주소를 통해 역참조해서 값을 할당한다.</p>
+<p>당연히 함수 파라미터로도 넘길 수 있다.</p>
+<p><img src="/images/img_2483a6630c804d16.png" alt="" />
+별거없다.</p>
+<p>C/C++와 마찬가지로 Zig는 dangling 포인터나 기타 유효하지 않은 포인터에 대한 어떤 관리나 책임도 갖지 않는다. 알아서 해야한다.</p>
+<br>
+<br>
+<br>
+<h2 id="dongjeog-haldang">동적 할당</h2>
+<p>Zig는 수많은 고급 언어들과 다르게 메모리 할당 기능을 기본으로 제공하지 않는다.<br />
+그것뿐만이 아니라 메모리에 대한 그 어떤 것도 책임지거나 관리하지 않는다. 알아서 해야 한다.</p>
+<p>Allocator 인터페이스를 통해서 간접적인 기능만을 제공한다. 이건 힙에 할당할 수도, 임의로 지정한 스택 시퀀스에 할당할 수도 있다.</p>
+<p>아래는 힙 할당자를 이용한 간단한 예제 코드다.</p>
+<p><img src="/images/img_9b03649730bb9385.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> std</span><span style="color: #94E2D5;"> =</span><span> @</span><span style="color: #94E2D5;">import</span><span>(</span><span style="color: #A6E3A1;">&quot;std&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> Allocator</span><span style="color: #94E2D5;"> =</span><span> std</span><span style="color: #94E2D5;">.</span><span>mem</span><span style="color: #94E2D5;">.</span><span>Allocator</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>pub fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> !void</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> stdout</span><span style="color: #94E2D5;"> =</span><span> std</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">getStdOut</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">writer</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // memory 영역 할당</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    var</span><span> arena</span><span style="color: #94E2D5;"> =</span><span> std</span><span style="color: #94E2D5;">.</span><span>heap</span><span style="color: #94E2D5;">.</span><span>ArenaAllocator</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">init</span><span>(std</span><span style="color: #94E2D5;">.</span><span>heap</span><span style="color: #94E2D5;">.</span><span>page_allocator)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // memory 영역 해제 (함수 종료시)</span></span>
+<span class="giallo-l"><span>    defer arena</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">deinit</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // allocator 생성</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> allocator</span><span style="color: #94E2D5;"> =</span><span> arena</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">allocator</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // i32 타입의 메모리 할당</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> ptr</span><span style="color: #94E2D5;"> =</span><span> try allocator</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">create</span><span>(i32)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    ptr</span><span style="color: #94E2D5;">.* =</span><span style="color: #FAB387;"> 42</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> a</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> i32</span><span style="color: #94E2D5;"> =</span><span> ptr</span><span style="color: #94E2D5;">.*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    try</span><span> stdout</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">print</span><span>(</span><span style="color: #A6E3A1;">&quot;Result: {?}</span><span style="color: #F5C2E7;">\n</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> .</span><span style="color: #9399B2;">{</span><span>a</span><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>보다시피 arena.deinit() 같은 함수를 이용해서 직접 메모리를 해제해야 한다. Zig는 아무런 책임도 지지 않는다.<br />
+그리고 allocator를 통해서 새로운 영역을 할당하거나 반환할 수 있다.</p>
+<p>이런걸 누가 쓸까...?</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://ziglang.org/documentation/0.11.0/#Pointers">https://ziglang.org/documentation/0.11.0/#Pointers</a><br />
+<a rel="external" href="https://ziglang.org/documentation/0.11.0/#Memory">https://ziglang.org/documentation/0.11.0/#Memory</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223393822219/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Zig] 단위 테스트<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223393982182/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Zig] comptime<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

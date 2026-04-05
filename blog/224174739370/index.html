@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Service Proxy | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224174739370/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Service Proxy">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224174739370/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-02-07T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224174739370/">[k8s] Service Proxy</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-07T00:00:00+00:00"><time datetime="2026-02-07T00:00:00+00:00">2026.02.07</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="723 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224174739370" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223084158042">https://blog.naver.com/sssang97/223084158042</a></p>
+<p>쿠버에서 CNI가 Pod 간의 통신을 매개하는 역할을 한다면, Service Proxy는 리소스를 내부나 외부 인터넷으로 개방하는 역할을 한다. 더 정확히 말하면 L4에서 Service의 IP 노출을 담당한다.</p>
+<p>k8s의 세부 스택들이 으레 그렇듯이, 이것도 단일 구현체가 아니라 여러가지 선택지가 있다.<br />
+어떤 구현체들이 있고, 어떤 식으로 각자 동작하는지를 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-nonri">기본 논리</h2>
+<p>Service의 기본적인 논리는 다음 그림과 같다.</p>
+<p><img src="/images/img_960ad1d583d0fc2e.png" alt="" />
+Service로 들어온 요청을 Pod로 변환해주는 것이다.<br />
+이 과정은 L4, TCP/UDP 수준에서 이루어진다.</p>
+<p>예를 들어 위 그림처럼 A 서비스가 192.168.0.100로 개방되어있고, A Service에는 B라는 Pod가 10.0.0.2 IP로 붙어있는 상태에서 192.168.0.100로 요청이 들어온다면, kube-proxy는 그걸 가로채서 10.0.0.2 pod로 넘긴다.<br />
+이걸 어떤 커널 기능을 써서 네트워크 트래픽을 매개할지는 구현체마다 다르다.</p>
+<br>
+<br>
+<br>
+<h2 id="kube-proxy">kube-proxy</h2>
+<p>kube-proxy는 매우 널리 사용되며, 많은 쿠버 배포판에서 기본값으로 사용되는 Service Proxy다.</p>
+<p>이건 동작 방식이 크게 3가지가 있다. iptables과 IPVS, nftables 등이다.<br />
+단순하고 작은 사용사례에서는 iptables로 충분하지만, 복잡한 사용사례가 필요하다면 다른 모드나 calico 같은 다른 proxy의 사용이 권장된다.</p>
+<br>
+<br>
+<h4 id="kube-proxy-iptables-mode">kube-proxy: iptables mode</h4>
+<p>이건 중소규모의 사용사례에 적합한 프록시 모드고, 상당수의 배포판에서 기본값이다. 리눅스 커널의 iptables에 의존하는 직관적인 구조를 갖고 있다.</p>
+<p>Service를 만들거나 변경하면, kube-proxy는 그걸 감시하다가 거기에 맞는 iptable NAT rule을 생성한다. 그러면 커널의 netfilter가 알아서 패킷을 매칭시켜 통과시키는 것이다.</p>
+<p>이 방식의 장점은, 커널 기능에 의존하는 것이라 매우 안정적이고 작은 규모에서는 성능도 나쁘지 않다는 것이다.<br />
+iptable 명령들을 사용하면 디버깅이나 문제해결도 간편하게 할 수 있다.</p>
+<p>단점은 확장에 매우 불리하다는 것이다. rule 추가/삭제와 패킷 전송 양쪽에 병목이 생긴다.<br />
+Service나 Pod가 많아진다면 그만큼 iptable rule이 늘어나는건데, 개수에 비례해서 rule 추가 성능이나 패킷 전송 시간이 느려진다. 패킷을 처리할때마다 커널의 netfilter가 rule 개수만큼 O(N) 루프를 돌려야 하기 때문이다.</p>
+<p>게다가 rule을 추가하고 삭제하는 것도 작지 않은 부하다.<br />
+rule을 1개 추가한다고 해서, 진짜 단순하게 1개만 추가하고 끝이 아니다.<br />
+Global Lock을 건 다음에 기존 ruleset을 다운로드하고, 인메모리에서 수정한 뒤에 그걸 커널에 전체 업로드하는 방식이다. 업로드가 끝나면 그제서야 Global Lock을 푼다. Lock으로 인한 블로킹이 심하다.</p>
+<p>그래서 Service가 수백/수천 단위를 넘어서는 대규모 사용사례의 경우에는 적합하지 않다.</p>
+<br>
+<br>
+<h4 id="kube-proxy-ipvs-mode-deprecated">kube-proxy: IPVS mode (deprecated)</h4>
+<p>IPVS (IP Virtual Server) 모드는 iptables 모드의 확장성 한계를 개선하고자 나온 방식이다.<br />
+이 IPVS도 사실 리눅스 커널에 내장된 로드밸런싱용 커널 기능이다. 자체 구현은 아니다.</p>
+<p>이 방식이 해결하고자 했던 것은 iptables의 라우팅 방식이 배열 기반의 O(N) 복잡도라는 것이었다.<br />
+하지만 IPVS를 사용하면 트래픽의 로드밸런싱을 해시테이블 기반으로 저장하고 관리한다. 그래서 이론적으로는 O(1)의 복잡도를 가진다.</p>
+<p>근데 그렇다고 해서 iptables을 완전히 버린 것은 아니었다. 패킷 필터링과 SNAT 같은 보조적인 부분에는 여전히 iptables을 섞어썼다.</p>
+<p>하지만 IPVS + iptables + ipset의 복잡한 아키텍처로 인해 유지보수 부담이 컸고, 새로운 네트워킹 기능과의 통합이 어려워져서, k8s v1.35(2025.12)부터  deprecated 되었다.<br />
+이후에는 nftables를 비롯한 eBPF 기반 솔루션으로의 전환이 권장된다.</p>
+<br>
+<br>
+<h4 id="kube-proxy-nftables-mode">kube-proxy: nftables mode</h4>
+<p>nftables는 kube-proxy에서 차세대로 밀어주고 있는 프록시 모드다.<br />
+높은 성능과 확장성, 기술 통합을 장점으로 내세운다.</p>
+<p>이것도 생짜 구현은 아니고, nftable이라는 리눅스 커널 기능에 의존한다.</p>
+<p>iptable에서 가장 심각했던 문제는, 라우팅 rule을 추가할때마다 <strong>Lock을 건 채로</strong> 전체 rule을 다운받고 수정한 전체 ruleset을 업로드하는 방식이었다는 것이다.<br />
+그래서 nftables에서는 incremantal한 rule update를 제공하기 때문에, 이런 문제가 거의 없다. 아무리 많아도 rule의 추가나 삭제는 O(1)로 큰 부하가 걸리지 않는다.</p>
+<p>패킷 전송시의 rule lookup도 해시테이블 조회라서, O(1)으로 빠르다. IPVS와 거의 비슷하다.</p>
+<br>
+<br>
+<br>
+<h2 id="calico-ebpf">Calico eBPF</h2>
+<p>calico를 eBPF 기반으로 구성할 경우, kube-proxy의 역할을 대체할 수 있다.<br />
+사용 규모가 크거나 기존에 Calico를 메인을 쓸 경우에 권장할만한 옵션이 된다.</p>
+<p>이건 BPF에 라우팅 rule들을 저장해놓고, eBPF 프로그램을 통해 패킷 전달을 처리하는 방식을 취한다.<br />
+rule의 추가/삭제와 조회 모두 O(1) 복잡도의 성능을 발휘하는데다, 커널 공간에서 직접 패킷 처리가 이루어지므로 유저-커널 간 컨텍스트 스위칭 없이 오버헤드를 최소화할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="ingress-controller">Ingress Controller?</h2>
+<p>envoy, traefik, nginx 같은 로드밸런서 기반의 Ingress Controller들도 Service를 열어주는 역할을 하긴 하지만, 이건 엄밀히 말하면 Service Proxy가 아니다.</p>
+<p>L7 기반의 프록시 시스템이고, 실제로 요청이 들어오면 내부적으로는 kube-proxy 같은 L4 서비스 프록시를 한번 더 거쳐서 동작한다. 트래픽 전송을 자체적으로 책임지는 것은 아니란 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/reference/command-line-tools-reference/kube-proxy/">https://kubernetes.io/ko/docs/reference/command-line-tools-reference/kube-proxy/</a><br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/services-networking/service/">https://kubernetes.io/ko/docs/concepts/services-networking/service/</a><br />
+<a rel="external" href="https://medium.com/@adityap23/why-kubernetes-deprecated-ipvs-the-shift-to-nftables-explained-d03450efb8ce">https://medium.com/@adityap23/why-kubernetes-deprecated-ipvs-the-shift-to-nftables-explained-d03450efb8ce</a><br />
+<a rel="external" href="https://docs.redhat.com/ko/documentation/red_hat_enterprise_linux/8/html/securing_networks/getting-started-with-nftables_securing-networks">https://docs.redhat.com/ko/documentation/red_hat_enterprise_linux/8/html/securing_networks/getting-started-with-nftables_securing-networks</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224176429255/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>NAT (Network Address Translation)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224173373332/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Clickhouse] 시스템 로그 정리<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

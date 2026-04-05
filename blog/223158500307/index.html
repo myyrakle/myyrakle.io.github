@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Docker] 이미지 크기 최적화: multi stage build | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223158500307/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Docker] 이미지 크기 최적화: multi stage build">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223158500307/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-07-17T00:00:00+00:00">
+    <meta property="article:tag" content="Container">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223158500307/">[Docker] 이미지 크기 최적화: multi stage build</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-07-17T00:00:00+00:00"><time datetime="2023-07-17T00:00:00+00:00">2023.07.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="241 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/container/">Container</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223158500307" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Docker의 가장 큰 장점이자 특징은 경량 컨테이너라는 것이다.<br />
+덕분에 작은 단위로 애플리케이션을 패키징해서 빠르게 배포를 처리할 수 있다.</p>
+<p>하지만 그냥 생각없이 말아서 쓰다가는 컨테이너가 수백메가, 기가급까지 뛰면서 무거워지고, 컨테이너가 뜨고 내려가는 속도가 느려질 수도 있다.</p>
+<p>이런식으로 대충 짰더니만</p>
+<p><img src="/images/img_3ecf800638315a95.png" alt="" /></p>
+<p><img src="/images/img_9262cb96e92ab344.png" alt="" /></p>
+<p>동작에는 문제가 없지만 이미지 크기가 1.2기가나 먹는다.</p>
+<p><img src="/images/img_1995613500cc6124.png" alt="" />
+이렇게 먹을 필요가 있을까? 없다.</p>
+<p>컨테이너의 크기가 커지는 이유에는 이런 것들이 있다.</p>
+<ol>
+<li>
+<p>애초에 이미지가 큼</p>
+</li>
+<li>
+<p>빌드중에 생기는 패키지 설치나, 빌드 부산물</p>
+</li>
+</ol>
+<br>
+<br>
+<p>보통 이미지 크기를 최적화할때는 alpine이라는 경량 이미지를 많이 사용한다.<br />
+그리고 빌드 부산물은 서빙하기전에 지워주면 좋을텐데... 그걸 완벽히 하기는 또 불편하거나 귀찮은 부분이 존재한다.</p>
+<p>그래서 좀 깔끔하게 이 프로세스를 구성하려면 도커파일을 2개 둬서 2개의 빌드를 분리하는게 바람직할 수 있다.</p>
+<ol>
+<li>
+<p>빌드 작업: 소스코드를 빌드해서 실행용 아티팩트를 export</p>
+</li>
+<li>
+<p>서빙 작업: 실행용 아티팩트를 받아서 alpine 등의 경량 이미지에 서빙</p>
+</li>
+</ol>
+<br>
+<br>
+<p>이런 여러개의 stage를 분리해서 빌드를 하려면 docker에서 지원하는 multi stage 기능을 사용하는 것이 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="docker-multi-stage-build">Docker: multi stage build</h2>
+<p>이 기능은 도커 19.03.0부터 지원된다.</p>
+<p>아래와 같이 Dockerfile에 2개 이상의 프로세스를 우겨넣을 수 있다.<br />
+첫번째 프로세스는 AS로 build라고 지어줬고, 두번째는 deploy라고 지어줬다.</p>
+<p><img src="/images/img_2cc1c2f939c9a5da.png" alt="" />
+그럼 COPY에서 --from 태그를 사용해서 스테이지 간에 파일을 주고받을 수 있다.<br />
+그리고 마지막에 진행한 프로세스가 최종 이미지의 결과물이 된다.</p>
+<p>저대로 빌드를 돌리면</p>
+<p><img src="/images/img_f3afe2f09b1f8750.png" alt="" />
+아주 얄쌍해질 것이다.<br />
+1.2기가에서 20메가가 되었다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/33377022/how-to-copy-files-from-dockerfile-to-host">https://stackoverflow.com/questions/33377022/how-to-copy-files-from-dockerfile-to-host</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223158138032/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] 바이너리 크기 최적화<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223157381436/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Github] Github Action: Custom Container<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

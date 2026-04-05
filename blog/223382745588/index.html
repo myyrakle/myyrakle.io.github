@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] tokio: Mutex | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223382745588/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] tokio: Mutex">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223382745588/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-14T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223382745588/">[Rust] tokio: Mutex</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-14T00:00:00+00:00"><time datetime="2024-03-14T00:00:00+00:00">2024.03.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="223 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223382745588" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>tokio는 std::sync의 Mutex와 별개로 자체적인 Mutex 구현체를 제공한다.</p>
+<p>대체로는 같은 결과를 얻을 수 있지만, 동작 방식이 조금 다름에 유의해야 한다. 일단은, tokio 문서에서도 가급적 std의 Mutex를 사용하는 것을 권장하는 편이다.</p>
+<p>둘다 섞어쓰는건 문제가 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongbeob">사용법</h2>
+<p>일단 사용법은 표준 뮤텍스와 크게 다르지는 않다.</p>
+<p><img src="/images/img_b4d2846e977aeedd.png" alt="" />
+생성방식은 동일한데</p>
+<br>
+<p><img src="/images/img_c792ddd55ae25f7c.png" alt="" />
+뮤텍스 가드 획득에 Result 레이어가 없고 await을 통해 대기한다는 것이 좀 다르다.</p>
+<p>아래는 간단한 예제 코드 전체다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:Arc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:Mutex</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> _counter</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Mutex</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #F9E2AF;font-style: italic;">0</span><span style="color: #9399B2;">))</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let counter</span><span style="color: #94E2D5;"> =</span><span> _counter</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> task1</span><span style="color: #94E2D5;"> =</span><span> tokio::</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        for _ in </span><span style="color: #FAB387;">0..1000</span><span> {</span></span>
+<span class="giallo-l"><span>            let mut counter = counter.lock().await;</span></span>
+<span class="giallo-l"><span>            *counter += </span><span style="color: #FAB387;">1</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    })</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> counter</span><span style="color: #94E2D5;"> =</span><span> _counter</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> task2</span><span style="color: #94E2D5;"> =</span><span> tokio::</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        for _ in </span><span style="color: #FAB387;">0..1000</span><span> {</span></span>
+<span class="giallo-l"><span>            let mut counter = counter.lock().await;</span></span>
+<span class="giallo-l"><span>            *counter += </span><span style="color: #FAB387;">1</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    })</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> (_1</span><span style="color: #9399B2;">,</span><span> _2) </span><span style="color: #94E2D5;">=</span><span> tokio::</span><span style="color: #89B4FA;font-style: italic;">join</span><span style="color: #94E2D5;">!</span><span>(task1</span><span style="color: #9399B2;">,</span><span> task2)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> counter</span><span style="color: #94E2D5;"> =</span><span> _counter</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Final counter value: {}&quot;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> *</span><span>counter)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_5781ce42783cb61e.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="mweoga-dareunga">뭐가 다른가?</h2>
+<p>표준 Mutex는 lock을 얻을 수 없는 상태면 일단 현재 컨텍스트를 차단한다. 물론 OS 기능들을 활용하기 때문에 비효율적인 차단을 하지는 않는다.<br />
+tokio Mutex는 lock을 얻을 수 없는 상태면 tokio executor에게 실행을 양보한다. FIFO 기반으로 우선순위가 지정된다.<br />
+os 수준에서 block 리소스를 아끼는지, tokio 수준에서 아끼는지의 차이일 뿐이다.</p>
+<p>근데 비동기 컨텍스트에서라도 표준 Mutex가 비용이 더 적고 효율적인 경우가 많다.<br />
+특히 Mutex 내부 값이 단순한 데이터성 값이라면 그냥 표준 Mutex가 훨씬 적합하다.</p>
+<p>tokio Mutex가 적합한 경우는 데이터베이스 연결과 같은 I/O 리소스를 다룰 때다. 그런 특별한 케이스가 아니라면 표준 Mutex를 쓰는 것을 tokio에서도 권한다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/73840520/what-is-the-difference-between-stdsyncmutex-vs-tokiosyncmutex">https://stackoverflow.com/questions/73840520/what-is-the-difference-between-stdsyncmutex-vs-tokiosyncmutex</a><br />
+<a rel="external" href="https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use">https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html#which-kind-of-mutex-should-you-use</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223382727295/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] PostGIS: 타입<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223383411701/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[MongoDB] TTL<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

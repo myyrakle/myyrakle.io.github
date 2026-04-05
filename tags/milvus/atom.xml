@@ -1,0 +1,608 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - milvus</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/milvus/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-05-12T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/milvus/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[Milvus] 스칼라 필드 인덱스 (메타데이터 인덱스)</title>
+        <published>2025-05-12T00:00:00+00:00</published>
+        <updated>2025-05-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223862499718/"/>
+        <id>https://myyrakle.github.io/blog/223862499718/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223862499718/">&lt;p&gt;Milvus는 벡터 필드 이외에도, 일반 스칼라 필드에 대해서도 효율적인 인덱싱을 지원한다.&lt;br &#x2F;&gt;
+용어가 좀 일관성 없이 와리가리한다. 스칼라 필드 인덱스라고 하기도 하고, 그냥 메타데이터라고 부르기도 하더라.&lt;&#x2F;p&gt;
+&lt;p&gt;스칼라 인덱스의 동작 매커니즘은, 여타 컬럼베이스 DB들과 크게 다르지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4203b6073c2ecd1b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+각 필드에 대한 값을 읽고, bitset 단위로 조건 캐시를 관리하면서 필터링을 수행하는 것이다.&lt;br &#x2F;&gt;
+그래서 복잡한 필터 조건에 대해서도 효율적으로 동작하고, 빠르다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;indegseu-cuga&quot;&gt;인덱스 추가&lt;&#x2F;h2&gt;
+&lt;p&gt;milvus는 스키마에 정의되어있는 필드에 한해서만 인덱스 추가가 된다. 근데 스키마 필드 추가가 동적으로 되지도 않아서 관리상 불편함이 좀 있는 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런 식으로 개별 필드에 대한 인덱스를 생성할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;indexes&#x2F;create&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;default&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;collectionName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_collection&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;indexName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;idx_brand_name&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;indexParams&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: [&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;            &amp;quot;indexType&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;            &amp;quot;fieldName&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;brand_name&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;            &amp;quot;indexName&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;idx_brand_name&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;indexType를 따로 지정하지 않으면 타입을 따라서 알아서 인덱스를 구성해준다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;begteo-geomsaeggwa-seukalra-pildeu-pilteoring&quot;&gt;벡터 검색과 스칼라 필드 필터링&lt;&#x2F;h2&gt;
+&lt;p&gt;milvus는 벡터 검색에 사전 필터링을 적용하는 것을 지원한다. 그러니까, 먼저 필터 조건에 맞는 값만 거른 다음에 그 목록을 기준으로 벡터 유사도 검색을 돌려주는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;milvus의 벡터 검색 필터링에는 2가지 동작 방식이 존재한다. 둘다 뭔가 심오한 방식을 쓰거나 한건 아니고, 순진한 방식으로 구현되어 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;첫번째 동작 방식은 Standard filtering이라고 부르는데, 매우 간단하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ee1e0e6af24d0fe3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;먼저 조건에 따라서 값을 전부 필터링하고, 필터링된 값들을 메모리에 로드한 다음에 거기서 벡터 유사도 연산을 돌리는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 이 방식은 필터링된 기반 데이터의 크기가 크다면 성능 효율성이 떨어질 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;두번째 동작 방식은  Iterative filtering라고 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_23a4e4ac05291d4f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이것도 사실 그렇게 복잡한건 아니다.&lt;br &#x2F;&gt;
+그래프 순회 중에 필터링을 할 때의 단점은, 너무 빠르게 순회가 중단되어서 원하는 값을 얻기가 어렵다는 것이다.&lt;br &#x2F;&gt;
+그래서 Iterative filtering은 그냥, 원하는 데이터 개수만큼을 얻을때까지 계속 뺑뺑이를 돌리는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이게 더 훌륭한 선택인지는 잘 모르겠지만, 이런 부분에 있어서는 qdrant가 filterable index를 포함해서 기술적으로 좀 도전을 더 한거같다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;index-scalar-fields.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;index-scalar-fields.md&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Index%20%28v2%29&#x2F;Create.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Index%20(v2)&#x2F;Create.md&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;vectordatabase&#x2F;comments&#x2F;1fj94ps&#x2F;what_vector_database_support_proper_filtering&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;vectordatabase&#x2F;comments&#x2F;1fj94ps&#x2F;what_vector_database_support_proper_filtering&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;single-vector-search.md#Filtered-search&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;single-vector-search.md#Filtered-search&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;zilliz.com&#x2F;blog&#x2F;what-is-new-with-metadata-filtering-in-milvus&quot;&gt;https:&#x2F;&#x2F;zilliz.com&#x2F;blog&#x2F;what-is-new-with-metadata-filtering-in-milvus&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;filtered-search.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;filtered-search.md&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;milvus-io&#x2F;milvus&#x2F;discussions&#x2F;35221&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;milvus-io&#x2F;milvus&#x2F;discussions&#x2F;35221&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;scalar_index.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;scalar_index.md&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Milvus] 성능 벤치마크</title>
+        <published>2025-04-27T00:00:00+00:00</published>
+        <updated>2025-04-27T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223848053614/"/>
+        <id>https://myyrakle.github.io/blog/223848053614/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223848053614/">&lt;p&gt;VectorDB를 도입하게 돼서 데이터베이스들을 대상으로 좀 공격적인 벤치마크를 해봤다.&lt;&#x2F;p&gt;
+&lt;p&gt;공통적으로 cpu 1개, 메모리 8기가 정도만 주고 돌려봤었고, milvus도 그렇게 해보려고 했다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223840387576&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223840387576&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+하지만 처음부터 큰 난관에 부딪혔다.&lt;&#x2F;p&gt;
+&lt;p&gt;결론부터 서두에 써놓자면, 리소스 효율성이 끔찍하고, 가용성 수준이 심각하게 낮다.&lt;br &#x2F;&gt;
+데이터베이스로서의 기본적인 부분들도 갖추지 못했다고 말할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;게다가 클러스터 구성도 불필요하게 복잡한 편이라서 관리포인트도 어지럽다.&lt;br &#x2F;&gt;
+어지간해서는 추천하지 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;그나마의 장점을 꼽자면, 레이턴시가 좀 낮은 편이었다는 것 정도다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;danjeom-jeongsinnagan-memori-sayongryanggwa-jeogayongseong&quot;&gt;단점: 정신나간 메모리 사용량과 저가용성&lt;&#x2F;h2&gt;
+&lt;p&gt;다른 데이터베이스들과 동일한 조건으로 1000만개 삽입 테스트를 먼저 돌렸다.&lt;br &#x2F;&gt;
+그냥 데이터 넣는건 pgvector, elasticsearch, qdrant 등 다른 DB들도 좀 오래 걸릴지언정 잘 감당했던 작업이라서, 이것도 별 문제가 없을줄 알았다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 아니었다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_509a2922c9a52bee.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_76fba7a67e4710b4.png&quot; alt=&quot;&quot; &#x2F;&gt;
+DB가 OOM으로 뻗어버렸다.&lt;br &#x2F;&gt;
+DB가 OOM으로 죽었다는 말을 들어본 적이 있나? 나는 지금 처음 보는거같다.&lt;&#x2F;p&gt;
+&lt;p&gt;대개 디스크 DB들은 메모리가 부족하면 느려지는 한이 있어도 디스크에 자원을 몰아놓고 메모리를 아끼는 자린고비 생활을 하는데, 이건 그런 기초적인 처리조차 해놓지 않고 몽땅 메모리에 올려버린다는 소리다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 16기가로 늘리고 다시 돌려봤는데&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_28271062c6b31590.png&quot; alt=&quot;&quot; &#x2F;&gt;
+또 터졌다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 32기가까지 올렸더니&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_962cc284ceeb4a9d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_58b7b6dfe5c3cfdf.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그제서야 좀 버텼다.&lt;&#x2F;p&gt;
+&lt;p&gt;이게 뭐하는 짓인지...&lt;br &#x2F;&gt;
+내 시스템에는 절대 도입하고 싶지 않다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jangjeom-bbareun-reiteonsi&quot;&gt;장점: 빠른 레이턴시&lt;&#x2F;h2&gt;
+&lt;p&gt;그나마의 장점을 꼽자면, 처리속도가 꽤 빨랐다는 것이다.&lt;br &#x2F;&gt;
+사실 이만큼 리소스를 독식하는데도 느리면 그게 더 큰 문제이긴 하지만 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_448ac2149e1fc60e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_901fc4d3c242785c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+웬만하면 100ms 미만으로 처리가 됐다.&lt;&#x2F;p&gt;
+&lt;p&gt;동일스펙으로 qdrant를 띄워서 테스트해봤을 때도 꽤 차이가 났다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7f6a53937265f43c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c7af98874e5d1d3f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+max 레이턴시는 별 차이가 없었지만, 평균 레이턴시는 milvus가 더 좋았다.&lt;br &#x2F;&gt;
+하지만 평상시의 메모리 사용량은 qdrant가 훨씬 적다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Milvus] Collection</title>
+        <published>2025-04-24T00:00:00+00:00</published>
+        <updated>2025-04-24T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223844460930/"/>
+        <id>https://myyrakle.github.io/blog/223844460930/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223844460930/">&lt;p&gt;이전 포스트&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223842124097&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223842124097&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;컬렉션은 Mivus의 기본 테이블 단위다.&lt;&#x2F;p&gt;
+&lt;p&gt;컬렉션은 기본적으로 고유 ID와, 사전에 정의된 여러 필드들로 구성될 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f3f29b4a0eda24de.png&quot; alt=&quot;&quot; &#x2F;&gt;
+벡터 값도 일반적인 필드 중 하나로 들어갈 수 있다.&lt;br &#x2F;&gt;
+벡터를 포함한 필드들에 대한 인덱스는 명시적으로 지정해야 한다. 자동으로 인덱스가 걸리는 구조는 아니다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;keolregsyeon-saengseong&quot;&gt;컬렉션 생성&lt;&#x2F;h2&gt;
+&lt;p&gt;생성은 전용 create API를 통해서 수행할 수 있다.&lt;br &#x2F;&gt;
+반드시 데이터베이스도 함께 지정해야 하고, 벡터 차원도 지정해줘야 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;collections&#x2F;create&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_db&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;collectionName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_collection&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dimension&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;8&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eafbffc851cad658.png&quot; alt=&quot;&quot; &#x2F;&gt;
+GRPC 등을 쓰면 벡터를 여러개 만든다거나, 벡터 타입을 지정한다거나 하는게 되는 것 같지만, HTTP는 기능에 제한이 있는 것 같다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;keolregsyeon-jeongbo-johoe&quot;&gt;컬렉션 정보 조회&lt;&#x2F;h2&gt;
+&lt;p&gt;목록 조회는 list로 조회할 수 있다. 마찬가지로 db를 지정해야 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;collections&#x2F;list&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_db&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3d85e8dcb936c860.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;상세 조회는 describe API를 쓰면 된다.&lt;br &#x2F;&gt;
+db 이름와 컬렉션 이름을 모두 전달받는다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;collections&#x2F;describe&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_db&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;collectionName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_collection&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_960c60a292a333dd.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이런 식으로 컬렉션에 대한 전체 정보를 뿌려준다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a942b20211a8b236.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이런식으로 자동 생성된 필드도 들어있다.&lt;br &#x2F;&gt;
+id가 정수 기본키고, vector가 벡터 필드다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;manage-collections.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;manage-collections.md&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Collection%20%28v2%29&#x2F;Create.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Collection%20(v2)&#x2F;Create.md&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Milvus] Entity</title>
+        <published>2025-04-24T00:00:00+00:00</published>
+        <updated>2025-04-24T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223844468303/"/>
+        <id>https://myyrakle.github.io/blog/223844468303/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223844468303/">&lt;p&gt;이전 포스트&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223844460930&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223844460930&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Entity는 Collection에 속한 각 데이터 행을 뜻한다. 그냥 벡터라고도 부른다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;entity-sabib&quot;&gt;Entity 삽입&lt;&#x2F;h2&gt;
+&lt;p&gt;insert 명령을 사용하면 삽입 겸 삭제를 동시에 batch로 처리할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;entities&#x2F;insert&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_db&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;collectionName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_collection&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;data&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: [&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;            &amp;quot;id&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;            &amp;quot;vector&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.3&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.4&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.5&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.6&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.7&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.8&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        },&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;            &amp;quot;id&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;            &amp;quot;vector&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.3&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.4&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.5&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.6&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.7&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.8&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.9&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a4819ea2950ce14a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이러면 성공 응답과 함께 id 목록이 반환된다.&lt;&#x2F;p&gt;
+&lt;p&gt;내 경우에는 동적 필드를 활성화해서 언제든 추가 필드를 데이터에 집어넣을 수 있었다.&lt;br &#x2F;&gt;
+그리고, 동일한 기본키로 값을 insert하면 기존 값을 대체한다. 그러니까 update 기능도 겸하는 셈이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2953b1d68986eb9d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;idro-entity-johoe&quot;&gt;ID로 Entity 조회&lt;&#x2F;h2&gt;
+&lt;p&gt;ID로 특정 엔티티를 조회하고 싶다면, get API를 쓸 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;entities&#x2F;get&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_db&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;collectionName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_collection&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;id&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 2&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_78fa3fd11aa5bab4.png&quot; alt=&quot;&quot; &#x2F;&gt;
+간단하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;entity-pilteo-johoe&quot;&gt;Entity 필터 조회&lt;&#x2F;h2&gt;
+&lt;p&gt;milvus는 벡터 검색 외에도, Elasticsearch처럼 단순 필터에 대해서도 꽤 뛰어난 성능을 보여줄 수 있다. 인덱스를 건다는 가정 하에서 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;query API를 사용하면 단순 필터에 기반한 조회를 수행할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;entities&#x2F;query&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_db&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;collectionName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_collection&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;filter&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;color == &amp;#39;red&amp;#39;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_25225ea932e31d1c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+filter라는 필드 안에다가 자기들만의 특수한 표현식을 작성해서 집어넣으면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;필터 문법에 대한 상세는 별도 문서를 참조한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;boolean.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;boolean.md&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;entity-begteo-yusado-geomsaeg&quot;&gt;Entity 벡터 유사도 검색&lt;&#x2F;h2&gt;
+&lt;p&gt;벡터 유사도 검색을 하고 싶다면 search API를 사용할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;### &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;POST http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;{{HOST}}:{{PORT}}&#x2F;v2&#x2F;vectordb&#x2F;entities&#x2F;search&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;Content&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;Type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; application&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;json&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;dbName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_db&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;collectionName&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;test_collection&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;data&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;: [&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        [&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;            0.1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.3&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.4&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.5&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.6&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.7&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.7&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        ]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;###&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_98ffb8d3e3107f33.png&quot; alt=&quot;&quot; &#x2F;&gt;
+기본적인 사용법은 어렵지 않다. 그냥 벡터 값을 하나 넘겨서 돌리면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_79604e0ddd7623f8.png&quot; alt=&quot;&quot; &#x2F;&gt;
+벡터 검색과 함께 필터를 조합할 수도 있다.&lt;br &#x2F;&gt;
+이것도 제 성능을 내려면 인덱스를 구성해야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Vector%20%28v2%29&#x2F;Search.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Vector%20(v2)&#x2F;Search.md&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;insert-update-delete.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;insert-update-delete.md&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Milvus] 소개 및 시작</title>
+        <published>2025-04-22T00:00:00+00:00</published>
+        <updated>2025-04-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223842105143/"/>
+        <id>https://myyrakle.github.io/blog/223842105143/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223842105143/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_19ce624b38b1d28e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+milvus는 대표적인 vector search 전문 데이터베이스 중 하나다.&lt;br &#x2F;&gt;
+milvus, qdrant, pinecone 이 3가지 정도가 벡터 DB들 사이에서는 3대장 포지션이다.&lt;&#x2F;p&gt;
+&lt;p&gt;2019년에 나왔고, Go와 C++을 섞어서 만들어졌다. 성능에 영향을 주는 핵심 로직은 주로 C++를 사용한 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;벡터 검색을 지원하는 데이터베이스 중에서는 성능이나 처리량 부분에서 가장 높은 성과를 보이는 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;아키텍쳐는 조금 복잡한 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a5aa18631c6a3fac.png&quot; alt=&quot;&quot; &#x2F;&gt;
+데이터 저장소는 일반 파일 볼륨, minio, S3 같은 클라우드 스토리지까지 전부 붙일 수 있다. 이게 좀 강점인 것 같다.&lt;br &#x2F;&gt;
+Coordinator Node와 Worker Node를 구분해서 연산을 처리하는 부분은 Elasticsearch와 유사한 부분이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;Client SDK 지원 수준은 qdrant보단 좀 별로다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_122c84e645b56550.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Rust가 없고, 닷넷도 정식 지원이 아니다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;docker-composero-silhaenghaebogi&quot;&gt;Docker Compose로 실행해보기&lt;&#x2F;h2&gt;
+&lt;p&gt;사실 난 여기서부터 좀 비호감이었다.&lt;br &#x2F;&gt;
+이건 단일 컨테이너로 간단하게 부팅해서 사용하는게 안된다. minio와 etcd를 기본으로 사용해야만 한다.&lt;br &#x2F;&gt;
+옛적 카프카도 이 정도는 아니었는데...?&lt;&#x2F;p&gt;
+&lt;p&gt;etcd는 클러스터 관리자고, minio는 뒷단 스토리지 관리자다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;version&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;3.5&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;services&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  etcd&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    container_name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; milvus&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;etcd&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    image&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; quay&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;io&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;coreos&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;etcd&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;v3&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;5.18&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    environment&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; ETCD_AUTO_COMPACTION_MODE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;revision&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; ETCD_AUTO_COMPACTION_RETENTION&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1000&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; ETCD_QUOTA_BACKEND_BYTES&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;4294967296&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; ETCD_SNAPSHOT_COUNT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;50000&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    volumes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; $&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;span&gt;DOCKER_VOLUME_DIRECTORY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;volumes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;etcd&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;etcd&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    command&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; etcd&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;advertise&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;client&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;urls&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;etcd:2379 -listen-client-urls http:&#x2F;&#x2F;0.0.0.0:2379 --data-dir &#x2F;etcd&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    healthcheck&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      test&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;CMD&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;etcdctl&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;endpoint&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;health&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      interval&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 30s&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      timeout&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 20s&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      retries&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 3&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  minio&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    container_name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; milvus&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;minio&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    image&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; minio&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;minio&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;RELEASE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;2023&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;03&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;20T20&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;16&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;18Z&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    environment&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      MINIO_ACCESS_KEY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; minioadmin&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      MINIO_SECRET_KEY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; minioadmin&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ports&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;9001:9001&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;9000:9000&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    volumes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; $&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;span&gt;DOCKER_VOLUME_DIRECTORY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;volumes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;minio&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;minio_data&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    command&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; minio server&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &#x2F;&lt;&#x2F;span&gt;&lt;span&gt;minio_data&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;console&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;address&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;:9001&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    healthcheck&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      test&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;CMD&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;curl&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;-f&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;http:&#x2F;&#x2F;localhost:9000&#x2F;minio&#x2F;health&#x2F;live&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      interval&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 30s&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      timeout&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 20s&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      retries&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 3&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  standalone&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    container_name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; milvus&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;standalone&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    image&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; milvusdb&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;milvus&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;v2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;5.9&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    command&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;milvus&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;run&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;standalone&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    security_opt&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; seccomp&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;unconfined&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    environment&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      ETCD_ENDPOINTS&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; etcd&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;2379&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      MINIO_ADDRESS&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; minio&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;9000&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    volumes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; $&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;span&gt;DOCKER_VOLUME_DIRECTORY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;volumes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;milvus&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;var&lt;&#x2F;span&gt;&lt;span&gt;&#x2F;lib&#x2F;milvus&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    healthcheck&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      test&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;CMD&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;curl&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;-f&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;http:&#x2F;&#x2F;localhost:9091&#x2F;healthz&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      interval&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 30s&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      start_period&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 90s&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      timeout&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 20s&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      retries&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 3&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    ports&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;19530:19530&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;9091:9091&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    depends_on&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;etcd&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;minio&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;networks&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;  default&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; milvus&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;파일 만들고&lt;&#x2F;p&gt;
+&lt;p&gt;실행해보자&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo docker compose&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; .&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;milvus&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;standalone&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;yml up&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cbd034146ca1a5aa.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_33f516741afddd30.png&quot; alt=&quot;&quot; &#x2F;&gt;
+오류 없이 전부 실행되고,&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_75a11da8ef47e828.png&quot; alt=&quot;&quot; &#x2F;&gt;
+9091 포트 엔드포인트로 접속이 되면, 잘 뜬 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ffb6ad452e983a87.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그리고, &#x2F;webui로 접속하면 개발자 보조용 대시보드가 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7aa3f6db0f9ae507.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_41e4e5cc5746714e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+옵션이나 슬로쿼리&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3f17f58bc6f3e824.png&quot; alt=&quot;&quot; &#x2F;&gt;
+데이터베이스가 컬렉션 목록 같은 메타데이터들을 조회할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 여기서 쿼리를 직접 날리거나, 데이터를 상세하게 조회하고 조작한다거나 하는 것은 지원되지 않는다.&lt;br &#x2F;&gt;
+이건 qdrant에 비해서 후달리는 부분인 것 같다. 여기서 할 수 있는게 적다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;milvus-io&#x2F;milvus&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;milvus-io&#x2F;milvus&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;discuss.pytorch.kr&#x2F;t&#x2F;2023-picking-a-vector-database-a-comparison-and-guide-for-2023&#x2F;2625&quot;&gt;https:&#x2F;&#x2F;discuss.pytorch.kr&#x2F;t&#x2F;2023-picking-a-vector-database-a-comparison-and-guide-for-2023&#x2F;2625&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;en.m.wikipedia.org&#x2F;wiki&#x2F;Milvus_(vector_database)&quot;&gt;https:&#x2F;&#x2F;en.m.wikipedia.org&#x2F;wiki&#x2F;Milvus_(vector_database)&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Milvus] zillis cloud로 시작해보기</title>
+        <published>2025-04-22T00:00:00+00:00</published>
+        <updated>2025-04-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223842116004/"/>
+        <id>https://myyrakle.github.io/blog/223842116004/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223842116004/">&lt;p&gt;zillis cloud는 milvus를 개발한 회사에서 직접 운영하는 클라우드 서비스다.&lt;&#x2F;p&gt;
+&lt;p&gt;직접 클러스터를 운영하는데 사용할 시간이나 인력이 부족하다면, 믿고 맡기는 것도 하나의 방법일 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;biyong&quot;&gt;비용&lt;&#x2F;h2&gt;
+&lt;p&gt;비용 방식은 조금 특이한 편이다. 일반적인 데이터베이스들과 다르게 프로비저닝보다는 서버리스 형태로 제공되는 경향이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_54d57d90fb0558f7.png&quot; alt=&quot;&quot; &#x2F;&gt;
+무료 사용량도 얼마간 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d4e135d11441af13.png&quot; alt=&quot;&quot; &#x2F;&gt;
+서버리스 요금은 GCP 대상으로만 지원된다.&lt;br &#x2F;&gt;
+아마 내부적으로는 파일스토리지 기반으로 저장해놨다가, 연산시에만 컴퓨팅 유닛 올려서 파일 읽어서 처리하는 형태가 되는 것 같다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_51fa644b91640480.png&quot; alt=&quot;&quot; &#x2F;&gt;
+dedicated 요금이란 것도 약간 직관적이지는 않다.&lt;br &#x2F;&gt;
+vcpu와 메모리를 명시적으로 지정하는게 아니라 컴퓨팅 유닛 단위로 돌아가게끔 해놨다.&lt;&#x2F;p&gt;
+&lt;p&gt;이것도 약간 서버리스하게 동작하게끔 설계를 해둔거같다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jinib-mic-sijag&quot;&gt;진입 및 시작&lt;&#x2F;h2&gt;
+&lt;p&gt;가입하고 시작해보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_49e6c26be410274d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여기도 구글과 깃헙 로그인을 지원한다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 가입은 좀 귀찮은 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5782e03e52ac63a3.png&quot; alt=&quot;&quot; &#x2F;&gt;
+입력도 좀 받고 이메일 인증도 해야하고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9928a8fe1d16d05f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_73241dabaab70b38.png&quot; alt=&quot;&quot; &#x2F;&gt;
+설문조사도 하더라.&lt;br &#x2F;&gt;
+크레딧 준다니까 받긴 했는데...&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2c92b16c3758a412.png&quot; alt=&quot;&quot; &#x2F;&gt;
+가입에 성공하면 이렇게 생긴 대시보드에 진입하게 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;keulreoseuteo-saengseonghaebogi&quot;&gt;클러스터 생성해보기&lt;&#x2F;h2&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_858dd57fc2837c2a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+진입하면 바로 클러스터 만들어보라고 뜬다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bd7f42b7fc6889cc.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Free 사이즈는 옵션이 고정이라 고를게 없다.&lt;br &#x2F;&gt;
+그리고 GCP 오리건에만 뜬다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d418f7cdf6a45dac.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Dedicated의 경우에는&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fae091d39c0fadce.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이런 식으로 CU 개수를 조정하는게 유일한 스펙 조정 방식이다.&lt;&#x2F;p&gt;
+&lt;p&gt;아무튼 그렇게 해서 만들면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7404de83f4a6c940.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이런 식으로 클러스터가 뜨고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_55efc48b20f7d419.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_39d074c74c47baa3.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여기서 직접 컬렉션이나 데이터를 조작해볼 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_42f6f243ebf2d33f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+모니터링 정보도 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f0a570f49bcc91da.png&quot; alt=&quot;&quot; &#x2F;&gt;
+쿼리 간편하게 콘솔에서 날리는 것도 클라우드 콘솔에서만 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;뭔가, 기본 대시보드에 없는 것들이 클라우드 대시보드에 꽤 있다.&lt;br &#x2F;&gt;
+직접 깔아쓰지 말고 클라우드 쓰라고 강매하는 느낌이 좀 든다. qdrant와는 이런 쪽에서 지향성이 다른거같다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Milvus] Database</title>
+        <published>2025-04-22T00:00:00+00:00</published>
+        <updated>2025-04-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223842124097/"/>
+        <id>https://myyrakle.github.io/blog/223842124097/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223842124097/">&lt;p&gt;milvus는 데이터베이스 계층을 지원한다.&lt;br &#x2F;&gt;
+데이터베이스는 테이블이 여러개 들어갈 수 있는 테이블의 논리적인 집합이다.&lt;&#x2F;p&gt;
+&lt;p&gt;논리적인 그룹일 뿐이라 성능적으로 영향을 주는건 없지만, 데이터베이스 단위로 레플리카 설정이나 약간의 제한 조정 등을 세분화해서 관리할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;API 기반으로 데이터베이스를 간단하게 만들어보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;milvus API의 최신 버전은 v2인데, v2 API부터는 특이하게 HTTP Method를 Post로 특이하고 동작 구분을 path 기반으로만 구분한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ee1f9db985462672.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그래서 조회도 이렇게 POST로 날려야 한다.&lt;br &#x2F;&gt;
+아직 아무것도 만들지 않았으니 기본 데이터베이스인 default 밖에 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;데이터베이스 생성은 create API와 함께 이름만 넘기면 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2836c8c50e4790b3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0a37d8cf9fc9ee91.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이렇게 잘 만들어진다.&lt;&#x2F;p&gt;
+&lt;p&gt;저기다가 컬렉션 단위를 또 만들어서 집어넣을 수 있는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fbf5bb07e5e2063d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그리고 또 보면서 느낀게, Go 개발자들은 뭔가 다 시스템 대충 만드는 데에는 일가견이 있는거같다.&lt;br &#x2F;&gt;
+&quot;dbName&quot; 필드가 누락되었으면 &quot;dbName&quot;을 입력하라고 해야지, 또 Go 구조체 이름으로 에러를 때리고 있다.&lt;br &#x2F;&gt;
+왜 이러는거지...&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;manage_databases.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;docs&#x2F;manage_databases.md&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Database%20%28v2%29&#x2F;List.md&quot;&gt;https:&#x2F;&#x2F;milvus.io&#x2F;api-reference&#x2F;restful&#x2F;v2.5.x&#x2F;v2&#x2F;Database%20(v2)&#x2F;List.md&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

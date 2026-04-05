@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana] k6를 대시보드에 통합 (with InfluxDB) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223526954698/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana] k6를 대시보드에 통합 (with InfluxDB)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223526954698/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-07-27T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223526954698/">[Grafana] k6를 대시보드에 통합 (with InfluxDB)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-07-27T00:00:00+00:00"><time datetime="2024-07-27T00:00:00+00:00">2024.07.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="508 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223526954698" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>부하테스트 도구인 k6를 Grafana 대시보드에 통합해서 모니터링할 수 있도록 구성하는 방법을 정리한다.</p>
+<p>k6는 기본적으로 그럭저럭 봐줄만한 CLI UI를 가지고 있으며</p>
+<p><img src="/images/img_4568ab625b8d0581.png" alt="" /></p>
+<p>웹 형태의 보고서 출력 기능도 제공한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223523385158">https://blog.naver.com/sssang97/223523385158</a><br />
+이것만으로도 대충 파악하는데는 문제가 없으나, 좀 더 체계적이고 중앙화된 형태로 테스트 report들을 쌓고 관리하고 싶다면 grafana와의 통합을 고민해볼 수 있다.</p>
+<p>그런데 아쉽게도 grafana 대시보드와의 공식적인 일체형 통합 오픈소스는 존재하지 않는다.<br />
+정확히 말하면 grafana cloud를 쓸 경우에는 완성형으로 제공해주는게 있는데, 오픈소스로는 조금 애매하다.</p>
+<p>여기서는 influxdb 기반의 데이터 통합을 구성해보겠다.<br />
+k6 report를 influxDB에 저장하고, 그걸 그라파나로 보는 형태가 되겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="influxdb-guseong">InfluxDB 구성</h2>
+<p>일단 저장소로 쓸 InfluxDB가 있어야 한다.</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223525737052">https://blog.naver.com/sssang97/223525737052</a></p>
+<p>토큰도 잘 따서 보관해두자.</p>
+<p>그리고 k6라는 버킷을 하나 팠다.</p>
+<p><img src="/images/img_9f4860fe4f8915c0.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="grafana-deiteososeu-guseong">Grafana 데이터소스 구성</h2>
+<p>먼저 데이터소스를 구성한다.</p>
+<p><img src="/images/img_c26f9dfa387866ba.png" alt="" />
+아마 influx-influxdb2.default.svc.cluster.local 이런 식으로 될 것이다.</p>
+<br>
+<p><img src="/images/img_92d3da7afa3f39a8.png" alt="" />
+그리고 influx v2라면 아마 token으로 인증을 해야할 것이다.<br />
+헤더에 Authorization으로 Token {토큰값} 넣어주고 연결하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="grafana-daesibodeu-guseong">Grafana 대시보드 구성</h2>
+<p>이번에는 데이터소스를 갖다가 대시보드를 만들어보자.<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/223526937053">https://m.blog.naver.com/sssang97/223526937053</a></p>
+<p><img src="/images/img_1fd3df068863ca6c.png" alt="" /></p>
+<p><img src="/images/img_e1d14b053c16f0d6.png" alt="" />
+아무래도 웬만하면 그냥 남들이 만든거 갖다쓰는게 좋은데</p>
+<p><a rel="external" href="https://grafana.com/grafana/dashboards/?dataSource=influxdb&amp;search=k6">https://grafana.com/grafana/dashboards/?dataSource=influxdb&amp;search=k6</a><br />
+여기서 적당히 조건 걸고 찾아서 쓰면 된다. 이런건 취향도 갈리는 부분이 있어서 뭘 추천한다고는 못하겠다.</p>
+<p><a rel="external" href="https://grafana.com/grafana/dashboards/10660-k6-load-testing-results/">https://grafana.com/grafana/dashboards/10660-k6-load-testing-results/</a><br />
+난 그냥 앞에 보이는걸로다가 대충 골랐다.</p>
+<br>
+<p><img src="/images/img_33495914837caf7d.png" alt="" /></p>
+<p><img src="/images/img_2cfdeccbd6bae3a3.png" alt="" />
+로드하면 당연히 처음에는 비어있을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="k6ro-deiteo-jeonsong">k6로 데이터 전송</h2>
+<p>Grafana에서 k6 테스트 결과가 보이도록 하려면, k6가 실행될때마다 그 결과를 InfluxDB로 쏴줄 수 있도록 해야한다.<br />
+원래 k6 자체에 influxDB out 기능이 내장되어있었는데, influxDB가 v2 올라가면서 갖다버린건지 뭐가 잘 안맞더라. 그래서 k6-&gt;influxDB를 구성하려면 xk6라는 k6의 시험판?을 사용해야 한다.</p>
+<p>go cli를 사용해서 적당히 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>go install go</span><span style="color: #94E2D5;">.</span><span>k6</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>xk6</span><span style="color: #94E2D5;">/</span><span>cmd</span><span style="color: #94E2D5;">/</span><span>xk6@latest</span></span>
+<span class="giallo-l"><span>xk6 build</span><span style="color: #94E2D5;"> --</span><span style="color: #CBA6F7;">with</span><span> github</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #94E2D5;">/</span><span>xk6</span><span style="color: #94E2D5;">-</span><span>output</span><span style="color: #94E2D5;">-</span><span>influxdb</span></span></code></pre>
+<p><img src="/images/img_1e6eb1a0313f6079.png" alt="" /></p>
+<p><img src="/images/img_cbcec64c844a1eb1.png" alt="" />
+그럼 그냥 저걸 그대로 쓰든, /usr/bin에 박든 해서 쓰면 된다.</p>
+<p>실행방법은 이렇다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>K6_INFLUXDB_TOKEN</span><span style="color: #94E2D5;">=</span><span>토큰 \</span></span>
+<span class="giallo-l"><span>K6_INFLUXDB_BUCKET</span><span style="color: #94E2D5;">=</span><span>k6 \</span></span>
+<span class="giallo-l"><span>K6_INFLUXDB_ADDR</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;http://...:80&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>K6_INFLUXDB_ORGANIZATION</span><span style="color: #94E2D5;">=?</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">./</span><span>k6 run foo</span><span style="color: #94E2D5;">.</span><span>js</span><span style="color: #94E2D5;"> -</span><span>o xk6</span><span style="color: #94E2D5;">-</span><span>influxdb</span></span></code></pre>
+<p>org ID는 influx에서 찾아오면 된다.</p>
+<p><img src="/images/img_5d56a081a6bc7a15.png" alt="" /></p>
+<p>그리고 실행을 때리면</p>
+<p><img src="/images/img_cc02e18e0dcde666.png" alt="" />
+평소와 다름없이 실행을 할 것이고</p>
+<br>
+<p><img src="/images/img_63a0283ac8f4084d.png" alt="" />
+대시보드에도 가시화가 될 것이다.</p>
+<br>
+<p><img src="/images/img_67e5f0ffd33c3ccd.png" alt="" />
+URL 필터도 되고 기본적인건 되더라.<br />
+그런데 이건 앵귤러 디펜던시가 있는 약간 레거시한 대시보드라 약간 삐걱거리는게 있었다.</p>
+<br>
+<br>
+<p><a rel="external" href="https://grafana.com/grafana/dashboards/2587-k6-load-testing-results/">https://grafana.com/grafana/dashboards/2587-k6-load-testing-results/</a></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://grafana.com/grafana/dashboards/14801-k6-dashboard/">https://grafana.com/grafana/dashboards/14801-k6-dashboard/</a><br />
+<a rel="external" href="https://velog.io/@heka1024/Grafana-k6%EC%9C%BC%EB%A1%9C-%EB%B6%80%ED%95%98-%ED%85%8C%EC%8A%A4%ED%8A%B8%ED%95%98%EA%B8%B0">https://velog.io/@heka1024/Grafana-k6%EC%9C%BC%EB%A1%9C-%EB%B6%80%ED%95%98-%ED%85%8C%EC%8A%A4%ED%8A%B8%ED%95%98%EA%B8%B0</a><br />
+<a rel="external" href="https://docs.influxdata.com/influxdb/cloud/admin/tokens/create-token/">https://docs.influxdata.com/influxdb/cloud/admin/tokens/create-token/</a><br />
+<a rel="external" href="https://k6.io/docs/get-started/results-output/">https://k6.io/docs/get-started/results-output/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223526937053/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana] 대시보드 설치하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223525737052/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[InfluxDB] k8s에 설치하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

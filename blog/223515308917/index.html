@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Node.js] 스레드와 Event Loop | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223515308917/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Node.js] 스레드와 Event Loop">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223515308917/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-07-17T00:00:00+00:00">
+    <meta property="article:tag" content="Javascript">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223515308917/">[Node.js] 스레드와 Event Loop</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-07-17T00:00:00+00:00"><time datetime="2024-07-17T00:00:00+00:00">2024.07.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="886 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/javascript/">Javascript</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223515308917" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Node.js 환경에 대해서 이야기하거나 평가할 때 자주 거론되는 주제 중 하나가 스레드의 활용성이다.</p>
+<p>흔히 Node 환경을 가리켜서 싱글스레드 환경의 런타임이라고 말하곤 한다.<br />
+근데 사실 또 멀티코어 환경을 아예 활용하지 못하는 것도 아니다. 정확히 말하면 I/O 동작에 대해서만 멀티스레드 활용을 보장할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="singgeul-seuredeu">싱글 스레드?</h2>
+<p>Node.js는 C/C++, Java, C# 같은 기성 언어들과 다르게 스레드를 직접 제어하지 못한다.<br />
+네이티브 스레드나 경량 스레드를 호출해서 직접 멀티코어를 쥐어짜 CPU 집약적인 연산을 효율적으로 해낼 수는 없다는 말이다.</p>
+<p>Promise 같은 비동기 단위를 통해 동시성을 구현할 수는 있지만, 멀티스레드와 같은 병렬성을 담보하지는 못한다.<br />
+그냥 tick 기반으로 시분할 처리만을 수행하는 것이기 때문이다.</p>
+<p>이런 부분에서는 파이썬, 루비와 비스무리한 싱글스레드 언어라고 할 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="event-loop">Event Loop!</h2>
+<p>하지만 Node.js는 이벤트 루프라는 매커니즘을 통해 I/O 작업을 효율화한다.<br />
+I/O 집약적인 환경에서는 멀티스레드를 충분히 활용한다고 할 수 있다.</p>
+<p><img src="/images/img_bde1d7be217262c5.png" alt="" />
+<a rel="external" href="https://www.geeksforgeeks.org/node-js-event-loop/">https://www.geeksforgeeks.org/node-js-event-loop/</a><br />
+Node.js는 내부적으로 libuv라는 병렬처리 라이브러리를 사용하는데, 이걸 통해 스레드풀을 구성하고 I/O 작업을 다중화한다.<br />
+그리고 libuv는 또 내부적으로 epoll(Linux), kqueue(Mac), IOCP(Windows) 같은 커널 수준의 네트워킹 매커니즘을 사용해서 커널 스레드를 활용한다.</p>
+<p>방식을 간략히 정리하면 이렇다.</p>
+<ol>
+<li>File I/O나 Network I/O 같은 작업이 발생하면, 런타임은 그 요청을 이벤트 큐에 넣는다.</li>
+<li>이벤트 루프는 이벤트 큐에 작업이 들어오면 스레드풀을 활용해 작업을 처리한다.</li>
+<li>스레드상에서 작업이 완료되면 이벤트루프는 그 결과를 이벤트 큐를 통해 Javascript 측에 응답한다.</li>
+</ol>
+<p>이런 구조 덕분에 서버 환경에서도 그럭저럭 나쁘지 않은 퍼포먼스를 보여줄 수 있는 것이다.<br />
+연산 성능이 구리긴 한데, 어차피 서버 구조는 네트워크 I/O가 대부분이고, 대부분의 무거운 일은 DB가 하기 때문이다.<br />
+좀 특수한 영역으로 가면 말이 달라질 수도 있지만, 대부분의 스타트업 수준에서 요구하는 기능 명세에서는 성능이 그다지 부족하진 않다.</p>
+<p>조금 더 들어가보면, 이벤트루프의 각 루프 스텝은 이런 식으로 구성된다.</p>
+<p><img src="/images/img_9c7b7a9fb8d99395.png" alt="" />
+<a rel="external" href="https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick">https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick</a></p>
+<ol>
+<li>
+<p>timer: 일단 타이머 관련 작업을 확인해서 먼저 처리한다. setTimeout이나 SetInterval로 예약한 함수가 이에 해당된다.</p>
+</li>
+<li>
+<p>pending callbacks: 이전 루프에서 보류된 콜백을 실행한다.</p>
+</li>
+<li>
+<p>idle, prepare: 이건 몰라도 된다. 내부적으로 GC를 위한 확인이나 잡다한 내부동작을 위해 존재한다.</p>
+</li>
+<li>
+<p>poll: 새로운 I/O 이벤트를 받고 처리한다. readFile 같은 함수가 사용되면 그걸 받아주는 것이다. 사실 이게 점유율의 99% 정도는 된다.</p>
+</li>
+<li>
+<p>check: 이벤트 큐에 추가된 모든 setImmediate() 콜백을 처리한다.</p>
+</li>
+<li>
+<p>close callbacks: "소켓 연결 닫기" 같은 정리 작업에 대한 처리를 수행한다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>무한루프 뺑글뺑글 돌면서 저 스텝들을 계속 반복하는 것이다.<br />
+그리고 Event Loop 자체는 메인 스레드 위에서 돈다.</p>
+<p>자바스크립트로 악질적인 문제를 낸다면 단골메뉴로 나오는 소재다.<br />
+원리를 잘 알면 더럽고 비직관적인 코드를 짜기 좋다.</p>
+<p>이벤트 루프의 코드는 여기서 볼 수 있다.<br />
+<a rel="external" href="https://github.com/nodejs/node/blob/main/deps/uv/src/unix/core.c#L378-#L417">https://github.com/nodejs/node/blob/main/deps/uv/src/unix/core.c#L378-#L417</a></p>
+<br>
+<br>
+<br>
+<h2 id="coejeoghwa-pointeu-setimmediate">최적화 포인트: setImmediate</h2>
+<p>setImmediate는 특수한 최적화 포인트가 필요할 때 사용되는 특수한 함수 중 하나다.</p>
+<p>위에 언급했듯이 setImmediate는 이벤트 루프 스텝 중 poll 다음으로 처리된다.<br />
+거의 마지막 부분에 실행되는 셈인데, 이걸 이용해서 현재 자신이 처리하는 작업의 우선순위를 뒤로 미룰 수 있다는 것이다. 리소스를 양보하는 것이다.</p>
+<p>그래서 뭔가 오랫동안 CPU를 잡아먹는 무거운 연산이 있는 경우에는 setImmediate로 띄워서 다른 더 중요한 I/O 작업이 우선으로 처리되게끔 유도하곤 한다.</p>
+<p>관련 포스트<br />
+<a rel="external" href="https://rclayton.silvrback.com/scheduling-execution-in-node-js">https://rclayton.silvrback.com/scheduling-execution-in-node-js</a></p>
+<br>
+<br>
+<br>
+<h2 id="coejeoghwa-pointeu-event-loop-lag">최적화 포인트: Event Loop Lag</h2>
+<p>Event Loop은 위에서 언급했듯 주기적으로 메인 스레드를 점유하여 대기 중인 작업들을 처리한다.<br />
+이때, 메인 스레드가 다른 작업으로 인해 점유되어 Event Loop가 대기하는 시간이 길어지는 것을 Event Loop Lag이라고 한다.<br />
+I/O가 이벤트루프를 통해 비동기로 돈다고는 했지만, 이벤트루프 자체가 동기 코드에 의해서 블럭될 수 있는 구조로 되어있기 때문에 발생하는 문제다.</p>
+<p>아무튼 Lag이 높다면 특정한 작업이 메인 스레드를 오래 잡고 있다는 것으로, Node.js의 Event Loop 구조를 이상적으로 활용하고 있지 못하다는 뜻이 된다.</p>
+<p><strong>1. Lag 측정법</strong></p>
+<p>Lag 측정용으로 제공되는 Node.js 전용 도구들이 존재한다.<br />
+돈내고 쓸거라면 New Relic, Appdynamics, Dynatrace 같은 옵션이 있고, 오픈소스 버전으로는 이런게 있다.<br />
+<a rel="external" href="https://www.npmjs.com/package/nodejs-dashboard">https://www.npmjs.com/package/nodejs-dashboard</a></p>
+<p><strong>2. Lag 개선</strong></p>
+<p>과도한 Lag을 개선하는 것에는 몇가지 옵션이 존재한다.</p>
+<br>
+<ol>
+<li>
+<p>동기 코드를 최대한 다 비동기 코드로 전환한다.</p>
+</li>
+<li>
+<p>worker_threads API 사용</p>
+</li>
+<li>
+<p>C++로 네이티브 애드온 짜서 박기</p>
+</li>
+<li>
+<p>child_process 사용</p>
+</li>
+</ol>
+<br>
+<br>
+<p>필요와 상황에 따라서 신중하게 선택하면 된다.</p>
+<p>참조<br />
+<a rel="external" href="https://medium.com/nodejsmadeeasy/nodejs-event-loop-lag-5d5928fd03c">https://medium.com/nodejsmadeeasy/nodejs-event-loop-lag-5d5928fd03c</a></p>
+<br>
+<br>
+<br>
+<h2 id="coejeoghwa-pointeu-event-loop-utilization">최적화 포인트: Event Loop Utilization</h2>
+<p>Event Loop Utilization은 Event Loop가 얼마나 바쁘게 작업을 하고 있는지 나타내는 최적화용 수치다.</p>
+<p>일반적으로 0과 1 사이의 값을 갖는데, 1에 가까울 수록 Event Loop가 쉬는 시간 없이 항상 어떤 작업을 처리하고 있다는 것이다.<br />
+만약 서버가 이미 Max RPS에 도달해서 더 이상의 트래픽을 받지 못하고 있는데, Event Loop Utilization이 1보다 낮다면 Loop를 충분히 활용하지 못하고 있다는 것이다.</p>
+<p>Event Loop Utilization는 Node.js에서 제공하는 perf_hooks라는 API를 활용하면 측정할 수 있다.<br />
+<a rel="external" href="https://nodejs.org/api/perf_hooks.html">https://nodejs.org/api/perf_hooks.html</a></p>
+<p>참조<br />
+<a rel="external" href="https://blog.platformatic.dev/the-nodejs-event-loop">https://blog.platformatic.dev/the-nodejs-event-loop</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://nodesource.com/blog/event-loop-utilization-nodejs/">https://nodesource.com/blog/event-loop-utilization-nodejs/</a><br />
+<a rel="external" href="https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick">https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick</a><br />
+<a rel="external" href="https://github.com/libuv/libuv">https://github.com/libuv/libuv</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/63770952/nodejs-setimmediate-function-realtime-usecase-and-example">https://stackoverflow.com/questions/63770952/nodejs-setimmediate-function-realtime-usecase-and-example</a><br />
+<a rel="external" href="https://www.korecmblog.com/blog/node-js-event-loop">https://www.korecmblog.com/blog/node-js-event-loop</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223516497933/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] Failed to inspect image &quot;...&quot; did not resolve to an alias and no unqualified-search...<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223511012222/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>토이 프로젝트 레퍼런스: build your own x<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

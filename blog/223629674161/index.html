@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Optimization] zero-copy | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223629674161/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Optimization] zero-copy">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223629674161/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-10-23T00:00:00+00:00">
+    <meta property="article:tag" content="최적화">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223629674161/">[Optimization] zero-copy</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-23T00:00:00+00:00"><time datetime="2024-10-23T00:00:00+00:00">2024.10.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="607 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/coejeoghwa/">최적화</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223629674161" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>zero-copy는 극단적인 최적화가 필요할때 사용되는 테크닉 중 하나다.<br />
+쉽게 말해서 복사(copy) 행위를 최소화한 채로 최적화를 한다는 말이다.</p>
+<p>zero-copy가 적용되는 방식은 상황에 따라 다를 수 있지만, 통상적으로 I/O 집약적인 부분에서 I/O가 연속적으로 실행될 때 그 사이의 불필요한 복사를 방지하는 것을 위주로 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-pail-ilggo-jeonsonghagi">예제: 파일 읽고 전송하기</h2>
+<p>간단한 예제를 만들고 하나씩 분석해보자.</p>
+<p>그냥 로컬에 있는 파일 하나를 읽어서 그걸 HTTP든 TCP든 전송한다고 치자.<br />
+별로 신경쓰지 않고 프로그램을 구현한다면 보통 이런 식으로 I/O 체인이 발생할 것이다.</p>
+<p><img src="/images/img_6783908373ee2da4.png" alt="" />
+DMA가 커널 메모리에 파일 내용을 적재하면, 그걸 다시 프로세스 메모리로 복사한다.<br />
+그러면 프로그램은 프로세스 메모리에 적재된 파일 내용을 사용할 수 있다. 변수에 로드된 것이다.</p>
+<p>그러면 다시 파일 내용을 전송해야 하는데, 구현하기에 따라서 4번처럼 전송용 메모리 복사가 발생할 수도 있다.<br />
+그 다음에는 네트워크에 전송하기 위해 파일 내용을 다시 커널 메모리에 적재하고, Network Interface를 통해 실제 바깥 세상으로 나가게 된다.</p>
+<p>커널 메모리와 Disk/Network의 상호 통신은 DMA에 의해 이루어지는 복사고, 나머지는 전부 CPU에 의한 복사다.</p>
+<br>
+<br>
+<br>
+<h2 id="a-bulpilyohan-kodeu-sujun-bogsa-jegeo">A. 불필요한 코드 수준 복사 제거</h2>
+<p>일단 그냥 단순히 코드 수준에서 불필요한 복사가 없는지부터 보는게 중요하다.<br />
+당연히 저기서 4번 복사는 없앨 수 있지 않겠는가?</p>
+<p><img src="/images/img_04780c6b8748a74c.png" alt="" />
+이건 언어마다 다를테지만, 방법은 다 대동소이할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="b-direct-memory-access-jeeo">B. Direct Memory Access 제어</h2>
+<p>프로세스에서 I/O는 기본적으로 커널메모리&gt;프로세스메모리 순으로 제어가 된다.<br />
+일단 어떤 것이든 간에 커널메모리를 통해 write/read가 발생하고, 그걸 프로세스 메모리라는 격리된 영역 안에 매핑시키는 것이다.</p>
+<p>하지만 이것도 특수한 syscall들을 사용하면 불필요한 메모리 복사 없이 커널메모리를 바로 사용할 수 있다.<br />
+그 대표적인 방법 중 하나가 memory map이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223479875946">https://blog.naver.com/sssang97/223479875946</a></p>
+<p>이걸 잘 응용한다면, 프로세스 메모리로의 불필요한 복사를 막을 수 있다. 또 2번의 복사를 줄일 수 있는 것이다.</p>
+<p><img src="/images/img_60f5e55e3939387d.png" alt="" />
+다시 이렇게 정리가 된다.<br />
+이제는 총 3번의 복사만으로 파일을 읽어서 전송할 수 있게 되었다.</p>
+<br>
+<br>
+<br>
+<h2 id="c-mode-switching-biyong-jeolyaghagi">C. mode switching 비용 절약하기</h2>
+<p>일반적으로 간과하기 쉬운 부분 중 하나지만, 사실 복사뿐만 아니라 시스템 호출(syscall) 또한 꽤 무거운 작업 중의 하나다.</p>
+<p>Linux에서 write나 read 같은 커널 기능을 호출하게 되면 프로그램은 사용자 모드에서 "커널 모드"로 전환하게 되는데, 이러면 커널 모드로 컨텍스트를 전환하는 도중에 많은 성능 손실이 발생할 수 있기 때문이다.<br />
+이 컨텍스트 스위칭은 레지스터, 스택포인터, 프로그램 카운터의 상태를 건드리고, CPU 캐시도 순간적으로 뻑날 수 있다. 그래서 시스템 호출은 최소화할 수 있다면 최소화하는게 바람직하다.</p>
+<p>그래서 사실 위의 최적화 사례도 잘 뜯어보면</p>
+<p><img src="/images/img_a60171f5cf24435f.png" alt="" /></p>
+<p>컨텍스트 스위칭이 4번이나 일어나는 셈이다.</p>
+<p><img src="/images/img_ed3f88d00806a4e1.png" alt="" />
+mmap으로 읽을때 한번, 다시 돌아올때 한번, 네트워크 쓰기모드로 전환할때 한번, 다시 돌아올때 한번.</p>
+<p>그러면 저걸 한번에 모아서 할 수는 없는걸까?<br />
+있다!</p>
+<p>Linux는 sendfile이라는 syscall을 지원하는데, 이게 바로 파일을 읽어서 네트워크로 쏘는것까지를 하나로 뭉쳐놓은 시스템 명령이다.</p>
+<p><img src="/images/img_a7a73ed154d12289.png" alt="" />
+이러면 이제 mode switching이 2번으로 줄어들었다.</p>
+<br>
+<br>
+<br>
+<h2 id="d-keoneol-memorigan-bogsabiyong-jeolyaghagi">D. 커널 메모리간 복사비용 절약하기</h2>
+<p>근데 저걸 보다보면 또 의구심이 들 수 있다.</p>
+<p><img src="/images/img_a60171f5cf24435f.png" alt="" />
+2번에서 발생하는 비용은 줄일 수 없는걸까? 어쨌든 둘다 실제 메모리인데 말이다.</p>
+<p>이것도 당연히 할 수 있다!<br />
+DMA Gather라는 옵션을 sendfile과 함께 사용하면 된다.</p>
+<br>
+<p><img src="/images/img_e39298337d4299e4.png" alt="" />
+그러면 DMA가 디스크에서 파일을 읽을때, 그거를 Socket 전송을 위한 커널 메모리에 바로 적재하고 전송까지 해줄 수 있다.</p>
+<p>이러면 최종적으로 2번의 mode switching, 한번의 copy만으로 파일-&gt;네트워크 전송을 달성할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="eungyong-sarye">응용 사례</h2>
+<p>Kafka는 zero copy 방법론을 적극적으로 사용한 기반시스템 중 하나다.<br />
+위에서 언급했던 sendfile과 DMA gather 기능을 응용해서 빠르고 부하가 적은 전송 구조를 구현했다.</p>
+<p>그 외에도 Cassandra Streaming, Ceph, Apache Arrow 같은 많은 시스템들이 이를 통한 최적화된 기능을 제공한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.reddit.com/r/rust/comments/18cian3/i_dont_understand_zero_copy/">https://www.reddit.com/r/rust/comments/18cian3/i_dont_understand_zero_copy/</a><br />
+<a rel="external" href="https://medium.com/@kaixin667689/zero-copy-principle-and-implementation-9a5220a62ffd">https://medium.com/@kaixin667689/zero-copy-principle-and-implementation-9a5220a62ffd</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/1860253/what-is-the-overhead-involved-in-a-mode-switch">https://stackoverflow.com/questions/1860253/what-is-the-overhead-involved-in-a-mode-switch</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223632219413/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] 리전간 레이턴시 시각화.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223628230122/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>데이터베이스와 MVCC<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

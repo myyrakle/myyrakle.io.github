@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Nginx] 도메인 붙이기 (with CloudFlare) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222907998036/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Nginx] 도메인 붙이기 (with CloudFlare)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222907998036/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-10-23T00:00:00+00:00">
+    <meta property="article:tag" content="Proxy">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222907998036/">[Nginx] 도메인 붙이기 (with CloudFlare)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-10-23T00:00:00+00:00"><time datetime="2022-10-23T00:00:00+00:00">2022.10.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="179 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/proxy/">Proxy</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222907998036" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>도메인 붙이는 법을 간단히 다뤄보겠다.<br />
+우선 보유한 도메인이 있어야 하는데, 보통 웬만한 사이트들은 1년에 1만원 안팎으로 나온다.</p>
+<p>공짜로 도메인 뿌려주는 <a rel="external" href="https://www.freenom.com/en/index.html?lang=en">https://www.freenom.com/en/index.html?lang=en</a> 이런 사이트도 있긴 하다만, 당연히 돈주고 쓰느니만 못하다.</p>
+<p>개발자라면 하나쯤 갖고있는게 좋지 않겠는가? 없다면 질러보자.</p>
+<p>내 경우에는 cloudflare를 사용했는데, 다른 공급자들도 크게 다를건 없을 것이다. 가비아나 aws나..</p>
+<br>
+<br>
+<br>
+<h2 id="rekodeu-cugahagi">레코드 추가하기</h2>
+<p>도메인 공급자 사이트에 들어가서, 레코드를 추가해준다.</p>
+<p><img src="/images/img_9022b7fc06621073.png" alt="" />
+내 도메인이 myyrakle.com이니, nginx.myyrakle.com이 될 것이다.<br />
+그리고 저기 집어넣은 주소가 현재 로드밸런서가 돌고 있는 공개주소다.</p>
+<p>이렇게 돌고있다.</p>
+<p><img src="/images/img_3e65986d4ecada89.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="injeungseo-balgeubbadgi">인증서 발급받기</h2>
+<p>그다음에는 공급자 사이트에서 SSL용 인증서를 발급받는다.<br />
+이게 있어야 https에 필요한 암호화 작업을 처리할 수 있다.</p>
+<p>cloudflare는 저기서 받을 수 있다.</p>
+<p><img src="/images/img_2ce4cf331e82a3f1.png" alt="" /></p>
+<p>hostname만 적어주고 생성 누르면</p>
+<p><img src="/images/img_033b8260cd49658f.png" alt="" /></p>
+<p>이렇게 뽑아준다.</p>
+<p><img src="/images/img_2a4fc805cdb3df98.png" alt="" />
+한번밖에 못보니까 어디 은밀한 곳에 잘 숨겨둬야 한다.</p>
+<p>저 두 값을 nginx 서버에서도 작성해서 보관해준다.</p>
+<p><img src="/images/img_7612a48a6c2837ab.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="nginx-seoljeong">nginx 설정</h2>
+<p>이제 nginx에서만 처리해주면 된다.<br />
+만약 이렇게 되어있는 소스였다면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>upstream backend</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    least_conn</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    server</span><span style="color: #FAB387;"> 172.31</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">10.219</span><span>:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    server</span><span style="color: #FAB387;"> 172.31</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">15.163</span><span>:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>server</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  listen</span><span style="color: #FAB387;"> 80</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  location</span><span style="color: #94E2D5;"> /</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    proxy_pass http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//backend;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이런식으로 다시 작성해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>upstream backend</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    least_conn</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    server</span><span style="color: #FAB387;"> 172.31</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">10.219</span><span>:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    server</span><span style="color: #FAB387;"> 172.31</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">15.163</span><span>:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>server</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        listen</span><span style="color: #FAB387;"> 80</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        listen [::]:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        server_name nginx</span><span style="color: #94E2D5;">.</span><span>myyrakle</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #9399B2;">;</span><span>  </span></span>
+<span class="giallo-l"><span>        rewrite</span><span style="color: #94E2D5;"> ^</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//nginx.myyrakle.com/$request_uri; // http로 들어오면 https로 강제 전환</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>server</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        listen</span><span style="color: #FAB387;"> 443</span><span> ssl</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        server_name nginx</span><span style="color: #94E2D5;">.</span><span>myyrakle</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 도메인</span></span>
+<span class="giallo-l"><span>        ssl_certificate</span><span style="color: #94E2D5;"> /</span><span>ssl</span><span style="color: #94E2D5;">/</span><span>cert</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 아까 받은 인증서</span></span>
+<span class="giallo-l"><span>        ssl_certificate_key</span><span style="color: #94E2D5;"> /</span><span>ssl</span><span style="color: #94E2D5;">/</span><span>key</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 그리고 인증서 키</span></span>
+<span class="giallo-l"><span>        location</span><span style="color: #94E2D5;"> /</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                proxy_set_header Host $http_host</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                proxy_pass http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//backend;</span></span>
+<span class="giallo-l"><span>                proxy_set_header X</span><span style="color: #94E2D5;">-</span><span>Nginx</span><span style="color: #94E2D5;">-</span><span>Proxy</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                proxy_redirect off</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                proxy_set_header X</span><span style="color: #94E2D5;">-</span><span>Real</span><span style="color: #94E2D5;">-</span><span>IP $remote_addr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                proxy_set_header X</span><span style="color: #94E2D5;">-</span><span>Forwarded</span><span style="color: #94E2D5;">-</span><span>For $proxy_add_x_forwarded_for</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_6d742e2709e726d4.png" alt="" /></p>
+<p>그리고 리로드하면</p>
+<p><img src="/images/img_a4807527940d43af.png" alt="" /></p>
+<p>잘 될 것이다.</p>
+<p><img src="/images/img_5a9c7ffaa8689fd2.png" alt="" /></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222907962694/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Nginx] 로드밸런싱 직접 구성해보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222908425681/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 트랜잭션 격리(isolation) 수준<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

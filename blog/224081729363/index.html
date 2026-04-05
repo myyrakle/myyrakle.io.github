@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] 벡터 검색 (Vector Search) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224081729363/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] 벡터 검색 (Vector Search)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224081729363/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-11-20T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224081729363/">[Clickhouse] 벡터 검색 (Vector Search)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-11-20T00:00:00+00:00"><time datetime="2025-11-20T00:00:00+00:00">2025.11.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="609 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224081729363" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>clickhouse는 자체적으로 벡터 검색을 위한 함수들을 제공한다.<br />
+물론 전문 벡터 DB들처럼 높은 읽기 처리량과 레이턴시 보장을 제공하는건 아니라서, 실시간 서비스용으로는 사용할 수 없다.</p>
+<p>하지만 데이터셋이 엄청나게 크진 않고 기존 데이터셋이 clickhouse에 있다면, 실험-검증용으로 가볍게 쓰기에는 충분하다.</p>
+<p>clickhouse는 인덱스를 쓰지 않는 정확한 벡터 검색과, 인덱스를 사용하는 오차 있는 벡터 검색을 제공한다.</p>
+<br>
+<br>
+<br>
+<h2 id="begteo-yusado-hamsuwa-jeonghwaghan-begteo-geomsaeg">벡터 유사도 함수와 정확한 벡터 검색</h2>
+<p>clickhouse는 함수의 형태로 유사도 연산을 제공한다. 따로 뭘 설치할 필요는 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>select </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">cosineDistance</span><span>(  </span></span>
+<span class="giallo-l"><span>   [</span><span style="color: #FAB387;">0.5736801028251648</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.2516217529773712</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;">0.6825592517852783</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>   [</span><span style="color: #FAB387;">0.5636801028251648</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.3516217529773712</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;">0.16825592517852783</span><span>]</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> cosine</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">dotProduct</span><span>(  </span></span>
+<span class="giallo-l"><span>   [</span><span style="color: #FAB387;">0.5736801028251648</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.2516217529773712</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;">0.6825592517852783</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>   [</span><span style="color: #FAB387;">0.5636801028251648</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.3516217529773712</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;">0.16825592517852783</span><span>]</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> dot</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">L2Distance</span><span>(  </span></span>
+<span class="giallo-l"><span>   [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span>]</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>   [</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 4</span><span>]</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> euclid</span></span></code></pre>
+<p><img src="/images/img_9cf8bf64850c0814.png" alt="" />
+그냥 이렇게 벡터값 2개 넣으면 비교해주는 식이다.</p>
+<p>정확한 벡터 검색을 수행하는 방법도, 저 유사도 함수를 가져다가 정렬에 붙이는 것에서 벗어나지 않는다.<br />
+간단하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create table default</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">vector_test</span><span> (</span></span>
+<span class="giallo-l"><span>  id String</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> uuidv7</span></span>
+<span class="giallo-l"><span>	color String</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> Red</span><span style="color: #9399B2;">,</span><span> Blue</span><span style="color: #9399B2;">,</span><span> Yellow</span><span style="color: #9399B2;">,</span><span> Black</span><span style="color: #9399B2;">,</span><span> White</span><span style="color: #9399B2;">,</span><span> Green</span></span>
+<span class="giallo-l"><span>	vector</span><span style="color: #89B4FA;font-style: italic;"> Array</span><span>(Float)</span><span style="color: #94E2D5;"> --</span><span style="color: #FAB387;"> 256</span><span> vector</span></span>
+<span class="giallo-l"><span>) </span></span>
+<span class="giallo-l"><span>Engine</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>Order by id</span></span></code></pre>
+<p><img src="/images/img_4d96105e058108fa.png" alt="" />
+그냥 적당히 벡터 저장용 컬럼 추가한 다음에</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSERT INTO default</span><span style="color: #94E2D5;">.</span><span>vector_test</span></span>
+<span class="giallo-l"><span>SELECT </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    generateUUIDv7</span><span>()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> id</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    [</span><span style="color: #A6E3A1;">&#39;Red&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Blue&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Yellow&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Black&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;White&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Green&#39;</span><span>][</span><span style="color: #89B4FA;font-style: italic;">toUInt8</span><span>(</span><span style="color: #89B4FA;font-style: italic;">rand</span><span>()</span><span style="color: #94E2D5;"> %</span><span style="color: #FAB387;"> 6</span><span>)</span><span style="color: #94E2D5;"> +</span><span style="color: #FAB387;"> 1</span><span>]</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> color</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    arrayMap</span><span>(x</span><span style="color: #94E2D5;"> -&gt;</span><span style="color: #89B4FA;font-style: italic;"> randNormal</span><span>(</span><span style="color: #FAB387;">0.5</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.3</span><span>)</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> range</span><span>(</span><span style="color: #FAB387;">256</span><span>))</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> vector</span></span>
+<span class="giallo-l"><span>FROM</span><span style="color: #89B4FA;font-style: italic;"> numbers</span><span>(</span><span style="color: #FAB387;">5000000</span><span>)</span></span>
+<span class="giallo-l"><span>SETTINGS max_insert_threads</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">4</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_704cd6ed916b7a24.png" alt="" />
+벡터 값 넣어주고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>select</span><span style="color: #94E2D5;"> *</span><span> </span></span>
+<span class="giallo-l"><span>from 테이블</span></span>
+<span class="giallo-l"><span>where</span><span style="color: #94E2D5;"> ...</span><span> </span></span>
+<span class="giallo-l"><span>order by </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">L2Distance</span><span>(  </span></span>
+<span class="giallo-l"><span>   vector</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>   [</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> ...</span><span>]</span></span>
+<span class="giallo-l"><span>) asc</span></span></code></pre>
+<p>이런 식으로, Distance 결과로 정렬을 걸면 된다. l2은 작을수록 가까우니 asc를 걸고, dot/cosine은 클수록 가까운 것이니 desc를 걸면 되겠다.</p>
+<br>
+<p><img src="/images/img_d3030dff8e3225ec.png" alt="" />
+그럼 이런 식으로 동작한다. 풀스캔 기반이긴 하지만, clickhouse 자체가 워낙 이런 부분에 최적화가 잘 되어있다보니 인덱스 없이 돌아도 어지간한 사이즈에서는 충분히 빠르다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeonghwaghan-geomsaegyi-munje">정확한 검색의 문제</h2>
+<p>저 정확한 검색의 단점은, 데이터 크기가 비대해질수록 성능 부하가 막심해진다는 것이다. 항상 풀스캔해서 모든 데이터에 대해 벡터연산을 수행하기 때문이다.<br />
+그래서 이런 방식은 하드웨어가 아무리 좋더라도 규모 확장에 따라 한계에 부딪히게 된다.</p>
+<p>내 경우에도 100-500만개 정도에서는 수월하게 잘 돌았지만, 2000만개쯤 되니 거의 10초 가까이 걸렸다.</p>
+<br>
+<br>
+<br>
+<h2 id="begteo-indegseuwa-geunsaci-geomsaeg">벡터 인덱스와 근사치 검색</h2>
+<p>다행히 clickhouse는 HNSW 벡터 인덱스 기반의 근사치 검색 또한 제공한다.<br />
+완전히 일치하지는 않지만, 그 대가로 빠르고 효율적인 부분검색을 가능케 하는 것이다.</p>
+<p>이 기능은 안정화되지 않았고, 부족한 부분이 제법 많다.<br />
+현재 25 버전 기준으로도 베타 버전 상태에 있다.</p>
+<p>아무튼, 저 유클리드 벡터에 대해 인덱스를 추가하고 싶다면, 이런 식으로 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SET allow_experimental_vector_similarity_index</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>vector_test</span></span>
+<span class="giallo-l"><span>ADD INDEX vector_index vector TYPE</span><span style="color: #89B4FA;font-style: italic;"> vector_similarity</span><span>(</span><span style="color: #A6E3A1;">&#39;hnsw&#39;</span><span style="color: #9399B2;">,</span><span> L2Distance</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;f64&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>vector_similarity의 매개변수는 DB 버전에 따라 정신없이 계속 바뀐다. 어떤 버전에서는 차원을 받기도 하고 안받기도 하고, 매개변수 숫자도 와리가리한다. 문서를 보고 사용할 수가 없다.</p>
+<p>아무튼 만들고 나면 인덱스가 적용이 될텐데...</p>
+<p><img src="/images/img_e0b03f713e169c92.png" alt="" />
+사실 잘 되진 않는다.</p>
+<p>clickhouse의 vector index가 그렇게 순진한 형태로 구현된 것이 아니기 때문이다.<br />
+이 벡터 인덱스는 다른 인덱스들과 마찬가지로 SKIP Index 기반으로 구현된다. 잘 모른다면 이에 대한 구조 이해가 선행되어야 한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223926075870">https://blog.naver.com/sssang97/223926075870</a><br />
+아무튼 중요한 것은, 벡터 인덱스는 행 단위가 아니라 granule 단위의 애매한 인덱스 단위라는 것이다.<br />
+그래서 이것도 일치하는 블록을 찾아내는 인덱스가 아니라, 일치하지 않는 블록을 버리는 인덱스로 구현된다.</p>
+<p>그렇다보니 이건 항상 효율적이진 않아서 DB가 벡터 인덱스를 선택하지 않을 수도 있다. 기존 방식대로 스캔하는게 유리하다 판단하면 과감하게 버리고 쓰지 않는다.</p>
+<p>EXPLAIN을 걸어보면, 인덱스를 어떻게 타는지를 확인해볼 수 있다.</p>
+<p><img src="/images/img_ddcf47dc186108f7.png" alt="" />
+내 경우에는 스킵한 비율이 높지 않아서 쓰니마니한 구성이 되어버린 상황이긴 하다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajeon-pilteoringgwa-sahu-pilteoring">사전 필터링과 사후 필터링</h2>
+<p>벡터 검색을 수행할때 가장 골치아픈 부분 중 하나가 필터링이다. 벡터 인덱스의 구조상 사전 필터링의 구현에는 상당한 tradeoff가 존재하기 때문이다.</p>
+<p>사후 필터링은 쉽다. 100개 가져오면 그 중에 맞지 않는 필터링 조건에 맞지 않는 20개(예시)를 버리고 80개만 던져주면 되는 것이기 때문이다.</p>
+<p>clickhouse의 필터링 동작은 좀 미묘한 부분이 있다. 명시적이지 않고, 현재 테이블 상태에 따라서 사전/사후 필터링을 자동으로 동작하기 때문이다. (나중에 달라질 수 있음)</p>
+<p>만약 필터링 조건에 사용되는 값이 기본키, 그러니까 파티션 키의 일부라면, 그건 사전 필터링이 될 수 있다.<br />
+필터링으로 거른 다음에 벡터 검색을 수행한다는 것이다.<br />
+반면 필터링 조건에 사용되는 필드가 Skip Index에 걸려있거나, 아무것도 없다면 그건 사후 필터링을 선택한다.</p>
+<p>관련된 플래그는 vector_search_filter_strategy이다. 기본값은 auto라서 자동으로 필터링 방식을 선택한다.</p>
+<p>그래서 기본키로 인덱스를 걸어보면</p>
+<p><img src="/images/img_6d8996dd6659ef61.png" alt="" /></p>
+<p><img src="/images/img_d0b8a1ec6b03bc0c.png" alt="" />
+실제로 999개를 스캔해와서 999개에 대해서만 벡터 검색을 수행한다는 것을 볼 수 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/knowledgebase/vector-search">https://clickhouse.com/docs/knowledgebase/vector-search</a><br />
+<a rel="external" href="https://clickhouse.com/docs/engines/table-engines/mergetree-family/annindexes">https://clickhouse.com/docs/engines/table-engines/mergetree-family/annindexes</a><br />
+<a rel="external" href="https://clickhouse.com/docs/sql-reference/functions/distance-functions">https://clickhouse.com/docs/sql-reference/functions/distance-functions</a><br />
+<a rel="external" href="https://clickhouse.com/docs/operations/settings/settings#vector_search_filter_strategy">https://clickhouse.com/docs/operations/settings/settings#vector_search_filter_strategy</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224082880575/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[LLM] LangGraph<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224080593051/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[LLM] Langchain<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

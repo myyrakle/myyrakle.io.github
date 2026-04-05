@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] API Gateway: Websocket API | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222923857318/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] API Gateway: Websocket API">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222923857318/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-11-09T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222923857318/">[AWS] API Gateway: Websocket API</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-11-09T00:00:00+00:00"><time datetime="2022-11-09T00:00:00+00:00">2022.11.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="591 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222923857318" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_8363e307010565a2.png" alt="" />
+세상이 참 좋아져서 굳이 서버를 구성하지 않고도 서버를 만들 수 있는 시대가 왔다.<br />
+Lambda 같은 서비스들 말이다.</p>
+<p>Lambda의 가장 큰 특징은 무상태성이다. 그냥 그때그때 뭔지모를 머신에서 프로세스를 올리는 것이라, 보통 기존 서버에서 말하는 세션이나 롱 폴링 같은 처리가 어렵다. 웹소켓도 그렇고 말이다.</p>
+<p>하지만 다행히도 Lambda가 아니라 API Gateway를 사용하면 어느정도 구현이 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>이건 일반 API Gateway와 다르게 비용이 부과된다.</p>
+<p><img src="/images/img_e0b8ca09ef6b9017.png" alt="" />
+요청 수와 연결시간 기준이다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-gandanhan-caetingseobeo-guhyeonhaebogi">예제: 간단한 채팅서버 구현해보기</h2>
+<p>WebSocket API를 통해 정말 간단한 기능만 있는 단일 채팅방을 구현해보면서 구조를 익혀보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="lambda-saengseong">Lambda 생성</h2>
+<p>먼저 서버 동작을 구현할 람다 함수들을 생성한다.<br />
+하나만 만들어서 연결해도 되긴 되는데, 나는 웹소켓 접속, 접속종료, 기타동작에 대해서 별도 함수를 다 구현했다.<br />
+그래서 먼저 용도별로 하나씩 깔아줬다.</p>
+<p><img src="/images/img_b25445d1c66e70c3.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="websocket-api-saengseong">WebSocket API 생성</h2>
+<p>이건 API Gateway 콘솔에 가서 만들어야 한다.</p>
+<p><img src="/images/img_0e21cca5e21cc112.png" alt="" /></p>
+<p>이름과 표현식을 지정한다.</p>
+<p><img src="/images/img_a089849ac93469db.png" alt="" />
+라우팅 선택 표현식은, 클라이언트가 데이터에 action 값을 어디로 보낼 것인지를 지정한다.<br />
+action 값은 소켓 연결시에는 connect, 종료시에는 disconnect를 받고, 클라이언트에서 임의로 action 값을 지정했을 때도 그것대로 받는다.</p>
+<p>그냥 기본값으로 줘도 무방하다.</p>
+<br>
+<p><img src="/images/img_2c440a73d2ade69c.png" alt="" />
+그 다음에는 경로를 지정해준다.<br />
+아까 만든 함수를 엮어주면 된다.</p>
+<br>
+<p><img src="/images/img_75882ca700c7ceca.png" alt="" /></p>
+<p>그럼 이런식으로 만들어질 것이다.</p>
+<p><img src="/images/img_93a21729803fb477.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="dynamo-keonegsyeon-teibeul-saengseong">Dynamo 커넥션 테이블 생성</h2>
+<p>그냥 서버를 쓰면 이렇게까지 하지는 않아도 되지만, Lambda는 서버리스이기 때문에 커넥션을 저장하고 관리할 필요가 있다. 커넥션을 들고있어야 다시 브로드캐스트를 해줄 수 있기 때문이다.<br />
+대충 하나 만들어준다.</p>
+<p><img src="/images/img_38230fc2ba6be878.png" alt="" />
+내 채팅서버는 채팅이 휘발성이라 보내줄 커넥션 목록만 저장하고 채팅용 테이블은 두지 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeongyeolsi-deuleooneun-event-gabs">연결시 들어오는 event 값</h2>
+<p>람다함수에 콘솔로그를 찍어본다면</p>
+<p><img src="/images/img_f1e6469c35ce80b5.png" alt="" /></p>
+<p>connect는 이렇게</p>
+<p><img src="/images/img_889aa72bb366c71f.png" alt="" /></p>
+<p>disconnect는 이렇게</p>
+<p><img src="/images/img_0b231d1e7542ef48.png" alt="" /></p>
+<p>기타 default는 이렇게 들어온다.</p>
+<p><img src="/images/img_458618d40557c659.png" alt="" /></p>
+<p>여기서 이제 connect 함수에서는 connectionId를 Dynamo에 저장하고,<br />
+disconnect에서는 connectionId를 제거.<br />
+default에서 send action으로 메세지를 받으면 connectionId를 전체조회해서 모든 접속자들에게 메세지를 뿌려줄 것이다.</p>
+<p>connect 함수 코드는 이렇다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> aws</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> client</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span>DynamoDB</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">DocumentClient</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(event)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> connection_id</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">.</span><span>requestContext</span><span style="color: #94E2D5;">?.</span><span>connectionId</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">put</span><span>(</span><span style="color: #9399B2;">{</span><span> TableName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;chat_connection&#39;</span><span style="color: #9399B2;">,</span><span> Item</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span> connection_id</span><span style="color: #9399B2;"> } }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // TODO implement</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        statusCode</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        body</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #A6E3A1;">&#39;Hello from Lambda!&#39;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>간단하다.<br />
+그냥 넣기만 한다.</p>
+<p>disconnect 함수 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> aws</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> client</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span>DynamoDB</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">DocumentClient</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(event)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> connection_id</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">.</span><span>requestContext</span><span style="color: #94E2D5;">?.</span><span>connectionId</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">delete</span><span>(</span><span style="color: #9399B2;">{</span><span> TableName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;chat_connection&#39;</span><span style="color: #9399B2;">,</span><span> Key</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span> connection_id</span><span style="color: #9399B2;"> } }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // TODO implement</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        statusCode</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        body</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #A6E3A1;">&#39;Hello from Lambda!&#39;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>이것도 간단하다.<br />
+connection이 끊기면 지우기만 한다.</p>
+<p>다음은 default 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> aws</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> client</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span>DynamoDB</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">DocumentClient</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> apiGateway</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ApiGatewayManagementApi</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    endpoint</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;q4w54cu53i.execute-api.ap-northeast-2.amazonaws.com/production&#39;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(event)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> body</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">parse</span><span>(event</span><span style="color: #94E2D5;">.</span><span>body)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    switch</span><span> (body</span><span style="color: #94E2D5;">.</span><span>action)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        case</span><span style="color: #A6E3A1;"> &#39;send&#39;</span><span style="color: #9399B2;">: {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            const</span><span> list</span><span style="color: #94E2D5;"> =</span><span> (</span><span style="color: #CBA6F7;">await</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">scan</span><span>(</span><span style="color: #9399B2;">{</span><span> TableName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;chat_connection&#39;</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>())</span><span style="color: #94E2D5;">.</span><span>Items</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            await</span><span style="color: #F9E2AF;font-style: italic;"> Promise</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">all</span><span>(list</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">map</span><span>(</span><span style="color: #CBA6F7;">async</span><span style="color: #EBA0AC;font-style: italic;"> e</span><span style="color: #CBA6F7;">=&gt;</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                await</span><span> apiGateway</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">postToConnection</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>                    ConnectionId</span><span style="color: #94E2D5;">:</span><span> e</span><span style="color: #94E2D5;">.</span><span>connection_id</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>                    Data</span><span style="color: #94E2D5;">:</span><span> Buffer</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">from</span><span>(</span><span style="color: #FAB387;">JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #9399B2;">{</span><span> action</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;">&#39;receive&#39;</span><span style="color: #9399B2;">,</span><span> name</span><span style="color: #94E2D5;">:</span><span> body</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #9399B2;">,</span><span> message</span><span style="color: #94E2D5;">:</span><span> body</span><span style="color: #94E2D5;">.</span><span>message</span><span style="color: #9399B2;"> }</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">br</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    // TODO implement</span></span>
+<span class="giallo-l"><span>    const response = </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        statusCode: </span><span style="color: #FAB387;">200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        body: </span><span style="color: #FAB387;">JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #A6E3A1;">&#39;Hello from Lambda!&#39;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>;</span></span>
+<span class="giallo-l"><span>    return response;</span></span>
+<span class="giallo-l"><span>};</span></span></code></pre>
+<p>send action을 날리면 저장되어있던 connectionId를 전부 읽어서 다시 쏴준다.</p>
+<br>
+<br>
+<br>
+<h2 id="peuronteuendeu-react">프론트엔드 (React)</h2>
+<p>프론트엔드 코드는 이런식으로 작성했다.<br />
+여기서는 표준 웹소켓을썼는데,  socketio 웹소켓모드를 사용해도 무방할 것이다.</p>
+<p><img src="/images/img_9419047b0931b416.png" alt="" />
+open이 connect 성공, close가 disconnect에 트리거된다.<br />
+그리고 나머지 임의의 메세지들은 전부 message 이벤트로 들어온다.<br />
+여기서는 메세지가 오면 채팅 리스트에 이어붙여서 보여주게 했다.</p>
+<p>그리고 전송을 누르면 메세지를 날리도록 했다.</p>
+<p><img src="/images/img_53ebed22978309f6.png" alt="" /></p>
+<p>전체 코드는 github에서 확인할 수 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/aws-serverless-chat">https://github.com/myyrakle/aws-serverless-chat</a><br />
+그대로 돌려봐도 된다.</p>
+<p>이렇게 해서 실행해보면</p>
+<p><img src="/images/img_3b656da9baa15a20.png" alt="" />
+connectionId도 잘 쌓일 것이고</p>
+<br>
+<p><img src="/images/img_e9e510a3bd278091.png" alt="" /></p>
+<p><img src="/images/img_d03acb6c941eca3b.png" alt="" />
+잘 돌아갈 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="yuyisahang">유의사항</h2>
+<p>나는 간단한 테스트와 저렴한 비용을 위해 DynamoDB를 썼지만, 실제로 활발한 채팅 서버 등을 운영하려면 Redis를 쓰는 편이 더욱 좋을 것이다.</p>
+<p>그리고 WebSocket API도 제약사항이 제법 있다.<br />
+10분 동안 요청이 없는 커넥션은 강제로 닫고, 요청을 열심시 쏘고 있어도 2시간이 넘으면 강제로 닫아버린다.<br />
+이거 말고도 메세지 크기에도 제한이 있고.. 이것저것 많다.<br />
+자세한건 해당 문서를 참조해봄이 좋겠다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html">https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html</a></p>
+<p>이런저런 제약사항이나 불편한 점들이 있긴 하지만, 그걸 크게 신경쓸 정도가 아니라면 완전관리형이란 점에서 쓸만한 이유는 충분히 있는 것 같다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/apigateway/latest/developerguide/apigateway-websocket-api.html">https://docs.aws.amazon.com/ko_kr/apigateway/latest/developerguide/apigateway-websocket-api.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/apigateway/latest/developerguide/apigateway-websocket-api-overview.html">https://docs.aws.amazon.com/ko_kr/apigateway/latest/developerguide/apigateway-websocket-api-overview.html</a><br />
+<a rel="external" href="https://github.com/socketio/socket.io-client/issues/1370">https://github.com/socketio/socket.io-client/issues/1370</a><br />
+<a rel="external" href="https://lacti.github.io/2019/07/07/websocket-api/">https://lacti.github.io/2019/07/07/websocket-api/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html">https://docs.aws.amazon.com/apigateway/latest/developerguide/limits.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222929371593/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Deno 1.28: npm 모듈 호환성 제공<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222923127752/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>이슈노트 #6: 계정 탈취 이슈<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

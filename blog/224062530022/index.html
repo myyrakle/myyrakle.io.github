@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[CassandraDB] CDC (Change Data Capture) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224062530022/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[CassandraDB] CDC (Change Data Capture)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224062530022/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-11-03T00:00:00+00:00">
+    <meta property="article:tag" content="CassandraDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224062530022/">[CassandraDB] CDC (Change Data Capture)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-11-03T00:00:00+00:00"><time datetime="2025-11-03T00:00:00+00:00">2025.11.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="228 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/cassandradb/">CassandraDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224062530022" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>CassandraDB는 자체적으로 변경 데이터 캡쳐(CDC, Change Data Capture) 기능을 제공한다.<br />
+이를 통해 CassandraDB의 데이터를 소스로 삼아, 외부 시스템에 데이터를 동기화할 수 있다.</p>
+<p>근데 다른 주요 DB들의 CDC 기능에 비하면 매우 성의없고 저열한 형태로 제공된다.<br />
+API가 뭐 따로 있는게 아니고, 로컬 디스크에 있는 커밋로그(WAL)을 직접 읽어야 하기 때문이다.<br />
+이런 면에서는 ScyllaDB가 훨씬 뛰어나다.</p>
+<br>
+<br>
+<br>
+<h2 id="cdc-hwalseonghwahagi">CDC 활성화하기</h2>
+<p>먼저 DB 수준에서 활성화를 해줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>cassandra</span><span style="color: #94E2D5;">/</span><span>cassandra</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"><span>sudo systemctl restart cassandradb</span></span></code></pre>
+<p><img src="/images/img_e884ee050ebfd26f.png" alt="" />
+기본값은 비활성화다.</p>
+<p>cassandradb를 재부팅해보면, 데이터 디렉토리에 cdc_raw라는 폴더가 생긴다.</p>
+<p><img src="/images/img_172bb178aa7fc794.png" alt="" />
+저기에 cdc 읽을 것이 들어온다.</p>
+<p>그리고 개별 CDC 옵션은 테이블 수준에서 관리된다.<br />
+테이블을 만들때 cdc 플래그를 주거나</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE test_space</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">foo</span><span> (id int</span><span style="color: #9399B2;">,</span><span> value text</span><span style="color: #9399B2;">,</span><span> PRIMARY</span><span style="color: #89B4FA;font-style: italic;"> KEY</span><span>(id)) WITH cdc</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>나중에 활성화할 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER TABLE foo WITH cdc</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그러면 다음과 같이 적용이 된다.</p>
+<p><img src="/images/img_e7dcb5d236ec45be.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="eungyong">응용...</h2>
+<p>중요한건, 이게 하는 역할은 그냥 commitlog가 읽히기 전까지 지워지지 않게 하는 정도라는 것이다.<br />
+직접 다 해야 한다. 그래서 CDC를 읽는 프로그램은 반드시 CassandraDB가 있는 노드에 같이 올라가야 한다.</p>
+<p>커밋로그는 아까 언급했던 cdc_raw 경로에 있고</p>
+<p><img src="/images/img_62023f517211f4ac.png" alt="" /></p>
+<p><img src="/images/img_89109d37c14d75ea.png" alt="" />
+저걸 파싱해서 쓰면 되는 것이다. 그리고 다 처리했다면 직접 지우면 된다.<br />
+근데 자체 포맷이라 자바 아니면 호환되는 라이브러리 찾기도 쉽지 않다.</p>
+<p>그래서 편하게 쓰려면 그냥 debezium 처럼 대신 구현해준 것을 갖다쓰는 편이 낫다.<br />
+<a rel="external" href="https://github.com/debezium/debezium-connector-cassandra">https://github.com/debezium/debezium-connector-cassandra</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://cassandra.apache.org/doc/latest/cassandra/managing/operating/cdc.html">https://cassandra.apache.org/doc/latest/cassandra/managing/operating/cdc.html</a><br />
+<a rel="external" href="https://debezium.io/documentation/reference/stable/connectors/cassandra.html">https://debezium.io/documentation/reference/stable/connectors/cassandra.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224066277914/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] INSERT 처리량 최적화해보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224061538134/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>난수(Random). 진짜 난수와 가짜 난수<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

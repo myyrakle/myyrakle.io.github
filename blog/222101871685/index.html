@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[SQL] 트랜잭션 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222101871685/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[SQL] 트랜잭션">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222101871685/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2020-09-28T00:00:00+00:00">
+    <meta property="article:tag" content="SQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222101871685/">[SQL] 트랜잭션</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-09-28T00:00:00+00:00"><time datetime="2020-09-28T00:00:00+00:00">2020.09.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="275 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/sql/">SQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222101871685" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>트랜잭션은 DB의 핵심 기능 중 하나다.</p>
+<p>보통 데이터베이스의 본질을 이야기할 때 거론되는 것 중 하나가 원자성이다.<br />
+일정 실행 단위를 묶어서, 그게 하나의 기본 단위로 동작할 수 있어야 한다는 것이다.</p>
+<p>한번 예를 들어보겠다.<br />
+소비자를 나타내는 A 테이블이 있고, 판매자를 나타내는 B 테이블이 있다.<br />
+만약에 거래를 해서 A가 B에게서 물건을 구매한다면, 일반적으로는 A는 돈이 삭감되고 나서 물품이 지급될 것이고, B는 돈이 추가되고 물품이 줄어들 것이다. 이 거래는 하나의 완성된 작업이어야 한다.<br />
+만약 중간에 오류가 나서 A의 돈만 줄어들고 물품이 들어오지 않는다면 이는 심각한 문제가 된다.</p>
+<p>그래서 바람직한 로직이라면 오류 발생 시 아무것도 수정되지 않아야 한다.</p>
+<p>이를 간단히 수행할 수 있게 해주는 것이 바로 트랜잭션이란 기능이다.<br />
+여러개의 쿼리를 하나의 트랜잭션으로 묶어서, 완전 성공, 아니면 완전 실패의 둘로만 결과를 구분할 수 있는 것이다.</p>
+<p>한번 돌려보면서 살펴보자.<br />
+테스트 환경은 PostgreSQL이나, 다른 RDB들도 별 차이는 없을 것이다.</p>
+<p>대충 id값과 텍스트값을 가지는 테이블이 있다.</p>
+<p><img src="/images/img_3d71ea8dfa98d835.png" alt="" /></p>
+<p><img src="/images/img_aae90225dad43cec.png" alt="" /></p>
+<p>트랜잭션의 시작은 begin transaction으로 수행할 수 있다.<br />
+이제부터 이 연결에서 실행되는 쿼리들은 전부 이 트랜잭션 안에 '갇힌다.'</p>
+<p><img src="/images/img_a6eca2c83f035ba2.png" alt="" /></p>
+<p>로우 하나를 삭제해봤다.</p>
+<p><img src="/images/img_6a9b120d870c7c3a.png" alt="" />
+정상적으로 삭제했다고 뜨고,</p>
+<p>select해봐도 잘 삭제된 것을 확인할 수 있다.</p>
+<p><img src="/images/img_233eb4c9b3598aea.png" alt="" /></p>
+<p>이 상태에서 저 연결 말고, 터미널 하나 더 열어서 접속하고 똑같이 select를 해봤다.</p>
+<p><img src="/images/img_2b073147385af3da.png" alt="" />
+음? 바뀌지 않은 것을 확인할 수 있다.<br />
+방금 수행한 그 작업은 트랜잭션 안에서 실행됐기 때문에, 그 안에서만 갇혀있고 실제로는 적용되지 않았기 때문이다.</p>
+<p>다시 돌아가서, rollback을 쳐봤다.</p>
+<p><img src="/images/img_600e785f6148b133.png" alt="" />
+그럼 삭제했던게 다시 원복된다.<br />
+보통 뭐 하나라도 오류가 발생하거나 잘못된 게 있으면 항상 롤백으로 트랜잭션 내의 작업을 전부 취소해버린다.</p>
+<p>실행한 내용들에 아무 문제도 없다면, 반대로 그냥 commit 명령만 사용하면 된다.<br />
+이건 트랜잭션에서 수행한 내용들을 전부 실제 DB에 다 적용한다.</p>
+<p><img src="/images/img_67d4491a35ef7d78.png" alt="" /></p>
+<p>생각보다 간단하다.<br />
+begin transaction.<br />
+commit<br />
+rollback<br />
+이 셋만 알면 된다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222108356627/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 재귀 쿼리 (계층형 쿼리)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222099160064/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] 코그니토: 회원가입<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

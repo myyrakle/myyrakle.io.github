@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Cabbage Collector - 직접 GC 구현해보기 (with Rust) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223862027590/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Cabbage Collector - 직접 GC 구현해보기 (with Rust)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223862027590/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-05-11T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223862027590/">Cabbage Collector - 직접 GC 구현해보기 (with Rust)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-05-11T00:00:00+00:00"><time datetime="2025-05-11T00:00:00+00:00">2025.05.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="540 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223862027590" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_9d41afd1a2250b8e.png" alt="" />
+한번 간단하게나마 GC 시스템을 구현해봤다.<br />
+구현 알고리즘은 순진하고 초기적인 형태의 Mark and Sweep다.</p>
+<p><a rel="external" href="https://github.com/myyrakle/cabbage_collector/tree/v0.1.0">https://github.com/myyrakle/cabbage_collector/tree/v0.1.0</a></p>
+<br>
+<br>
+<br>
+<h2 id="jeonje">전제</h2>
+<p>GC도 제대로 만들려면 끝도 없기 때문에, 로직과 코드의 단순성을 위해 최소한의 부분만 구현해본다.<br />
+그래서</p>
+<ol>
+<li>메모리 풀링과 컴팩션이 없고</li>
+<li>싱글스레드 환경만 고려했으며</li>
+<li>GC가 동시적으로 실행되지 않고</li>
+<li>GC를 수동으로 트리거하며</li>
+<li>부모-자식 간의 연결도 수동으로 한다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="naebu-gaegce-gujo-seolgye">내부 객체 구조 설계</h2>
+<p>먼저 실제 객체 단위를 정의해보겠다.</p>
+<p><img src="/images/img_2ba45047c47be52b.png" alt="" />
+data_ptr는 동적할당된 포인터의 실제 주소 정수값이 들어갈 필드고, layout은 객체의 할당과 해제를 통제하기 위한 보조 값이다.<br />
+marked가 마크앤스윕 처리를 위한 마크 필드고, is_root는 root인 경우를 식별하기 위해 둔 상태값이다.<br />
+그리고 각 객체가 가진 자식 객체 참조를 관리하기 위해서 child_objects 필드를 추가했다. 저걸 통해서 쭉쭉 내려가면서 실제 참조 여부를 검증하려 한다.</p>
+<p>객체의 할당 부분은 적당히 구현했다.</p>
+<p><img src="/images/img_ff665ed1ecca2325.png" alt="" />
+Box로 객체를 생성한 다음에 into_raw로 강제로 누수시켰다.<br />
+저래야 자동으로 할당이 해제되지 않고 raw 포인터로 leak돼서 내 마음대로 통제할 수 있다.</p>
+<p>이 시점부터는 통제할 수 없는 폭주기관차가 되기 때문에, 잘 처리해야 한다.<br />
+의도적으로 여기에서는 raw 포인터를 주로 사용했다. 안전한 형태로도 구현하지 못할 것은 없지만, 오히려 코드가 더 복잡해지고, 성능 손실도 약간 존재할 수 있어서 배제했다.</p>
+<p>할당 해제 부분은 특별한 부분은 없다.</p>
+<p><img src="/images/img_0f57bfd62e3d457f.png" alt="" />
+지금은 없는데 추후에는 객체에 정의된 drop 함수도 호출할 수 있게 하려고 한다.<br />
+물론 이 시점에는 객체에 대한 타입 정보가 없어서 구현하기가 좀 애매하긴 하다만...<br />
+생각을 좀 해봐야 할 것 같다.</p>
+<p>그리고, 객체의 전반적인 관리를 위한 객체 풀이 있어야 한다. 그러려면 전역변수는 거의 필수다.<br />
+전역변수의 남발은 Rust의 경영철학에는 잘 맞지 않는 부분이지만, 어쩔 수 없다.</p>
+<p><img src="/images/img_4963e7be30ea348d.png" alt="" /></p>
+<p><img src="/images/img_182cb1366580d081.png" alt="" />
+실제 GC 탐색을 위한 root 목록 값이 있고, 그냥 전체 객체 목록을 관리하고 할당해제하기 위한 all_objects 필드도 따로 뒀다.<br />
+root값은 양쪽 필드에 다 포함될 수 있고, non-root 값들은 all_objects에만 포함될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="silsayong-gaegce-taib-seolgye">실사용 객체 타입 설계</h2>
+<p>내부 객체와는 별도로 사용자 측면에서 사용할 일종의 스마트 포인터도 필요하다.<br />
+이건 값이 clone으로 얕은 복사가 될 경우 같은 객체를 가리켜야 한다.</p>
+<p><img src="/images/img_a8c23586d0e0461d.png" alt="" />
+필드 자체는 단순하게 잡았다.<br />
+유의할 점은, 여기다가 지속되어야 하는 값을 넣어서는 안된다는 것이다. 이 래퍼 객체의 생사와 별개로 실제 객체의 수명을 우리가 직접 관리해야하기 때문이다.</p>
+<p>여기다 의미있는걸 넣으면 변수가 스코프를 벗어나자마자 할당해제돼서 끔찍한 UB가 발생할 것이다.</p>
+<p>그리고 조금 난감한 문제가 하나 있는데, root와 root가 아닌 것을 구분하거나 객체 아래에 다른 객체가 소속되는 것을 라이브러리 설계 수준에서 감지하기 좀 어렵다는 것이다.<br />
+언어 수준에서는 이런걸 구분하는게 어렵지 않다만, 그냥 구조체나 함수 수준에서는 이런걸 알 수가 없다.</p>
+<p>그래서 여기서는 그냥 단순화해서 수동으로 생성하고 부모-자식도 명시하도록만 해뒀다.</p>
+<p><img src="/images/img_d41c41996af683f0.png" alt="" /></p>
+<p><img src="/images/img_e04701b2e0ff9c27.png" alt="" /></p>
+<p><img src="/images/img_d8b11c9d117b5f81.png" alt="" />
+추후 괜찮은 아이디어가 생긴다면 적용해볼 생각은 있다.</p>
+<p>또 중요한게 Box가 해제될때의 동작이다.</p>
+<p><img src="/images/img_9409a6393392c4e9.png" alt="" />
+root가 사라질때에 한해서는 root 목록에서 그걸 제거해야한다.<br />
+그래야 미사용객체를 gc 스텝에서 식별할 수 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gc-guhyeon">GC 구현</h2>
+<p>자, 이제 진짜 gc를 구현해보자.<br />
+사실 앞서 했던 밑작업에 비해서는 더 간단한 편이다.</p>
+<p><img src="/images/img_36d2dbf8fa60ae69.png" alt="" />
+스텝은 총 3개로 구성된다.</p>
+<br>
+<p><img src="/images/img_f74a64706ea003b1.png" alt="" />
+초기화하고</p>
+<br>
+<p><img src="/images/img_9eb02315f7e37b84.png" alt="" />
+root 기준으로 실제로 참조되는 것만 마크한 다음에</p>
+<br>
+<p><img src="/images/img_18d3d85b2db583fb.png" alt="" />
+날려버리면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="teseuteu">테스트</h2>
+<p>그래서 사용할 때는 이런 식으로 작성할 수 있다.</p>
+<p><img src="/images/img_a673624f93503a0a.png" alt="" /></p>
+<p><img src="/images/img_707faac312b28a55.png" alt="" />
+스코프가 해제된 이후에 GC를 트리거하면 알아서 정리해주고</p>
+<br>
+<p><img src="/images/img_57eed805b3407d9a.png" alt="" /></p>
+<p><img src="/images/img_af27e505d4c9b471.png" alt="" />
+상호참조가 걸린 경우에도 잘 풀어준다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/myyrakle/cabbage_collector">https://github.com/myyrakle/cabbage_collector</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223862791822/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>SSL 환경의 상태.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223862409123/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>모니터링 지표 용어<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

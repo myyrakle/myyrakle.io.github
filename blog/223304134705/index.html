@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Concurrency: sync.Pool | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223304134705/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Concurrency: sync.Pool">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223304134705/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-12-27T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223304134705/">[Go] Concurrency: sync.Pool</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-12-27T00:00:00+00:00"><time datetime="2023-12-27T00:00:00+00:00">2023.12.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="438 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223304134705" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>sync.Pool은 동기화 패키지에 있지만, 실질적인 사용처는 사실 동기화보단 GC 튜닝에 있다.<br />
+sync 패키지 기능들이 대부분 그렇지만, 멀티 고루틴에서 사용해도 thread-safe한 기능 단위다.</p>
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223232328524">https://blog.naver.com/sssang97/223232328524</a></p>
+<p>Go에서 항상 최적화의 쟁점이 되는 것이 GC다. 그리고 잦고 무거운 할당은 더 느린 GC의 원인이 된다.<br />
+sync.Pool은 반복적이고 무거운 초기화 작업이 반복될 때, 할당 최소화에 유용한 기능이다.</p>
+<p>대략적인 사용법은 이렇다.<br />
+풀에서 초기값을 설정할 New 함수를 오버라이딩해서 정의, 공유가 가능한 위치에 변수로 깔아둔다.</p>
+<p><img src="/images/img_217b037ebc8ac10f.png" alt="" />
+Pool에서 객체를 가져올 때는 Get 함수로 가져온다. 이때 풀에 가용 객체가 없다면 정의한 New 함수로 객체를 초기화해서 반환해준다.<br />
+그리고 객체를 다 썼다면 다시 Pool에 반납해준다.</p>
+<p>기본적인 사용 원리는 이정도다.<br />
+근데 이걸 쓰면 대체 뭐가 좋은걸까?</p>
+<p>이건 사실 가벼운 단일 태스크의 작업에서는 큰 효용을 보이지는 못한다.<br />
+이게 장점을 드러내는 환경은 고루틴이 동시에 돌면서 같은 pool에서 비슷한 객체를 꺼내쓸때다.<br />
+코드로 간결하게 표현한다면 이런 느낌이다.</p>
+<p><img src="/images/img_41b0fa1b9b8ddc9a.png" alt="" />
+위와 같이 풀을 통해 꺼내쓰면 모든 고루틴마다 각각의 객체를 전부 생성할 필요가 없다.<br />
+풀에 사용할 수 있는 객체가 있다면 바로 꺼내쓸 수 있기 때문이다. 일종의 캐시의 개념이라 보면 된다.</p>
+<p>그래서 각각의 초기화 작업이 꽤 무겁다면 꽤 괜찮은 성능 개선점이 될 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="poolyi-gujowa-weonri">Pool의 구조와 원리</h2>
+<p>pool을 잘 활용하려면 GC와의 관계성에 대해서도 어느정도 이해를 갖고 있어야 한다. 그냥 쓴다고 무조건 빨라지는게 아니기 때문이다.</p>
+<p>Pool 구조체를 까보면 이런 구조를 갖고 있다.</p>
+<p><img src="/images/img_89e20cabed061993.png" alt="" />
+Pool은 크게 2개의 영역으로 구성된다.<br />
+하나는 local 풀, 하나는 victim 풀이다.</p>
+<p>일반적으로 오브젝트를 생성해서 초기화할때, 오브젝트들은 로컬 풀에 적재된다. 여기까지는 문제가 없다.</p>
+<p>golang 런타임은 sync.Pool에 대해 아래 알고리즘을 통해 지속적으로 자원을 통제한다.</p>
+<ol>
+<li>GC 타임이 돌면 go 런타임은 내부적으로 local 풀을 victim 풀로 이동시킨다. (이때 기존 victim 풀은 제거된다.)</li>
+<li>GC 타임이 한번 더 돌면 local 풀을 또 victim 풀로 밀어내고, 기존 victim 풀을 제거하는 것을 반복한다.<br />
+출처 <a rel="external" href="https://www.sobyte.net/post/2022-03/think-in-sync-pool/">https://www.sobyte.net/post/2022-03/think-in-sync-pool/</a><br />
+어차피 sync.Pool은 오브젝트가 없으면 새로 생성을 해서 주기 때문에 이 때문에 발생하는 기능적인 결함은 별로 없다. 성능적인 사이드이펙트만을 발생시킬 뿐이다.</li>
+</ol>
+<p>근데 왜 굳이 지우는걸까? 이유는 간단하다.<br />
+초기화만 무한정 하다보면 오브젝트가 끝없이 적재되고 메모리가 미친듯이 쌓일 수 있기 때문이다. 그래서 GC를 자체적으로 적용하는 것이다.</p>
+<p>아무튼 여기서 중요한 점은, GC 타임이 두면 돌면 기존에 할당된 오브젝트들은 증발한다는 점이다.<br />
+그래서 실제로 성능이 향상되는 정도는 그 빈도에 얼마나 영향을 받는지에 따라 다르다.</p>
+<p>이 기법은 CPU 캐시 구조에서 곧잘 사용하는 Victim cache 알고리즘에서 유래했다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://medium.com/swlh/go-the-idea-behind-sync-pool-32da5089df72">https://medium.com/swlh/go-the-idea-behind-sync-pool-32da5089df72</a><br />
+<a rel="external" href="https://pkg.go.dev/sync#Pool">https://pkg.go.dev/sync#Pool</a><br />
+<a rel="external" href="https://www.sobyte.net/post/2022-03/think-in-sync-pool/">https://www.sobyte.net/post/2022-03/think-in-sync-pool/</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Victim_cache">https://en.wikipedia.org/wiki/Victim_cache</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223305758945/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] 디버그 환경 구성 (VSCode)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223302343599/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] race detector<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

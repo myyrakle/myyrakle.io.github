@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Argo Rollouts: Blue Green Deploy | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223134448282/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Argo Rollouts: Blue Green Deploy">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223134448282/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-06-21T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223134448282/">[k8s] Argo Rollouts: Blue Green Deploy</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-06-21T00:00:00+00:00"><time datetime="2023-06-21T00:00:00+00:00">2023.06.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="418 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223134448282" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223134344138">https://blog.naver.com/sssang97/223134344138</a></p>
+<p>Argo Rollouts을 사용해서 Blue-Green 배포를 구성하는 방법을 다뤄보겠다.</p>
+<p>우선 서비스가 2개 있어야 한다.<br />
+하나는 프로덕션 배포용 엔드포인트고, 하나는 새 버전을 배포할때 테스트할 용도의 엔드포인트다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Service</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> prod</span><span style="color: #94E2D5;">-</span><span>service</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #9399B2;">:</span><span> bg</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>      port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>  type</span><span style="color: #9399B2;">:</span><span> LoadBalancer</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Service</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>service</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #9399B2;">:</span><span> bg</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>      port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>  type</span><span style="color: #9399B2;">:</span><span> LoadBalancer</span></span></code></pre>
+<p>둘다 일단 하나의 앱(bg-server)만 가리키게 해놨다.</p>
+<p>그리고 Rollout을 사용해서 리소스를 정의한다.<br />
+Rollout는 Deployment와 유사한 형태의 커스텀 컨트롤러다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> argoproj</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1alpha1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Rollout </span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> bg</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>  revisionHistoryLimit</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 2</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> bg</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        app</span><span style="color: #9399B2;">:</span><span> bg</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> bg</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>        image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>        imagePullPolicy</span><span style="color: #9399B2;">:</span><span> Always</span></span>
+<span class="giallo-l"><span>        ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> containerPort</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>  strategy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    blueGreen</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>      activeService</span><span style="color: #9399B2;">:</span><span> prod</span><span style="color: #94E2D5;">-</span><span>service</span></span>
+<span class="giallo-l"><span>      previewService</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>service</span></span>
+<span class="giallo-l"><span>      autoPromotionEnabled</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span></code></pre>
+<p>blueGreen 필드에 궁금해할만한 대부분의 옵션이 들어있다.<br />
+방금 정의한 2개의 서비스를 연결하고 autoPromotionEnabled를 false로 했다.<br />
+autoPromotionEnabled는 새 버전이 문제없이 떴을때 blue-green 스위칭을 자동으로 할 것인지에 대한 것이다.</p>
+<p>자동으로 하게 해도 좋지만, 일단은 테스트를 위해 수동으로 하게 했다.</p>
+<p>이미지 myyrakle/node-server-for-test:1는 내가 테스트용으로 말아둔 간단한 서버다.<br />
+이제 저걸 myyrakle/node-server-for-test:2로 올리면서 배포를 수행해볼 것이다.</p>
+<p>일단 저 초기 구성대로 리소스들을 게시한다.<br />
+그럼 Rollout을 기반으로 레플리카 Pod가 3개 뜰 것이고</p>
+<p><img src="/images/img_14f2eea9bf8f8cf4.png" alt="" /></p>
+<p>서비스로 실행도 잘 될 것이다.</p>
+<p><img src="/images/img_b0b80305aef8cd40.png" alt="" /></p>
+<p><img src="/images/img_60f859407654c83b.png" alt="" />
+배포를 진행하지 않는 상태에서는 둘다 같은 Pod 그룹을 가리킨다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl argo rollouts list rollout</span></span></code></pre>
+<p><img src="/images/img_530fc96edc58d6a3.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="blue-green-baepo-silhaeng">Blue-Green 배포 실행</h2>
+<p>ArcoCD로 gitops 기반을 구성해뒀다면, 그냥 이미지 버전만 수정하면 된다.</p>
+<p><img src="/images/img_59bec2cd0693e1c8.png" alt="" /></p>
+<p>그러면 가동을 시작해서</p>
+<p><img src="/images/img_b02912f0ca23ca62.png" alt="" /></p>
+<p>추가 파드를 띄우고</p>
+<p><img src="/images/img_bfab41d6652d94b0.png" alt="" /></p>
+<p><img src="/images/img_1f6a680cf639c6c7.png" alt="" /></p>
+<p>test용 서비스에 새 배포 버전이 라우팅될 것이다.</p>
+<p><img src="/images/img_6c7f9f3128026fb1.png" alt="" /></p>
+<p>그리고 Pod 프로비저닝이 완료되면 정지 상태가 된다.</p>
+<p><img src="/images/img_c851380430b3d8cb.png" alt="" />
+근데 이건 autoPromotionEnabled를 꺼놔서 그렇고, 켜놨다면 자동으로 스위칭을 수행할 것이다.<br />
+지금은 저걸 수동으로 스위칭해보겠다.</p>
+<p>다음과 같이 CLI를 사용해서 변경을 트리거하면 된다.</p>
+<p><img src="/images/img_8cc65d13567a058a.png" alt="" /></p>
+<p>그러면 프로덕션 서비스도 스위칭이 될 것이고</p>
+<p><img src="/images/img_a16a9d3c43cd2832.png" alt="" /></p>
+<p>기존 버전도 내려가고</p>
+<p><img src="/images/img_686bb4347a87e3a2.png" alt="" /></p>
+<p>배포가 끝날 것이다.</p>
+<p><img src="/images/img_cfcb862f0e8632bc.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="mujungdan-baepo">무중단 배포</h2>
+<p>그런데 저대로 autoPromotionEnabled만 켜기에는 구성에 문제가 좀 있다.<br />
+따로 뭘 설정하지 않았기 때문에 Pod들만 다 뜨면 바로 갈아버린다는 것인데, Pod가 뜨는 것과 그 안에서 실제 서버가 다 뜨는지는 별개이기 때문이다...</p>
+<p>가장 간단하게 적용할 수 있는 방법은 autoPromotionSeconds으로 스위칭을 수행하기 전에 대기시간을 넣어주는 것이다.<br />
+지금 내 서버가 뜨는 시간이 어지간해서는 10초 안에 다 끝날 것 같다. 하면 이렇게 10초를 넣어주면 된다.</p>
+<p><img src="/images/img_3a9e6e8f47fc5701.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="health-check">Health Check</h2>
+<p>하지만 저것만으로는 부족할 수 있다.<br />
+새로 뜬 버전이 항상 완벽하게 실행된다는 보장이 있는가? 갑자기 세팅이 꼬여서 500이 뜰 수도 있지 않은가?</p>
+<p>이 때문에, 보통 스위칭을 하기 전에 새 버전에 대한 Health Check로 검증을 수행하는 것은 꽤나 기본적인 작업이다.</p>
+<p>이를 위해서는 먼저 AnalysisTemplate으로 검증을 위한 정의를 만들어줘야 한다.<br />
+보통은 프로메테우스와 연계해서 상태확인을 하는 편이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> argoproj</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1alpha1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> AnalysisTemplate</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> success</span><span style="color: #94E2D5;">-</span><span>rate</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  args</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> service</span><span style="color: #94E2D5;">-</span><span>name</span></span>
+<span class="giallo-l"><span>  metrics</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> success</span><span style="color: #94E2D5;">-</span><span>rate</span></span>
+<span class="giallo-l"><span>    interval</span><span style="color: #9399B2;">:</span><span> 5m</span></span>
+<span class="giallo-l"><span>    # NOTE</span><span style="color: #9399B2;">:</span><span> prometheus queries</span><span style="color: #CBA6F7;"> return</span><span> results</span><span style="color: #CBA6F7;"> in</span><span> the form</span><span style="color: #CBA6F7;"> of</span><span> a vector</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>    # So it is common to access the index</span><span style="color: #FAB387;"> 0</span><span style="color: #CBA6F7;"> of</span><span> the returned array to obtain the value</span></span>
+<span class="giallo-l"><span>    successCondition</span><span style="color: #9399B2;">:</span><span> result[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #94E2D5;"> &gt;=</span><span style="color: #FAB387;"> 0.95</span></span>
+<span class="giallo-l"><span>    failureLimit</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>    provider</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      prometheus</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        address</span><span style="color: #9399B2;">:</span><span> http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//prometheus.example.com:9090</span></span>
+<span class="giallo-l"><span>        query</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">          sum</span><span>(</span><span style="color: #89B4FA;font-style: italic;">irate</span><span>(</span></span>
+<span class="giallo-l"><span>            istio_requests_total</span><span style="color: #9399B2;">{</span><span>reporter</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;source&quot;</span><span style="color: #9399B2;">,</span><span>destination_service</span><span style="color: #94E2D5;">=~</span><span style="color: #A6E3A1;">&quot;{{args.service-name}}&quot;</span><span style="color: #9399B2;">,</span><span>response_code!~</span><span style="color: #A6E3A1;">&quot;5.*&quot;</span><span style="color: #9399B2;">}</span><span>[5m]</span></span>
+<span class="giallo-l"><span>          ))</span><span style="color: #94E2D5;"> /</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">          sum</span><span>(</span><span style="color: #89B4FA;font-style: italic;">irate</span><span>(</span></span>
+<span class="giallo-l"><span>            istio_requests_total</span><span style="color: #9399B2;">{</span><span>reporter</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;source&quot;</span><span style="color: #9399B2;">,</span><span>destination_service</span><span style="color: #94E2D5;">=~</span><span style="color: #A6E3A1;">&quot;{{args.service-name}}&quot;</span><span style="color: #9399B2;">}</span><span>[5m]</span></span>
+<span class="giallo-l"><span>          ))</span></span></code></pre>
+<p>그리고 그걸 가져다가 prePromotionAnalysis에 등록해주면 끝이다.</p>
+<p><img src="/images/img_5347a5368aa4ed37.png" alt="" /></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://argoproj.github.io/argo-rollouts/features/bluegreen/">https://argoproj.github.io/argo-rollouts/features/bluegreen/</a><br />
+<a rel="external" href="https://argo-rollouts.readthedocs.io/en/stable/features/analysis/">https://argo-rollouts.readthedocs.io/en/stable/features/analysis/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223135487777/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Concurrency] 데드락(deadlock)과 라이브락(live lock)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223134537766/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] ArgoCD: Image Updater<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

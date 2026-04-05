@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] CoreDNS | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224175706636/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] CoreDNS">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224175706636/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-02-08T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224175706636/">[k8s] CoreDNS</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-08T00:00:00+00:00"><time datetime="2026-02-08T00:00:00+00:00">2026.02.08</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="278 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224175706636" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>쿠버네티스는 서비스들 간의 내부적인 통신을 위해 자체적인 DNS 시스템을 내장하고 있다.<br />
+예전에는 kubeDNS라고 있었는데, 그건 deptrecated되어서 v1.35부터는 CoreDNS가 기본값이다.</p>
+<p>CoreDNS는 kube-system에 속하는 기본 리소스다.<br />
+다음 명령을 사용해서 상태를 확인할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get all</span><span style="color: #94E2D5;"> -</span><span>n kube</span><span style="color: #94E2D5;">-</span><span>system</span><span style="color: #94E2D5;"> -</span><span>l k8s</span><span style="color: #94E2D5;">-</span><span>app</span><span style="color: #94E2D5;">=</span><span>kube</span><span style="color: #94E2D5;">-</span><span>dns</span></span></code></pre>
+<p><img src="/images/img_d6784d34822b7a9e.png" alt="" />
+가장 중요한 핵심 컴포넌트이므로, 이것들이 정상적인 상태가 아니라면 네트워킹 시스템 전반이 고장날 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-gujo">기본 구조</h2>
+<p>CoreDNS는 쿠버네티스 시스템의 일부로서 기능하며, DNS 요청을 중간에 가로채서 처리하는 방식을 취한다.</p>
+<p><img src="/images/img_d4fa671d63657aed.png" alt="" />
+쿠버네티스의 리소스 이름으로 구성된 도메인 요청이 들어올 경우, 그 리소스를 찾아서 알려준다.<br />
+하지만 모르는 도메인이라면 진짜 DNS에 떠넘겨버리는 식으로 동작한다.</p>
+<br>
+<br>
+<br>
+<h2 id="naebu-dns">내부 DNS</h2>
+<p>CoreDNS는 Pod와 서비스에 대해서 내부 DNS 기능을 제공한다.<br />
+당연히 이건 클러스터 내 Pod들에서만 사용할 수 있는 가짜 도메인이다. 바깥에서는 동작하지 않는다.</p>
+<p>서비스의 경우 풀네임은 "서비스명.네임스페이스명.cluster.local"이고, "서비스명.네임스페이스명"으로 줄일 수도 있고, 네임스페이스마저 동일하다면 "서비스명"으로 퉁칠 수도 있다.</p>
+<p><img src="/images/img_f8ca5e6f19a683a3.png" alt="" /></p>
+<p>Pod의 경우에는 내부 DNS를 억지로 쓰려면 쓸 수는 있지만 일반적이진 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="dns-seoljeong">DNS 설정</h2>
+<p>CoreDNS가 도메인 행세를 하긴 하지만, 결국에는 진짜 외부 DNS도 써야한다.<br />
+당연히 DNS 목록은 조정이 가능하며, 커스텀 DNS 서버를 추가할 수도 있다.</p>
+<p>다음 명령은 CoreDNS의 설정 정보를 조회한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get configmap</span><span style="color: #94E2D5;"> -</span><span>n kube</span><span style="color: #94E2D5;">-</span><span>system coredns</span><span style="color: #94E2D5;"> -</span><span>o yaml</span></span></code></pre>
+<p><img src="/images/img_00d27aa3a512c076.png" alt="" />
+여기서 forward라는 절이 진짜 DNS로 떠넘기는 기준값이다.<br />
+이 경우에는 해당 노드 호스트의 /etc/resolved.conf로 떠넘긴다는 뜻이다. 즉, 호스트와 동일한 DNS를 쓴다.</p>
+<p>저걸 명시적으로 바꾸고 싶다면 호스트 시스템의 /etc/resolved.conf 내용을 바뀌게 하거나, 저 행 자체를 "forward . 1.1.1.1 8.8.8.8" 같은 식으로 변경하고 CoreDNS 서버를 재부팅하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/services-networking/dns-pod-service/">https://kubernetes.io/ko/docs/concepts/services-networking/dns-pod-service/</a><br />
+<a rel="external" href="https://kubernetes.io/ko/docs/tasks/administer-cluster/coredns/">https://kubernetes.io/ko/docs/tasks/administer-cluster/coredns/</a><br />
+<a rel="external" href="https://github.com/coredns/deployment/blob/master/kubernetes/Scaling_CoreDNS.md">https://github.com/coredns/deployment/blob/master/kubernetes/Scaling_CoreDNS.md</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224176666438/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] Prometheus: AlertManager로 Slack 경보 구성<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224175723534/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] Ingress<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

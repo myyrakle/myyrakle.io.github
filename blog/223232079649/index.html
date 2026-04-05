@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Concurrency: 고루틴 누수 방지하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223232079649/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Concurrency: 고루틴 누수 방지하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223232079649/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-10-09T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223232079649/">[Go] Concurrency: 고루틴 누수 방지하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-09T00:00:00+00:00"><time datetime="2023-10-09T00:00:00+00:00">2023.10.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="176 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223232079649" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>고루틴 자체가 다른 언어들의 비동기 시스템과 비교해서 가볍고 단순하다보니, 그만큼 가볍게 써서 누수가 나는 경우가 꽤 많다.<br />
+고루틴 누수는 심각한 문제로, 고루틴이 계속 줄줄 새다보면 다른 고루틴 프로세스가 사용해야할 리소스를 낭비하거나, 종국에는 stackoverflow 등으로 프로그램을 터뜨릴 수도 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="best-practice-bumoege-jeeogweon-jugi">Best Practice: 부모에게 제어권 주기</h2>
+<p>고루틴 사용에 있어서 가장 안정적인 구조는, 부모가 자식 고루틴을 정리할 수 있게끔 구성하는 것이다.<br />
+그럼 부모 고루틴이 종료될때, 혹은 더 이상 해당 자식 고루틴이 필요없다고 판단할 경우에 자동으로 정리되게끔 할 수 있기 때문이다.</p>
+<p>기본 원칙은 이렇다.<br />
+고루틴 함수의 첫번째 매개변수에는 항상 해당 프로세스를 강제로 종료시킬 수 있는 채널 done을 받도록 한다.</p>
+<p><img src="/images/img_327ca9d0f281a033.png" alt="" />
+그리고 for-select 루프에서 done이 종료되거나 메세지가 오면 강제로 리턴하도록 구성하는 것이다.<br />
+기본 로직은 나머지 select case에서 구현한다.</p>
+<p>부모 고루틴에서는 자식 고루틴을 생성하되, 제어용 채널을 만들어서 넘겨주고, 해당 채널을 통해서 언제든 자식 고루틴을 정리할 수 있도록 한다.</p>
+<p><img src="/images/img_a22c3779b4bd7280.png" alt="" />
+그럼 저기서 close(done)을 했을때, 자식 고루틴은 종료 메세지를 받고 return을 하게 된다.</p>
+<br>
+<p><img src="/images/img_c5431b9a977bd13c.png" alt="" />
+이렇게.<br />
+고루틴을 활용함에 있어서 이러한 원칙을 항상 지키도록 노력하면 고루틴 누수 문제를 최소화할 수 있다.</p>
+<p>아래는 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;time&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	doWork</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(done</span><span style="color: #94E2D5;"> &lt;-</span><span>chan any)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		defer fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;doWork done&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;doWork start&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		for</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			select</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			default</span><span>:</span></span>
+<span class="giallo-l"><span>				fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;do something...&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>				time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			case</span><span style="color: #94E2D5;"> &lt;-</span><span>done</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	done</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(chan any)</span></span>
+<span class="giallo-l"><span>	go</span><span style="color: #89B4FA;font-style: italic;"> doWork</span><span>(done)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 5초 대기</span></span>
+<span class="giallo-l"><span>	time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">5</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	close</span><span>(done)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 자식 고루틴이 종료될때까지 대기...</span></span>
+<span class="giallo-l"><span>	time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223231946274/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>블룸 필터 (Bloom Filter)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223232089632/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] Concurrency: return channel<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

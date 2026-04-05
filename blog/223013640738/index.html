@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] 파드(pod) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223013640738/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] 파드(pod)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223013640738/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-02-13T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223013640738/">[k8s] 파드(pod)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-02-13T00:00:00+00:00"><time datetime="2023-02-13T00:00:00+00:00">2023.02.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="334 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223013640738" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>파드(Pod)는 쿠버에서 관리하는 가장 기본적인 리소스 단위다.<br />
+쿠버에서 실질적으로 기능하는 대부분의 리소스는 Pod나 Pod의 변종이라고 보면 된다.</p>
+<p>Docker의 컨테이너와 비슷하다고 볼 수 있다. 마찬가지로 도커 이미지(OCI)를 받고, 이미지를 그대로 실행하는 식으로 동작한다.</p>
+<p><img src="/images/img_594c8992babff511.png" alt="" />
+k8s의 Pod가 Docker의 컨테이너와 다른 점은, 하나의 Pod에 여러개의 컨테이너가 들어갈 수 있다는 것이다.<br />
+하나의 Pod는 각자가 고유한 IP를 가지며, 동일 Pod 내에 공존하는 컨테이너들도 같은 IP를 가진다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>만만한 nginx 이미지를 가져다가 잘 동작하는지 돌려보도록 하자</p>
+<p>먼저 배포를 위한 yaml 파일을 하나 작성한다.<br />
+쿠버에서 리소스의 관리는 항상 yaml로 시작해서 yaml로 끝난다.</p>
+<p><img src="/images/img_70902002c2c884d6.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Pod</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> nginx</span><span style="color: #94E2D5;">-</span><span>pod # 파드 이름</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> container</span><span style="color: #94E2D5;">-</span><span>name </span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> nginx # 도커 이미지</span></span></code></pre>
+<p>이런식으로 쳐주면 된다.<br />
+이미지로는 nginx를 가져가게 했는데, 이러면 기본적으로 nginx라는 이미지를 도커허브에서 꺼내올 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="padeu-saengseong">파드 생성</h2>
+<p>create/apply 명령을 통해 생성할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl create</span><span style="color: #94E2D5;"> -</span><span>f 설정파일</span></span>
+<span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> -</span><span>f 설정파일</span></span></code></pre>
+<p><img src="/images/img_6a656389fb8215a2.png" alt="" />
+create는 생성 전용이고, 좀 더 권장하는 명령은 apply다. apply는 생성/수정이 다 한방에 된다.</p>
+<p>문제가 없다면 이렇게 PENDING 상태로 추가되었다가</p>
+<p><img src="/images/img_16696d024a620555.png" alt="" /></p>
+<p><img src="/images/img_2492a6fa5bae33c4.png" alt="" />
+문제가 없다면 실행이 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="padeu-rogeu-bogi">파드 로그 보기</h2>
+<p>파드 내부에서 돌아간 것에 대한 로그를 보고싶다면 logs 명령을 사용하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl logs 파드명</span></span></code></pre>
+<p><img src="/images/img_5a4d1df37c5d7904.png" alt="" />
+그럼 실제로 실행된 내역을 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="padeu-jeobsoghagi">파드 접속하기</h2>
+<p>파드에 직접 들어가서 뭔가 확인하고 싶을 수도 있다.<br />
+그럴때는 exec 명령을 사용하면 되는데, 도커 컨테이너에 들어가는 것과 거의 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl exec</span><span style="color: #94E2D5;"> -</span><span>it 파드명</span><span style="color: #94E2D5;"> /</span><span>bin</span><span style="color: #94E2D5;">/</span><span>bash</span></span></code></pre>
+<p><img src="/images/img_2bd01a21e0a26f37.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="padeu-jeongbo-johoehagi">파드 정보 조회하기</h2>
+<p>파드 자체에 대한 전체 정보를 보고 싶다면, descibe pods 명령을 사용한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl describe pods 파드명</span></span></code></pre>
+<p><img src="/images/img_6e42e58434cee01c.png" alt="" /></p>
+<p><img src="/images/img_ecf75e6530b14143.png" alt="" />
+이런저런 전체적인 정보와, IP 같은 것도 확인할 수 있다.</p>
+<p>저 IP로 접속을 해보면,</p>
+<p><img src="/images/img_28d3c1d6004b12d1.png" alt="" />
+잘 돌아가는 것을 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="padeu-sagje">파드 삭제</h2>
+<p>파드 삭제는 delete pods 명령으로 처리할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl</span><span style="color: #94E2D5;"> delete</span><span> pods 파드명</span></span></code></pre>
+<p><img src="/images/img_a7d1883ffc75cba0.png" alt="" /></p>
+<p>근데 보통 프로덕션 레벨에서 시스템을 구축할 때는 Pod만 사용하는 일은 거의 없다.</p>
+<p>보통 deployment나 statefulset, daemonset 같은 그룹 단위를 통해 재배포까지 통합해서 관리하곤 하는데, 그건 이후 포스트에서 하나씩 다뤄보겠다.<br />
+여기서는 Pod라는게 있고 대충 이렇게 쓴다는 것만 알고 넘어가면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/tasks/manage-kubernetes-objects/imperative-command/">https://kubernetes.io/ko/docs/tasks/manage-kubernetes-objects/imperative-command/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223016029749/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] VPC 및 네트워크 구성요소<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223014091774/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Redis] 설치 in Mac<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

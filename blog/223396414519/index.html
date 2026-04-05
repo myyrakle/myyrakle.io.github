@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] async trait | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223396414519/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] async trait">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223396414519/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-27T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223396414519/">[Rust] async trait</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-27T00:00:00+00:00"><time datetime="2024-03-27T00:00:00+00:00">2024.03.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="399 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223396414519" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust의 async 시스템은 얼마전까지만 해도 trait에 대한 지원이 부족했었다. 소유권과 관련된 문제가 복잡하게 얽혔기 때문이다.<br />
+그리고 근래에, 1.75.0 버전부터 부분적으로 지원이 되기 시작했다.</p>
+<br>
+<br>
+<h2 id="1-75-beojeon-ihu">1.75 버전 이후</h2>
+<p>1.75 버전 이후에는 부분적으로만 지원이 되기 시작했다.<br />
+예를 들어, 이렇게 단순한 경우에는 지원이 된다.</p>
+<p><img src="/images/img_9f697cdb30211803.png" alt="" /></p>
+<p><img src="/images/img_3d26593c6544bb0d.png" alt="" /></p>
+<p>그리고 impl T 같은 경우로 static dispatch를 할 경우에도 잘 동작한다.</p>
+<p><img src="/images/img_046c6aebd496f671.png" alt="" /></p>
+<p>문제는 dynamic dispatch에 제한이 있다는 것이다.<br />
+위 코드에서 trait을 impl T가 아니라, dyn T로 교체해보자.</p>
+<p><img src="/images/img_2c25c0c5fe966b9c.png" alt="" /></p>
+<p><img src="/images/img_368582f086cfd146.png" alt="" />
+그럼 이제 오류가 발생하기 시작한다.</p>
+<p>이건 근본적으로 async trait을 벗어나서 "trait 메서드에서의 impl T 반환 문제"에 관계된 문제이기도 하다.<br />
+async trait의 메서드는 내부적으로 반환 타입을 impl Future로 변환한다. 여기서 저 문제에 도달하는 것이다.</p>
+<p>내용이 좀 복잡한데, 간단하게 말해서 이것도 라이프타임 관련된 문제라고 보면 된다.</p>
+<p>아래는 참고할만한 글들이다. 궁금하다면 보면 된다.<br />
+<a rel="external" href="https://blog.rust-lang.org/2023/12/21/async-fn-rpit-in-traits.html#where-the-gaps-lie">https://blog.rust-lang.org/2023/12/21/async-fn-rpit-in-traits.html#where-the-gaps-lie</a><br />
+<a rel="external" href="https://smallcultfollowing.com/babysteps/blog/2019/10/26/async-fn-in-traits-are-hard/">https://smallcultfollowing.com/babysteps/blog/2019/10/26/async-fn-in-traits-are-hard/</a></p>
+<p>아무튼 이것도 추후에는 사용성을 더 개선할 예정이라고 한다.<br />
+이 문제가 걸린다면 다시 아래에서 소개하는 "1.75.0 미만 버전"의 방법을 사용해야 한다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="1-75-0-miman-beojeonyi-gyeongu">1.75.0 미만 버전의 경우</h2>
+<p>1.75 이전 버전에서는 trait에 async를 집어넣는 것이 불가능했었다.</p>
+<p><img src="/images/img_324189394b62348c.png" alt="" /></p>
+<p><img src="/images/img_a4c199c11062d6d8.png" alt="" />
+에러를 잔뜩 뿜어낸다.</p>
+<p>이에 대한 가장 많이 사용했던 해결책은 서드파티 crate인 async_trait을 사용하는 것이다.</p>
+<p><img src="/images/img_148e53605fe41846.png" alt="" />
+깔고</p>
+<p>트레잇에 매크로 붙인다음에</p>
+<p><img src="/images/img_0a08f5541ac2850a.png" alt="" /></p>
+<p>구현부에도 붙여주면 된다.</p>
+<p><img src="/images/img_7fa8a1e24c5596ef.png" alt="" /></p>
+<p>그럼 잘 돌 것이다.</p>
+<p><img src="/images/img_bf0adb0a3d2a4461.png" alt="" /></p>
+<p>이 매크로가 해주는 일은 이렇다.<br />
+이런 코드를</p>
+<p><img src="/images/img_8ce4c6fe89d80326.png" alt="" /></p>
+<p>이렇게 핀을 박아서 감싸주는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>trait Readable</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    fn readable</span><span style="color: #94E2D5;">&lt;</span><span style="color: #A6E3A1;">&#39;a&gt;(&amp;self) -&gt; Pin&lt;Box&lt;dyn &#39;</span><span>a</span><span style="color: #94E2D5;"> +</span><span> Send</span><span style="color: #94E2D5;"> +</span><span> Future</span><span style="color: #94E2D5;">&lt;</span><span>Output</span><span style="color: #94E2D5;"> =</span><span> io</span><span style="color: #9399B2;">:</span><span>:Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #94E2D5;">&gt;&gt;&gt;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://blog.rust-lang.org/inside-rust/2023/05/03/stabilizing-async-fn-in-trait.html">https://blog.rust-lang.org/inside-rust/2023/05/03/stabilizing-async-fn-in-trait.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/65921581/how-can-i-define-an-async-method-in-a-trait">https://stackoverflow.com/questions/65921581/how-can-i-define-an-async-method-in-a-trait</a><br />
+<a rel="external" href="https://smallcultfollowing.com/babysteps/blog/2023/03/12/to-async-trait-or-just-to-trait/">https://smallcultfollowing.com/babysteps/blog/2023/03/12/to-async-trait-or-just-to-trait/</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/223306429993">https://blog.naver.com/sssang97/223306429993</a><br />
+<a rel="external" href="https://smallcultfollowing.com/babysteps/blog/2019/10/26/async-fn-in-traits-are-hard/">https://smallcultfollowing.com/babysteps/blog/2019/10/26/async-fn-in-traits-are-hard/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223399890870/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Entity Component System 패턴 (ECS)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223396451184/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[HTTP] 특수한 기본 응답 헤더<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

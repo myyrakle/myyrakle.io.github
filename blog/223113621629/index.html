@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>k8s에 Prometheus + Grafana 통합하기 (kube-prometheus) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223113621629/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="k8s에 Prometheus + Grafana 통합하기 (kube-prometheus)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223113621629/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-28T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223113621629/">k8s에 Prometheus + Grafana 통합하기 (kube-prometheus)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-28T00:00:00+00:00"><time datetime="2023-05-28T00:00:00+00:00">2023.05.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="215 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223113621629" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223112560400">https://blog.naver.com/sssang97/223112560400</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/223112752812">https://blog.naver.com/sssang97/223112752812</a></p>
+<p>여기서는 K8S 환경에서 Prometheus와 Grafana로 모니터링 시스템을 구축하는 방법을 다뤄본다.<br />
+내 테스트환경은 GCP GKE인데, 다른 provider라도 크게 다를 것은 없을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="pod-guseonghagi">Pod 구성하기</h2>
+<p>고맙게도 누가 일체형으로 말아준 구성이 있다.<br />
+service, networkpolicy,</p>
+<p>clone받고,</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>git clone https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/coreos/kube-prometheus.git</span></span>
+<span class="giallo-l"><span>cd kube</span><span style="color: #94E2D5;">-</span><span>prometheus</span><span style="color: #94E2D5;">/</span></span></code></pre>
+<p><img src="/images/img_3edec4106ee12de9.png" alt="" /></p>
+<p>apply로 다 띄워준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> --</span><span>server</span><span style="color: #94E2D5;">-</span><span>side</span><span style="color: #94E2D5;"> -</span><span>f manifests</span><span style="color: #94E2D5;">/</span><span>setup</span></span>
+<span class="giallo-l"><span>kubectl wait</span><span style="color: #94E2D5;"> --</span><span>for condition</span><span style="color: #94E2D5;">=</span><span>Established</span><span style="color: #94E2D5;"> --</span><span>all CustomResourceDefinition</span><span style="color: #94E2D5;"> --</span><span>namespace</span><span style="color: #94E2D5;">=</span><span>monitoring</span></span>
+<span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> -</span><span>f manifests</span><span style="color: #94E2D5;">/</span></span></code></pre>
+<p><img src="/images/img_ccd39a53f460abd7.png" alt="" /></p>
+<p><img src="/images/img_afc11fa5f640dbaa.png" alt="" />
+이렇게 다 뜨면 되고</p>
+<p>그러면 저 grafana 3000 포트를 사용해서 접속을 할 수 있다.</p>
+<p><img src="/images/img_eebf6fe650883cda.png" alt="" />
+내부 환경이라면 바로 내부 IP로 접속해서 사용하면 되고, 외부에서 접속할 일이 있다면 IP를 추가로 할당해준다.</p>
+<p>이렇게 말이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl patch service grafana</span><span style="color: #94E2D5;"> -</span><span>n monitoring</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #A6E3A1;"> &#39;{&quot;spec&quot;: {&quot;type&quot;: &quot;LoadBalancer&quot;}}&#39;</span></span></code></pre>
+<p><img src="/images/img_a2bf8ace974543ef.png" alt="" /></p>
+<p>그리고 내 아이피를 찾아서 그 아이피를 허용하게끔 방화벽 설정을 풀어준다.<br />
+기본설정은 다 막는거다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> networking</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> NetworkPolicy</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>component</span><span style="color: #9399B2;">:</span><span> grafana</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>name</span><span style="color: #9399B2;">:</span><span> grafana</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>part</span><span style="color: #94E2D5;">-</span><span>of</span><span style="color: #9399B2;">:</span><span> kube</span><span style="color: #94E2D5;">-</span><span>prometheus</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>version</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 9.5</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">2</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> allow</span><span style="color: #94E2D5;">-</span><span>grafana</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span> monitoring</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  egress</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"><span>  ingress</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> from</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> ipBlock</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        cidr</span><span style="color: #9399B2;">:</span><span> 내아이피</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">32</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3000</span></span>
+<span class="giallo-l"><span>      protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>  podSelector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>component</span><span style="color: #9399B2;">:</span><span> grafana</span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>name</span><span style="color: #9399B2;">:</span><span> grafana</span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>part</span><span style="color: #94E2D5;">-</span><span>of</span><span style="color: #9399B2;">:</span><span> kube</span><span style="color: #94E2D5;">-</span><span>prometheus</span></span>
+<span class="giallo-l"><span>  policyTypes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> Egress</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> Ingress</span></span></code></pre>
+<p>적용하면</p>
+<p><img src="/images/img_c93dafebcb86a3fe.png" alt="" /></p>
+<p>이제 접속이 될 것이다.</p>
+<p><img src="/images/img_91cb42bbff278d19.png" alt="" />
+기본계정인 admin/admin으로 로그인하고,</p>
+<br>
+<p><img src="/images/img_ac7b85a02e0b876f.png" alt="" />
+비밀번호 수정해주면</p>
+<p>끝이다.</p>
+<p><img src="/images/img_ca97c9097c5fbbf9.png" alt="" /></p>
+<br>
+<p><img src="/images/img_765b2f3af780d2a0.png" alt="" /></p>
+<p><img src="/images/img_996d66c243e29319.png" alt="" />
+기본적인 것들은 얼추 갖추어져 있으니, 필요한대로 변경하거나 추가하면서 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/57716003/should-prometheus-exporters-be-run-as-sidecar-containers-or-in-separate-deployme">https://stackoverflow.com/questions/57716003/should-prometheus-exporters-be-run-as-sidecar-containers-or-in-separate-deployme</a><br />
+<a rel="external" href="https://gist.github.com/payam-int/edf977c6af603fee0ce1b05da7792fe7">https://gist.github.com/payam-int/edf977c6af603fee0ce1b05da7792fe7</a><br />
+<a rel="external" href="https://chhanz.github.io/kubernetes/2021/09/30/deploy-kube-prometheus/">https://chhanz.github.io/kubernetes/2021/09/30/deploy-kube-prometheus/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223113602058/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] build.rs를 통한 빌드 스크립트 구성<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223114101887/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] generate<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

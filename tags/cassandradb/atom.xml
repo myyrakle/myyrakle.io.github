@@ -1,0 +1,368 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - CassandraDB</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/cassandradb/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-11-03T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/cassandradb/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[CassandraDB] CDC (Change Data Capture)</title>
+        <published>2025-11-03T00:00:00+00:00</published>
+        <updated>2025-11-03T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224062530022/"/>
+        <id>https://myyrakle.github.io/blog/224062530022/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224062530022/">&lt;p&gt;CassandraDB는 자체적으로 변경 데이터 캡쳐(CDC, Change Data Capture) 기능을 제공한다.&lt;br &#x2F;&gt;
+이를 통해 CassandraDB의 데이터를 소스로 삼아, 외부 시스템에 데이터를 동기화할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 다른 주요 DB들의 CDC 기능에 비하면 매우 성의없고 저열한 형태로 제공된다.&lt;br &#x2F;&gt;
+API가 뭐 따로 있는게 아니고, 로컬 디스크에 있는 커밋로그(WAL)을 직접 읽어야 하기 때문이다.&lt;br &#x2F;&gt;
+이런 면에서는 ScyllaDB가 훨씬 뛰어나다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;cdc-hwalseonghwahagi&quot;&gt;CDC 활성화하기&lt;&#x2F;h2&gt;
+&lt;p&gt;먼저 DB 수준에서 활성화를 해줘야 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo vim&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &#x2F;&lt;&#x2F;span&gt;&lt;span&gt;etc&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;cassandra&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;cassandra&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;yaml&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo systemctl restart cassandradb&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e884ee050ebfd26f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+기본값은 비활성화다.&lt;&#x2F;p&gt;
+&lt;p&gt;cassandradb를 재부팅해보면, 데이터 디렉토리에 cdc_raw라는 폴더가 생긴다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_172bb178aa7fc794.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저기에 cdc 읽을 것이 들어온다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 개별 CDC 옵션은 테이블 수준에서 관리된다.&lt;br &#x2F;&gt;
+테이블을 만들때 cdc 플래그를 주거나&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE TABLE test_space&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;foo&lt;&#x2F;span&gt;&lt;span&gt; (id int&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; value text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; PRIMARY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; KEY&lt;&#x2F;span&gt;&lt;span&gt;(id)) WITH cdc&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;true&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;나중에 활성화할 수도 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ALTER TABLE foo WITH cdc&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;true&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그러면 다음과 같이 적용이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e7dcb5d236ec45be.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;eungyong&quot;&gt;응용...&lt;&#x2F;h2&gt;
+&lt;p&gt;중요한건, 이게 하는 역할은 그냥 commitlog가 읽히기 전까지 지워지지 않게 하는 정도라는 것이다.&lt;br &#x2F;&gt;
+직접 다 해야 한다. 그래서 CDC를 읽는 프로그램은 반드시 CassandraDB가 있는 노드에 같이 올라가야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;커밋로그는 아까 언급했던 cdc_raw 경로에 있고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_62023f517211f4ac.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_89109d37c14d75ea.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저걸 파싱해서 쓰면 되는 것이다. 그리고 다 처리했다면 직접 지우면 된다.&lt;br &#x2F;&gt;
+근데 자체 포맷이라 자바 아니면 호환되는 라이브러리 찾기도 쉽지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 편하게 쓰려면 그냥 debezium 처럼 대신 구현해준 것을 갖다쓰는 편이 낫다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;debezium&#x2F;debezium-connector-cassandra&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;debezium&#x2F;debezium-connector-cassandra&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;managing&#x2F;operating&#x2F;cdc.html&quot;&gt;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;managing&#x2F;operating&#x2F;cdc.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;debezium.io&#x2F;documentation&#x2F;reference&#x2F;stable&#x2F;connectors&#x2F;cassandra.html&quot;&gt;https:&#x2F;&#x2F;debezium.io&#x2F;documentation&#x2F;reference&#x2F;stable&#x2F;connectors&#x2F;cassandra.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[CassandraDB] 데이터베이스 아키텍쳐</title>
+        <published>2024-12-26T00:00:00+00:00</published>
+        <updated>2024-12-26T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223706344662/"/>
+        <id>https://myyrakle.github.io/blog/223706344662/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223706344662/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_37339c11daff7b40.png&quot; alt=&quot;&quot; &#x2F;&gt;
+카산드라DB가 다른 데이터베이스들과 비교해서 어떤 내부 구조를 가지고 있고, 어떤 장점과 단점, 한계가 있는지를 정리해본다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gibon-sogseong&quot;&gt;기본 속성&lt;&#x2F;h2&gt;
+&lt;p&gt;&lt;strong&gt;NoSQL&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+카산드라DB는 알다시피, NoSQL이다. 그 중에서도 Key-Value NoSQL 쯤으로 분류된다.&lt;br &#x2F;&gt;
+SQL 스타일의 스키마 정의 구조, SQL 쿼리 등을 제공하긴 하지만, RDB 수준의 복잡한 쿼리(Join 등), 일관성 보장을 제공하진 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;글로벌 수준의 분산 DB&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+카산드라 DB는 수평적으로 대규모 확장 가능한 구조를 지향하며, 글로벌 서비스를 위한 글로벌 수준 복제까지도 염두에 두고 설계되었다.&lt;br &#x2F;&gt;
+그래서 &lt;strong&gt;여러개의 데이터센터 간&lt;&#x2F;strong&gt;에 연결되는 것까지 고려해서 많은 기능과 옵션을 제공한다.&lt;br &#x2F;&gt;
+분산 복제 구조에 있어서는 DynamoDB에 큰 영향을 받았다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;높은 쓰기 처리량&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+multi master 형태의 분산 구조를 제공하기 때문에, write 처리량을 확장하는 것이 매우 쉽다.&lt;br &#x2F;&gt;
+카산드라DB는 전반적으로 일관성이나 read 능력을 좀 포기하고 write 처리량에 집중한 데이터베이스다.&lt;&#x2F;p&gt;
+&lt;p&gt;**대규모 데이터 클러스터 **&lt;br &#x2F;&gt;
+카산드라는 초대형 데이터세트를 감당하기 위해 만들어졌다. 넷플릭스나 디스코드(과거), 애플 같은데서도 노드 수천개짜리 대규모 Cassandra 클러스터를 메인급 DB로 사용하고 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;indegseu-gujo-lsm-teuri&quot;&gt;인덱스 구조: LSM 트리&lt;&#x2F;h2&gt;
+&lt;p&gt;CassandraDB를 포함한 NoSQL DB들이 전통적인 RDB들과 차별화되는 부분이  인덱스 구조다.&lt;&#x2F;p&gt;
+&lt;p&gt;LSM 기반의 인덱스 시스템을 사용하고, 이를 기반으로 데이터를 저장하기 때문에 RDB 대비해서 write 성능, 그 중에서도 append(insert) 성능이 매우 뛰어나다.&lt;&#x2F;p&gt;
+&lt;p&gt;자세한 원리나 구조는 별도 포스트를 참조한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223232181952&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223232181952&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;replication&quot;&gt;Replication&lt;&#x2F;h2&gt;
+&lt;p&gt;카산드라는 가용성과 수평 확장성을 제공하기 위해 꽤나 독특한 복제 구조를 갖는다.&lt;&#x2F;p&gt;
+&lt;p&gt;상당수의 DB들이 단일 master를 갖고, master가 write를 책임지고 slave가 read를 처리하게 한다.&lt;br &#x2F;&gt;
+이 구조는 구현하기에 간편하고 관리하기도 편하지만, write 처리량을 늘리는데 한계가 있고 마스터가 다운될 경우에 다운타임이 크게 발생한다는 문제가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;카산드라는 쓰기 처리량까지 수평적으로 확장하고, 가용성을 보다 보장하기 위해서 multi master 구조를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9075296f2144d657.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+master나 slave가 따로 있는게 아니라, 모든 노드가 동등하게 read&#x2F;write를 처리하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;gossip 프로토콜&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;복제 형태도 메쉬 형태로 마구잡이로 서로 쏘는 게 아니라, 가쉽(gossip)이란 매커니즘을 통해 복제를 전송한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9399e28ef3aa2cdf.png&quot; alt=&quot;&quot; &#x2F;&gt;
+4개의 노드가 있더라도 서로를 다 바라보고 다 쏘는게 아니라, 무작위의 노드에게 데이터를 연속적으로 날리면서 주고받을 뿐이다.&lt;br &#x2F;&gt;
+영희가 철수에게, 철수가 스미스에게, 소문(Gossip)을 퍼트리듯이 정보가 전달된다고 해서 가십 프로토콜이라 한다. 결국에는 소문이 모든 사람을 거쳐가므로 데이터 동기화는 똑같이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 송신자와 수신자가 명확하게 결합되어있지 않은 이러한 통신 구조 덕에 노드의 추가나 삭제가 매우 유연한 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;복제 전략&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+카산드라는 replication factor라는 옵션을 통해서 데이터의 복제본을 몇개나 만들지를 결정한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 Replication Strategy를 통해서 복제가 어떻게 배치될지를 정할 수도 있다. 예를 들어, 각 복제본이 서로 다른 데이터센터에 배치되게 한다거나 하는 세부설정들이 가능하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteo-patisyeon&quot;&gt;데이터 파티션&lt;&#x2F;h2&gt;
+&lt;p&gt;Cassandra는 무제한의 규모 확장을 달성하기 위해 복잡한 추가 설정 없이도 자동으로 데이터 파티셔닝, 샤딩을 수행한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러니까, 데이터가 insert되면 그 복제본을 모두가 공유하는게 아니라 적당히 파티션으로 분산해서 저장한다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;파티션 키&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+카산드라는 테이블의 Primary Key가 파티션을 결정하는 파티션 키가 된다. primary key가 복합컬럼이라면, 첫번째 컬럼이 파티션 키다.&lt;br &#x2F;&gt;
+파티션 키를 기준으로 어느 노드에 저장될지를 결정한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;파티션&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+&quot;클러스터링 키&quot;를 사용한다면, 복합 키이니 당연히 같은 파티션 키의 값은 여러개 중복될 수 있다. 이 경우 같은 파티션 키를 가진 데이터 집합을 파티션이라고 부른다.&lt;br &#x2F;&gt;
+각각의 파티션은 하나의 디스크 영역에 모아서 저장하는데, 개별 파티션이 수만, 수십만 row 단위를 넘어가면 성능이 극심하게 저하된다. 이런 쏠림 현상을 skew라고 부른다.&lt;br &#x2F;&gt;
+그래서 파티션 키는 중복성이 낮고 적당히 분배가 잘 되는 값을 사용해야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;클러스터링 키&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+primary가 복합 컬럼으로 구성되었다면, 첫번째 컬럼을 제외한 나머지 컬럼들이 모두 클러스터링 키가 된다.&lt;br &#x2F;&gt;
+클러스터 키는 이 파티션 단위를 정렬해서 저장하는 기준이 된다. 그래서 dynamo에서는 이걸 정렬 키라고 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;토큰 링&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+카산드라는 token ring이라고 하는 consistent 해싱 기법을 사용해서 파티션을 노드 간에 분산한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b33faa1bf05a8f6a.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+이를 통해 동적으로 추가되거나 삭제되는 노드들이 발생해도 파티션을 적절히 분산할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;자세한 매커니즘은 별도 포스트를 참고한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;223457713545&quot;&gt;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;223457713545&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;capgwa-deiteo-ilgwanseong&quot;&gt;CAP과 데이터 일관성&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터베이스의 성질을 대표하는 지표 중에 하나로 CAP이란 것이 있다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223115732041&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223115732041&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;카산드라의 경우에는 multi master 구조로 고가용성을 보장할 수 있다. 일부 노드가 터져도, 그 역할을 나머지가 땜빵하면 되기 때문이다. (Availablity)&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 파티션 내구성(Partition tolerance) 또한 충분히 보장한다. 각각의 노드는 거의 독립적으로 동작한다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 노드간의 모든 데이터 복제가 비동기적으로 전송되고, 복제 지연에 대한 책임이 거의 누구에게도 없어서 일관성(Consistency)을 보장하기가 매우 어렵다는 단점이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;따라서 카산드라는 일반적으로 AP 시스템으로 본다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;ilgwanseong-rebel-consistency-level&quot;&gt;일관성 레벨 (consistency level)&lt;&#x2F;h2&gt;
+&lt;p&gt;하지만 카산드라도 일관성 부족을 메꿀만한 기능들을 일부 제공한다.&lt;br &#x2F;&gt;
+이걸 극단적으로 활용한다면, 일관성을 얻는 대신 가용성을 포기하는 CP 시스템처럼 쓸 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;consistency level이란 옵션을 통해서 쿼리를 날릴때 복제되는 것을 기다릴지 말지를 기다리도록 할 수 있다. mongodb의 read&#x2F;write concern과 동등한 개념이라 보면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;consistency level을 결정할때는 노드 중에 coordinator node라는 것을 뽑아서 그 노드가 완료 여부를 확인해주도록 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6824301f4b4bbacc.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+이건 고정적으로 정해져있는게 아니라, 그때그때, 알고리즘으로 판단해서 선별한다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기서 쓰기와 읽기에 대한 consistency level은 동작이 좀 다르다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;쓰기&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+쓰기 작업에 대해서 write consistency level을 적용할 경우, 해당 쓰기 요청은 특정 level만큼의 노드에 복제가 완료되기까지 대기한다.&lt;br &#x2F;&gt;
+예를 들어 level을 ALL로 준다면 모든 노드에 복제된 후에 완료되기 때문에 write 후에 바로 read를 하더라도 반드시 최신 데이터를 조회할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;읽기&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+읽기 작업에 대해서 read consistency level을 적용한다면, 읽기 요청에 대해서 특정 level만큼의 노드가 응답해야 한다.&lt;br &#x2F;&gt;
+그렇지 않는다면 읽기가 실패한다.&lt;&#x2F;p&gt;
+&lt;p&gt;level은 ALL이 가장 강력한 일관성을 제공하지만, 이러면 카산드라를 쓰는 의미가 없어서 잘 안 쓴다.&lt;br &#x2F;&gt;
+보통 일관성을 보장해야한다고 하면 쿼럼(정족수)이나 데이터센터 그룹 단위 쿼럼 기반으로 설정하는 경우가 많다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;seukima&quot;&gt;스키마&lt;&#x2F;h2&gt;
+&lt;p&gt;카산드라는 테이블로 스키마를 먼저 정의하고 데이터를 저장하지만, 내부 저장 구조 자체는 대단히 유연한 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;최종적으로 디스크에 저장되는 구조에는 사실 스키마에 대한 값이 없다. 그러니까, 테이블 스키마 구조를 변경해도 그 스키마 변경사항은 그 시점의 데이터부터만 적용된다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이를 wide column 지향의 구조라고 한다.&lt;br &#x2F;&gt;
+이것도 row base 구조이긴 한데, 각 row가 다른 모양으로 저장될 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;mongodb 같은 비정형 구조에 비할 정도는 아니지만, 스키마 변경에 대응하기에 유리한 편이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jeongryeol&quot;&gt;정렬&lt;&#x2F;h2&gt;
+&lt;p&gt;카산드라는 read보다 write에 집중한 DB라 읽기 쿼리에 있어서는 제한이 많은데, 대표적인 것이 정렬이다.&lt;&#x2F;p&gt;
+&lt;p&gt;정렬(order by) 쿼리는, 파티션 키를 기반으로 단일 노드가 선택되었을 경우에 클러스터링 키를 기준으로만 정렬 가능하다. 그렇지 않고 order by를 막 걸어대면 쿼리가 에러를 던지면서 실패한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 웬만한 읽기 수준 가공은 클라이언트에서 처리해야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteoyi-sujeonggwa-beojeon-gwanri&quot;&gt;데이터의 수정과 버전 관리&lt;&#x2F;h2&gt;
+&lt;p&gt;카산드라에서 데이터의 수정(update)은 사실상 새로운 데이터 버전을 삽입하는 형태로 이루어진다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 update 쿼리는 데이터가 없을때 시도하면 실제로 데이터를 insert해서 만든다! 카산드라에서 insert와 update 작업에는 차이가 별로 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 insert&#x2F;update 쿼리는 항상 타임스탬프 값과 함께 값을 집어넣는다.&lt;br &#x2F;&gt;
+만약 동시적으로 동일 키에 대해서 다른 update 요청이 들어온다면, 카산드라는 가장 최신 타임스탬프의 쓰기만을 인정하고 나머지는 전부 버린다.&lt;&#x2F;p&gt;
+&lt;p&gt;아무튼 최신 값을 기준으로 다 복제는 시키니까, 완벽한 일관성은 아니지만 되긴 된다는 점에서 최종 일관성(Eventual consistency)을 지킨다고 표현하기도 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;상당히 낙관적인 구조라고 할 수 있겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;teuraenjaegsyeon&quot;&gt;트랜잭션&lt;&#x2F;h2&gt;
+&lt;p&gt;카산드라는 트랜잭션의 데이터 롤백, Lock 같은 기능을 제공하지 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 ACID나 트랜잭션이 없다고 봐도 된다. CAS 형식의 낙관적인 write 정도를 제공하는게 다다.&lt;br &#x2F;&gt;
+알아서 잘 해야한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;index.html&quot;&gt;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;index.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;jins-dev.tistory.com&#x2F;entry&#x2F;%EA%B0%80%EC%8B%AD-%ED%94%84%EB%A1%9C%ED%86%A0%EC%BD%9C-Gossip-Protocol-%EC%9D%B4%EB%9E%80&quot;&gt;https:&#x2F;&#x2F;jins-dev.tistory.com&#x2F;entry&#x2F;%EA%B0%80%EC%8B%AD-%ED%94%84%EB%A1%9C%ED%86%A0%EC%BD%9C-Gossip-Protocol-%EC%9D%B4%EB%9E%80&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;guarantees.html&quot;&gt;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;guarantees.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;dynamo.html&quot;&gt;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;dynamo.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;storage-engine.html&quot;&gt;https:&#x2F;&#x2F;cassandra.apache.org&#x2F;doc&#x2F;latest&#x2F;cassandra&#x2F;architecture&#x2F;storage-engine.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.read.seas.harvard.edu&#x2F;~kohler&#x2F;class&#x2F;cs239-w08&#x2F;decandia07dynamo.pdf&quot;&gt;https:&#x2F;&#x2F;www.read.seas.harvard.edu&#x2F;~kohler&#x2F;class&#x2F;cs239-w08&#x2F;decandia07dynamo.pdf&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;20205797&#x2F;which-part-of-the-cap-theorem-does-cassandra-sacrifice-and-why&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;20205797&#x2F;which-part-of-the-cap-theorem-does-cassandra-sacrifice-and-why&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.datastax.com&#x2F;en&#x2F;archived&#x2F;cassandra&#x2F;2.0&#x2F;cassandra&#x2F;dml&#x2F;dmlAboutDataConsistency.html&quot;&gt;https:&#x2F;&#x2F;docs.datastax.com&#x2F;en&#x2F;archived&#x2F;cassandra&#x2F;2.0&#x2F;cassandra&#x2F;dml&#x2F;dmlAboutDataConsistency.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.nullbus.net&#x2F;91&quot;&gt;https:&#x2F;&#x2F;blog.nullbus.net&#x2F;91&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;32867869&#x2F;how-cassandra-chooses-the-coordinator-node-and-the-replication-nodes&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;32867869&#x2F;how-cassandra-chooses-the-coordinator-node-and-the-replication-nodes&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;woooongs.tistory.com&#x2F;m&#x2F;89&quot;&gt;https:&#x2F;&#x2F;woooongs.tistory.com&#x2F;m&#x2F;89&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.datastax.com&#x2F;en&#x2F;cassandra-oss&#x2F;2.2&#x2F;cassandra&#x2F;dml&#x2F;dmlTransactionsDiffer.html&quot;&gt;https:&#x2F;&#x2F;docs.datastax.com&#x2F;en&#x2F;cassandra-oss&#x2F;2.2&#x2F;cassandra&#x2F;dml&#x2F;dmlTransactionsDiffer.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;medium.com&#x2F;code-zen&#x2F;cassandra-schemas-for-beginners-like-me-9714cee9236a&quot;&gt;https:&#x2F;&#x2F;medium.com&#x2F;code-zen&#x2F;cassandra-schemas-for-beginners-like-me-9714cee9236a&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;aws.amazon.com&#x2F;ko&#x2F;compare&#x2F;the-difference-between-cassandra-and-mongodb&#x2F;&quot;&gt;https:&#x2F;&#x2F;aws.amazon.com&#x2F;ko&#x2F;compare&#x2F;the-difference-between-cassandra-and-mongodb&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>넷플릭스의 CassandraDB 최적화 기록.link</title>
+        <published>2023-05-30T00:00:00+00:00</published>
+        <updated>2023-05-30T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223115635524/"/>
+        <id>https://myyrakle.github.io/blog/223115635524/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223115635524/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;netflixtechblog.com&#x2F;scaling-time-series-data-storage-part-i-ec2b6d44ba39&quot;&gt;https:&#x2F;&#x2F;netflixtechblog.com&#x2F;scaling-time-series-data-storage-part-i-ec2b6d44ba39&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[CassandraDB] 소개</title>
+        <published>2023-04-13T00:00:00+00:00</published>
+        <updated>2023-04-13T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223073004327/"/>
+        <id>https://myyrakle.github.io/blog/223073004327/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223073004327/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6eac8788aa56e29b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+카산드라DB는 분산시스템에 최적화된 NoSQL 데이터베이스 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;신속한 스케일아웃-확장이 가능하다는 것을 가장 큰 장점으로 내세운다. 다운타임 없이 노드를 수십수백개씩 자유롭게 늘리거나 줄일 수 있다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 write가 read보다 더 빠르다. 분산 환경에서의 빠르고 안전한 write 작업을 위해 read 성능을 희생한 형태인 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;2008년에 페이스북에 의해서 처음 만들어졌고, 현재는 아파치 재단에서 관리하고 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;NoSQL이라고는 하지만, SQL 구문을 약간 제공하고 ACID를 보장해서 RDB처럼 사용할 수는 있다.&lt;br &#x2F;&gt;
+다만 JOIN 같은건 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;대규모로 쓰기에는 꽤 적절한 것 같다. 넷플릭스나 애플 같은데서도 수천개 단위의 노드를 클러스터링해서 쓰고 있다고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;다만 자바로 만들어진거라서 GC로 인한 문제가 조금은 있는 것 같다.&lt;br &#x2F;&gt;
+디스코드는 카산드라로 수십억개 단위의 메세지 데이터를 관리하고 있다가 GC로 인한 문제를 겪고 ScyllaDB로 마이그레이션을 했다고 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gujo&quot;&gt;구조&lt;&#x2F;h2&gt;
+&lt;p&gt;카산드라는 multi master 레플리케이션을 통해 분산구조를 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_05245d1bb7768266.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+각 노드가 전부 읽기&#x2F;쓰기를 할 수 있으며, 한 노드에 쓰기가 발생했을 경우 다른 노드에도 변경사항을 전파하는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gossip-peurotokol&quot;&gt;gossip 프로토콜&lt;&#x2F;h2&gt;
+&lt;p&gt;카산드라는 노드 간 데이터 복제에 gossip이라는 프로토콜을 사용한다.&lt;br &#x2F;&gt;
+블록체인이나 기타 P2P에서도 자주 사용되는데, 꽤나 독특한 호출 구조를 갖는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6979daf7a7741986.png&quot; alt=&quot;&quot; &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;jins-dev.tistory.com&#x2F;entry&#x2F;%EA%B0%80%EC%8B%AD-%ED%94%84%EB%A1%9C%ED%86%A0%EC%BD%9C-Gossip-Protocol-%EC%9D%B4%EB%9E%80&quot;&gt;가십 프로토콜 (Gossip Protocol) 이란? :: Jins&#x27; Dev Inside (tistory.com)&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+4개의 노드가 있더라도 서로를 다 바라보고 다 쏘는게 아니라, 무작위의 노드에게 데이터를 연속적으로 날리면서 주고받을 뿐이다.&lt;br &#x2F;&gt;
+영희가 철수에게, 철수가 스미스에게, 소문(Gossip)을 퍼트리듯이 정보가 전달된다고 해서 가십 프로토콜이라 한다. 결국에는 소문이 모든 사람을 거쳐가므로 데이터 동기화는 똑같이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 송신자와 수신자가 명확하게 결합되어있지 않은 이러한 통신 구조 덕에 노드의 추가나 삭제가 매우 유연한 편이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sayonghaebogi&quot;&gt;사용해보기&lt;&#x2F;h2&gt;
+&lt;p&gt;docker를 통해서 테스트환경을 한번 만들어보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;이미지를 받고, 네트워크 세팅하고, 바로 실행하면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;docker pull cassandra&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;latest&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;docker network create cassandra&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;docker run&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;rm&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;d&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;name cassandra&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;hostname cassandra&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;network cassandra cassandra&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c9ae6bd4238a8e5e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 저 컨테이너에 접속해서 cqlsh를 실행하면, 바로 대화형 쉘이 열린다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;docker exec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;it 컨테이너해시 bash &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;cqlsh&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_60b88964dce101a5.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여기서 쿼리 쳐보면서 테스트를 하면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;kiseupeiseu-keyspace&quot;&gt;키스페이스 (keyspace)&lt;&#x2F;h2&gt;
+&lt;p&gt;키스페이스는 다른 RDB의 데이터베이스나 스키마와 비슷한 단위다.&lt;br &#x2F;&gt;
+하나의 키스페이스에는 여러개의 테이블이 들어갈 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;만드는 법은 어렵지 않다.&lt;br &#x2F;&gt;
+아래는 키스페이스 test_space를 만드는 간단한 쿼리다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE KEYSPACE IF NOT EXISTS test_space WITH REPLICATION&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;class&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; :&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;SimpleStrategy&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;replication_factor&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; :&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;1&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; };&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a2caed37f497b3fc.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;teibeul&quot;&gt;테이블&lt;&#x2F;h2&gt;
+&lt;p&gt;테이블은 여러분이 알던 그 테이블 단위가 맞다.&lt;br &#x2F;&gt;
+아래와 같은 형태로 만들 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span&gt; Create a table&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE TABLE IF NOT EXISTS test_space&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;item&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    uuid text PRIMARY KEY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    item_name text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    item_price double&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    last_update_timestamp timestamp&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_77d2b1c44ebf2808.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7d756e046c06f640.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 익숙한 SQL 구문을 통해 CRUD 작업을 처리할 수 있다.&lt;br &#x2F;&gt;
+데이터를 적절히 4개만 넣고 조회해보자.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;insert into test_space&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;item&lt;&#x2F;span&gt;&lt;span&gt;(uuid&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_price&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; last_update_timestamp)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;values&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;c714d095-0a63-4c1f-921d-42abd954e2c1&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;buldak&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100.5&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; toTimeStamp&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;()))&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;insert into test_space&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;item&lt;&#x2F;span&gt;&lt;span&gt;(uuid&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_price&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; last_update_timestamp)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;values&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;02773666-f483-4749-a3dd-c526e62daca2&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;eojuk&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 4000&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; toTimeStamp&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;()))&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;insert into test_space&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;item&lt;&#x2F;span&gt;&lt;span&gt;(uuid&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_price&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; last_update_timestamp)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;values&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;1f81911a-9a90-451c-8104-d6c9ff742588&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;gejang&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100.5&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; toTimeStamp&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;()))&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;insert into test_space&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;item&lt;&#x2F;span&gt;&lt;span&gt;(uuid&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; item_price&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; last_update_timestamp)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;values&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;4c2fff64-a727-48a6-aa87-5af6079f2ead&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;john doe&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100.5&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; toTimeStamp&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;()))&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; from test_space&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;item&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2066ff4252bb415b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+잘 되는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;jins-dev.tistory.com&#x2F;entry&#x2F;%EA%B0%80%EC%8B%AD-%ED%94%84%EB%A1%9C%ED%86%A0%EC%BD%9C-Gossip-Protocol-%EC%9D%B4%EB%9E%80&quot;&gt;가십 프로토콜 (Gossip Protocol) 이란? :: Jins&#x27; Dev Inside (tistory.com)&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;discord.com&#x2F;blog&#x2F;how-discord-stores-trillions-of-messages&quot;&gt;https:&#x2F;&#x2F;discord.com&#x2F;blog&#x2F;how-discord-stores-trillions-of-messages&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

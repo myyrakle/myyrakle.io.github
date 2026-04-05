@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Sequelize] 트랜잭션 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221976622314/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Sequelize] 트랜잭션">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221976622314/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2020-05-24T00:00:00+00:00">
+    <meta property="article:tag" content="개발노트">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221976622314/">[Sequelize] 트랜잭션</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-05-24T00:00:00+00:00"><time datetime="2020-05-24T00:00:00+00:00">2020.05.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="341 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/gaebalnoteu/">개발노트</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221976622314" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>일련의 DB 수정 작업들을 행하다보면, 그걸 하나의 완전한 작업 단위로서 묶어야 할 경우가 빈번하다.</p>
+<p>가령, 어떤 로직에서 수정작업 A와 B를 수행한다고 치자. 여기서 A와 B는 반드시 둘 다 수행되거나 아니면 둘 다 수행되지 않아야 한다.<br />
+그런데 갑자기 A에서 삑사리가 나서 B가 실행되지 못한다면? A를 어설프게 수정한 결과가 남은 상태에서 B만 수행되지 않은 상태가 된다.<br />
+이게 뭐란 말인가?</p>
+<p>이런 사태를 방지하기 위해 여러 쿼리 작업들을 하나의 단위로 묶고, 그 자체로 원자성을 가지도록 하는 것이 바로 트랜잭션이다. 트랜잭션으로 잘 묶인 작업들은 바로 DB에 반영이 되지 않는다.<br />
+전부 성공했을 경우에만 commit으로 완전히 반영하고, 문제가 하나라도 발생해서 끊겼을 경우엔 rollback으로 전부 날려버린다.</p>
+<p>시퀄라이즈에서도 이러한 기능을 쓰기 쉽게 제공한다.</p>
+<p>써보자.<br />
+우선 연결부터 만든다.<br />
+깜빡하고 host를 안넣었는데 잘 넣길 바란다.</p>
+<p><img src="/images/img_7bb95fb59d8373de.png" alt="" /></p>
+<p>트랜잭션에 포함할 쿼리를 수행하기 전에, 트랜잭션 객체를 생성한다.</p>
+<p><img src="/images/img_c595bd0b79a7b6e1.png" alt="" /></p>
+<p>그리고 트랜잭션에 포함시킬 쿼리 메소드마다, 마지막 object 인자로 넣어주면 된다.<br />
+키값은 transaction이다.</p>
+<p><img src="/images/img_7c4daf0bee227cd3.png" alt="" />
+난 raw 쿼리문을 썼지만, ORM 처리 메서드들에도 공통적으로 적용할 수 있다.</p>
+<p><img src="/images/img_7336ed5fb3f9203d.png" alt="" />
+이렇게 말이다.<br />
+공식 매뉴얼에 있는 예제다.</p>
+<p>그래서 대략, 다음과 같이 사용하면 된다.<br />
+쿼리 수행문들은 전부 예외처리구문으로 묶어놓고, catch로 이동하지 않으면 잘 수행된 것이니, commit으로 완전 적용.<br />
+예외 발생시엔 뭐가 펑크가 난 것이니 rollback으로 전부 원상복구한다.</p>
+<p><img src="/images/img_51c0c378965373e9.png" alt="" />
+저 코드를 돌리면</p>
+<p>이미 id는 기본키값으로 유일하기 때문에, 첫번째 쿼리는 삽입에 실패한다.</p>
+<p><img src="/images/img_9e48b15bc9697998.png" alt="" /></p>
+<p>이렇게 말이다.</p>
+<p><img src="/images/img_9d593bc3dae3576e.png" alt="" />
+그리고 테이블을 읽어보면 아무것도 달라진 것이 없다.</p>
+<p>하지만 문제없이 돌아가도록 한다면</p>
+<p><img src="/images/img_e3c6d4641002888f.png" alt="" /></p>
+<br>
+<p><img src="/images/img_6f9bdea0c2a44f83.png" alt="" />
+커밋되고,</p>
+<br>
+<p><img src="/images/img_580c16f6250edbdc.png" alt="" />
+실제로도 반영이 잘 될 것이다.</p>
+<br>
+<br>
+<h2 id="gwanridoeneun-teuraenjaegsyeon">관리되는 트랜잭션</h2>
+<p>위에서는 트랜잭션 객체를 얻어서 손으로 한땀한땀 commit과  rollback을 수행했었다.<br />
+하지만 시퀄라이즈에서는 보다 자동화된 간편한 방법을 제공한다.<br />
+transaction 메서드의 다른 오버로드 버전을 사용하면, 이건 쿼리문들을 실행하는 콜백함수를 받는다.<br />
+그리고 해당 콜백함수에서 뭐라도 예외가 발생하면 rollback을 수행하고,</p>
+<p><img src="/images/img_9d7770de0560b845.png" alt="" />
+문제없이 종료되면 commit을 수행하는 형태다.<br />
+그래서 자동으로 발생하는 예외 이외에, 임의로 rollback을 시키려면 직접 예외를 던져야 한다.</p>
+<p>그리고 저 함수 내에서는 commit과 rollback을 직접 사용하면 <strong>안 된다!</strong><br />
+오직 예외를 통해서만 간접적으로 발생시켜야 한다.</p>
+<p>여튼 그대로 실행시키면, 저기서는 id 1값이 이전과 동일하게 고유키와 충돌하므로, 롤백이 발생한다.</p>
+<p><img src="/images/img_333d4949be363152.png" alt="" /></p>
+<p>그렇다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://sequelize.org/master/manual/transactions.html">https://sequelize.org/master/manual/transactions.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221978836675/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Node.js] excel 사용해보기: exceljs<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221972616615/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>JWT란?<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

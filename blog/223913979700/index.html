@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] Engine: PostgreSQL | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223913979700/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] Engine: PostgreSQL">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223913979700/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-06-27T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223913979700/">[Clickhouse] Engine: PostgreSQL</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-27T00:00:00+00:00"><time datetime="2025-06-27T00:00:00+00:00">2025.06.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="353 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223913979700" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>clickhouse는 기본적으로 1차 저장소라기보다는, 기존 데이터를 부어서 빠르게 분석하기 위한 분석용 DB에 가깝다. 그래서 다른 DB와의 소스 통합을 꽤 잘 지원하는 편이다. PostgreSQL 소스를 엔진의 형태로 제공한다.</p>
+<p>그냥 이런 식으로 만들면, clickhouse가 알아서 원본 DB에서 가져와서 쿼리를 쏘아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE default</span><span style="color: #94E2D5;">.</span><span>postgresql_table</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `float_nullable`</span><span style="color: #89B4FA;font-style: italic;"> Nullable</span><span>(Float32)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `str`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `int_id`</span><span> Int32</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> PostgreSQL</span><span>(</span><span style="color: #A6E3A1;">&#39;localhost&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;db명&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;원본테이블&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;username&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;password&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="hangye">한계</h2>
+<p>이건 실제로 clickhouse에 데이터를 부어주는게 아니라, 대신 쏴주는 것에 불과하다.</p>
+<p>그냥 실시간으로 PostgreSQL에 쿼리를 쏴서 clickhouse 내에서 연산을 하는 것이라서, PostgreSQL의 원본 데이터 크기가 크다면 따라서 느려진다. 내부적으로는 COPY(SELECT ...)의 쿼리를 날려서 가져온다.</p>
+<p><img src="/images/img_06517af81778738a.png" alt="" /></p>
+<p>PostgreSQL을 clickhouse로 가져와서 고성능 쿼리를 날리고 싶다면, 직접 CDC로 가져오거나 실험적 대안인 MaterializedPostgreSQL를 써야 한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223918168727">https://blog.naver.com/sssang97/223918168727</a></p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>한번 써보자.<br />
+이런 단순한 key-value형 테이블이 있다고 가정해보겠다.</p>
+<p><img src="/images/img_66b85919bb691783.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE public</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">global_state</span><span> (</span></span>
+<span class="giallo-l"><span>	id bigserial NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	created_at timestamptz NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	updated_at timestamptz NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	deleted_at timestamptz NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;key&quot;</span><span> text NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	value text NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	CONSTRAINT global_state_pkey PRIMARY</span><span style="color: #89B4FA;font-style: italic;"> KEY</span><span> (id)</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>정의 자체는 간단하다.</p>
+<p>이걸 다시 clickhouse 형태에 맞춰서 재정의해주고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE acloset_qa</span><span style="color: #94E2D5;">.</span><span>global_state</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span>    id bigserial NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	created_at timestamptz NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	updated_at timestamptz NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	deleted_at timestamptz NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;key&quot;</span><span> text NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	value text NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>) </span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> PostgreSQL</span><span>(</span><span style="color: #A6E3A1;">&#39;엔드포인트&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;db명&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;원본테이블&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;username&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;password&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_570671f5018bc901.png" alt="" />
+엔진에다가 DB 접속정보만 넣어주면 된다.<br />
+그러면 clickhouse가 저 정보로 접속해서 알아서 가져오는 것이다.</p>
+<p>그러고 들어가보면</p>
+<p><img src="/images/img_e596ba138f3d447f.png" alt="" /></p>
+<p><img src="/images/img_726f403787e90d40.png" alt="" />
+데이터는 다 잘 들어가있고</p>
+<p>데이터를 새로 넣으면</p>
+<p><img src="/images/img_c3c1008f51d4552c.png" alt="" /></p>
+<p><img src="/images/img_1f5b581e5f94de5c.png" alt="" />
+맞춰서 반영되고</p>
+<p>수정해도</p>
+<p><img src="/images/img_50f0dee8097440d6.png" alt="" /></p>
+<p><img src="/images/img_9ef149531c265d3d.png" alt="" />
+알아서 반영해줄 것이다.</p>
+<p>그대로 잘 쓰면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="named-collection-gineung">named collection 기능</h2>
+<p>근데 위에서 사용한 생성 방법은 테이블을 만들때마다 접속정보를 계속 반복적으로, 중복되게 입력해야 한다는 단점이 있다.<br />
+named collection을 쓰면 접속정보를 미리 정의해두고 재사용할 수 있다.</p>
+<p>/etc/clickhouse-server/config.d/named_collections.xml 같은 파일을 만들고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">clickhouse</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #F5C2E7;">named_collections</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;</span><span style="color: #89B4FA;">mypg</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">host</span><span style="color: #94E2D5;">&gt;</span><span>localhost</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">host</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">port</span><span style="color: #94E2D5;">&gt;</span><span>5432</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">port</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">user</span><span style="color: #94E2D5;">&gt;</span><span>postgres</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">user</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">password</span><span style="color: #94E2D5;">&gt;</span><span>****</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">password</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        &lt;</span><span style="color: #89B4FA;">schema</span><span style="color: #94E2D5;">&gt;</span><span>schema1</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #89B4FA;">schema</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &lt;/</span><span style="color: #89B4FA;">mypg</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;/</span><span style="color: #F5C2E7;">named_collections</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">clickhouse</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p>이런 식으로 입력해준 뒤에, clickhouse 서버를 재시작하면 된다.<br />
+mypg가 이후에 사용할 수 있는 접속정보의 이름이다.</p>
+<p>그러면 그냥 바로 postgresql 함수로 호출해서 사용할 때도</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span><span> FROM</span><span style="color: #89B4FA;font-style: italic;"> postgresql</span><span>(mypg</span><span style="color: #9399B2;">,</span><span> table</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;table1&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이런 식으로 쓸 수 있고</p>
+<p>테이블을 생성할 때도</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE</span><span style="color: #89B4FA;font-style: italic;"> mypgtable</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span>) </span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> PostgreSQL</span><span>(mypg</span><span style="color: #9399B2;">,</span><span> table</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;test&#39;</span><span style="color: #9399B2;">,</span><span> schema</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;public&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이렇게 간단하게 처리할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteobeiseu-jeonce-mireoring">데이터베이스 전체 미러링</h2>
+<p>테이블을 하나하나 정의해서 옮기기 귀찮다면, 데이터베이스 전체를 미러링하는 방법도 있다.<br />
+그냥 데이터베이스 만들때 엔진 옵션을 넣어주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE database DB명</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> PostgreSQL</span><span>(</span><span style="color: #A6E3A1;">&#39;엔드포인트&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;DBNAME&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;user&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;password&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그럼 해당 데이터베이스의 전체 테이블을 자동으로 연결해준다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/integrations/postgresql">https://clickhouse.com/docs/integrations/postgresql</a><br />
+<a rel="external" href="https://clickhouse.com/docs/operations/named-collections#example-of-using-named-collections-with-the-postgresql-function">https://clickhouse.com/docs/operations/named-collections#example-of-using-named-collections-with-the-postgresql-function</a><br />
+<a rel="external" href="https://clickhouse.com/docs/engines/table-engines/integrations/postgresql">https://clickhouse.com/docs/engines/table-engines/integrations/postgresql</a><br />
+<a rel="external" href="https://clickhouse.com/docs/engines/database-engines/postgresql">https://clickhouse.com/docs/engines/database-engines/postgresql</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223914224979/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.88.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223911930530/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>파일시스템의 종류와 역사<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

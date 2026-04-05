@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 꼬리 호출 최적화 (Tail Call Optimization) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223578430194/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 꼬리 호출 최적화 (Tail Call Optimization)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223578430194/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-09-09T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223578430194/">[Rust] 꼬리 호출 최적화 (Tail Call Optimization)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-09-09T00:00:00+00:00"><time datetime="2024-09-09T00:00:00+00:00">2024.09.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="379 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223578430194" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>꼬리 호출 최적화(Tail Call Optimization)는 재귀 호출 표현법에서 사용되는 메모리/성능 비효율성을 완화할 수 있는 최적화 기법 중 하나다.</p>
+<p>여기서는 피보나치를 예로 들어보겠다.</p>
+<p><img src="/images/img_0be5cb37af797c5a.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> fibonacci_naive</span><span>(n: u32)</span><span style="color: #94E2D5;"> -&gt;</span><span> u32</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> n</span><span style="color: #94E2D5;"> ==</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">        0</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> else if</span><span> n</span><span style="color: #94E2D5;"> ==</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">        1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        fibonacci_naive</span><span>(n</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> fibonacci_naive</span><span>(n</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 2</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이런 수학적이고 재귀적인 표현이 적합한 경우에는 "표현성"과 "간결함" 측면에서는 재귀호출 표현이 뛰어나다.<br />
+근데 간결하다고 해서 효율적이란건 아니다.<br />
+재귀함수는 특성상 함수 호출 과정이 굉장히 많이 일어나는데, 함수 호출은 필연적으로 스택을 추가적으로 쌓기 때문에 스택 메모리를 비효율적으로 낭비한다. 게다가 스택 쌓고 내리고 하는 것도 실행속도에 영향을 준다.<br />
+그래서 재귀호출은 루프의 반복보다는 훨씬 느리다.</p>
+<p>저 예제 코드의 경우에도 한 50 정도까지는 그럭저럭 실행이 되지만, 60을 넘어가면 엄청나게 느려질 것이고, 그보다 더 넘어가면 스택오버플로로 터지기 딱 좋다.</p>
+<p><img src="/images/img_2251d3cf3e508304.png" alt="" /></p>
+<p>저런 형태의 코드는 어셈블리를 까봐도</p>
+<p><img src="/images/img_0b76fa0bc5cc1941.png" alt="" />
+그냥 순진하게 스스로를 호출한다.</p>
+<br>
+<br>
+<br>
+<h2 id="ggori-hocul-coejeoghwa">꼬리 호출 최적화</h2>
+<p>꼬리 호출 최적화는 특수하게 정의된 형태의 재귀호출 함수를 루프로 치환하는 최적화 기법이다.<br />
+재귀호출과 반복문의 장단점을 적절히 절충한 형태라고 할 수 있다.</p>
+<p>그리고 Rust는 암시적으로 꼬리 호출 최적화를 지원한다. 직접 구현한건 아니고 그냥 LLVM에 짬때린 것 같다.</p>
+<p>꼬리호출은 대략 다음과 같은 형태를 가진다.</p>
+<p><img src="/images/img_f3724f40e8127266.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">inline</span><span>(never)]</span></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> fibonacci_tail</span><span>(n: u128</span><span style="color: #9399B2;">,</span><span> a: u128</span><span style="color: #9399B2;">,</span><span> b: u128)</span><span style="color: #94E2D5;"> -&gt;</span><span> u128</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> n</span><span style="color: #94E2D5;"> ==</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        a</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        fibonacci_tail</span><span>(n</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span> b</span><span style="color: #9399B2;">,</span><span> a</span><span style="color: #94E2D5;"> +</span><span> b)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">inline</span><span>(never)]</span></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n: u128)</span><span style="color: #94E2D5;"> -&gt;</span><span> u128</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    fibonacci_tail</span><span>(n</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>처음 보면 이해하기 쉽지 않을 수도 있다.<br />
+원래 리턴값을 통해 상위 호출자로 결과를 넘기던 것을, 이제는 파라미터를 통해 계승하도록 바뀌었다.</p>
+<p>그래서 이제 이걸 어셈으로 까보면</p>
+<p><img src="/images/img_af33356c0ed195cf.png" alt="" />
+이제는 재귀호출이 전부 라사지고 단순한 점프 구문만 남았다.<br />
+루프로 치환된 것이다.</p>
+<p>이러면 이제 Stackoverflow 문제도 없어졌을뿐만 아니라, 성능도 압도적으로 증가한다.</p>
+<p><img src="/images/img_fd41b0bd4422e7ec.png" alt="" />
+원래는 60만 넘겨도 거의 뻗던 것이, 1000을 넘게 넘겨도 1초 미만으로 완료된다.</p>
+<br>
+<br>
+<br>
+<h2 id="bojanghaji-anheum-no-guarantee">보장하지 않음 (No Guarantee)</h2>
+<p>아직 Rust는 꼬리 호출 최적화를 명시적으로 지원하지는 않는다.<br />
+LLVM 최적화 패스에 기대서 어쩌다보니 나오게끔 되어있는 거지, Rust가 명시적인 최적화 보장을 제공해주거나 하는건 없는 것이다.</p>
+<p>예전에 Tail Call에 대한 보장을 문법적으로 지원하려고 be/become 같은 키워드를 예약해두긴 했는데, 현재로서는 요원하다. 우선순위가 굉장히 낮게 잡혀서 작업이 전혀 진행되지 않고 있는 것 같다.<br />
+<a rel="external" href="https://rust-lang.github.io/rfcs/0601-replace-be-with-become.html">https://rust-lang.github.io/rfcs/0601-replace-be-with-become.html</a></p>
+<p>아무튼 그래서 Tail Call Optimization이 적용되었는지를 검증하는 가장 확실한 방법은, 위처럼 어셈블리를 까보는 것이다.</p>
+<p>혹은 매크로 기반으로 Tail Call이 잘 적용되는 형태의 정형화되 코드를 생성해주는 crate이 하나 있다.<br />
+이런걸 써도 된다.<br />
+<a rel="external" href="https://docs.rs/tailcall/latest/tailcall/">https://docs.rs/tailcall/latest/tailcall/</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.rs/tailcall/latest/tailcall/">https://docs.rs/tailcall/latest/tailcall/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/59257543/when-is-tail-recursion-guaranteed-in-rust">https://stackoverflow.com/questions/59257543/when-is-tail-recursion-guaranteed-in-rust</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223577151618/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C#] CLR: GC의 구조<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223576600679/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] GC의 구조<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

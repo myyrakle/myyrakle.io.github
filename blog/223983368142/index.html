@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Qdrant] group query | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223983368142/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Qdrant] group query">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223983368142/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-08-26T00:00:00+00:00">
+    <meta property="article:tag" content="qdrant">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223983368142/">[Qdrant] group query</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-26T00:00:00+00:00"><time datetime="2025-08-26T00:00:00+00:00">2025.08.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="106 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/qdrant/">qdrant</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223983368142" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>qdrant도 grouping을 기반으로 하는 쿼리 구문을 제공한다.<br />
+일반 조회, scroll에서는 안되고, 전용 유사도 검색 API를 통해서만 사용할 수 있다.</p>
+<p>복잡한 통계 기능을 제공하는건 아니고, 단순 배열 그루핑 정도만 기능한다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteo-seting">데이터 세팅</h2>
+<p>적당히 깔았다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>PUT</span><span style="color: #94E2D5;"> /</span><span>collections</span><span style="color: #94E2D5;">/</span><span>products</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;vectors&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;size&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;distance&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Dot&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>PUT</span><span style="color: #94E2D5;"> /</span><span>collections</span><span style="color: #94E2D5;">/</span><span>products</span><span style="color: #94E2D5;">/</span><span>points</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;points&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;id&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;payload&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;blue&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;price&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10000</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;id&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;payload&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;red&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;price&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5000</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;id&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;payload&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;blue&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;price&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 20000</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">2</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;id&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;payload&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;yellow&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;price&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4000</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;id&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;payload&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;blue&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;price&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4500</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;id&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 6</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;payload&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;black&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;price&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 15000</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;id&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 7</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;payload&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;color&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;white&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;price&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 2000</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">1</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그러면 이런 식으로 그룹 쿼리를 날려볼 수 있다.<br />
+일반 query API와 요청 형식은 거의 같다. 그룹 기준을 지정하는 필드인 group_by가 추가될 분이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>POST</span><span style="color: #94E2D5;"> /</span><span>collections</span><span style="color: #94E2D5;">/</span><span>products</span><span style="color: #94E2D5;">/</span><span>points</span><span style="color: #94E2D5;">/</span><span>query</span><span style="color: #94E2D5;">/</span><span>groups</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;query&quot;</span><span>: [</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;">2</span><span>]</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;group_by&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;color&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;with_vector&quot;</span><span>: </span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;with_payload&quot;</span><span>: </span><span style="color: #FAB387;">true</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_6a4eaaa34533ae2b.png" alt="" />
+이러면 이제 color 기준으로 값을 묶고, hits라는 내부 필드에 모아서 뿌려준다.</p>
+<p>참고로, 성능 문제 때문인지 그루핑해서 뿌려주는 개수에는 제한이 존재한다.<br />
+group_size라는 파라미터로 조정할 수 있고, 기본값은 3개다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://api.qdrant.tech/api-reference/search/query-points-groups">https://api.qdrant.tech/api-reference/search/query-points-groups</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223983361531/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Qdrant] prefetch: Score boosting<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223981963685/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 인덱스 최적화: 복잡한 필터 조건<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

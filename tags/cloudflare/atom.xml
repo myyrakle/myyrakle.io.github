@@ -1,0 +1,860 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - Cloudflare</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/cloudflare/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-02-18T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/cloudflare/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[Cloudflare] R2: vs S3 벤치마크</title>
+        <published>2025-02-18T00:00:00+00:00</published>
+        <updated>2025-02-18T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223764227691/"/>
+        <id>https://myyrakle.github.io/blog/223764227691/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223764227691/">&lt;p&gt;이전 포스트&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223077815906&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223077815906&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+R2는 저렴한 AWS S3의 대안 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;저장 비용 자체도 S3보다 1.6배 정도는 저렴한데, CDN을 탄 조회 비용까지 무료이니 빅테크 서비스 중에서는 이만한게 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;munje-cdn-reiteonsi&quot;&gt;문제: CDN 레이턴시?&lt;&#x2F;h2&gt;
+&lt;p&gt;비용 저렴하고 다 좋긴 좋은데, Cloudflare에는 큰 문제가 있다. 한국에서만.&lt;&#x2F;p&gt;
+&lt;p&gt;엔터프라이즈 솔루션을 사용하지 않으면 한국 국내의 CDN 서버를 사용하지 않는다는 것이다.&lt;br &#x2F;&gt;
+그래서 이미지 같은걸 cloudflare 솔루션으로 조회한다고 쳐도, 한국에 위치한 CDN 서버를 타는게 아니라, 근처에 도쿄나 홍콩, 싱가폴 같은 다른 나라의 CDN 서버에서 가져오게 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;엔터프라이즈를 쓸만큼의 우량고객이라면 괜찮겠으나, 일반적인 사용량의 사용자라면 지리적인 격차로 인한 레이턴시 증가는 꽤 심각하게 와닿는 문제일 수 있다.&lt;br &#x2F;&gt;
+애초에 엔터프라이즈 긁으면 한달에 수백만원에서 천만원 단위는 우습게 나간다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;reiteonsi-silheom-junbi&quot;&gt;레이턴시 실험 준비&lt;&#x2F;h2&gt;
+&lt;p&gt;성능차가 얼마나 나는지 직접 한번 실험을 해보기로 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_61b684a9af69c73f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+작은 이미지, 적당한 이미지, 17mb까리 좀 큰 이미지를 테스트셋으로 준비했다.&lt;br &#x2F;&gt;
+내 경우에는 100mb~gb 같은 거대한 파일을 다룰 일은 없어서 그정도까지 찔러보진 않았다.&lt;&#x2F;p&gt;
+&lt;p&gt;각각에 적당히 업로드했다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3a978b1effe98094.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cc88b8acbc96c3db.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 복잡하게 코드 짤거 없이 쉘 커맨드로 대충 찔렀다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;time wget&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;server&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;response&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;report&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;speed&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;bits&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;O output_image&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;jpg 경로&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jageun-imiji-281k&quot;&gt;작은 이미지 (281k)&lt;&#x2F;h2&gt;
+&lt;p&gt;AWS Cloudfront부터 찔렀다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_03c34e977cc85a9a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+X-Cache: Miss from cloudfront라는 헤더가 보일텐데, 캐시에서 이미지를 가져오지 못했다는 뜻이다. 처음 조회하는거니까 당연하다.&lt;br &#x2F;&gt;
+최초에는 S3-&amp;gt;CDN으로 적재하는 시간이 걸리다보니, 거의 1초에 가깝게 걸리기도 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;다시 찌르면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6e663413e15ac9ec.png&quot; alt=&quot;&quot; &#x2F;&gt;
+X-Cache: Hit from cloudfront가 뜬 것이 보인다.&lt;br &#x2F;&gt;
+이번에는 캐시에서 잘 가져왔고, 실제로 실행시간도 100ms 단위로 빠르게 나왔다.&lt;br &#x2F;&gt;
+반복적으로 시도해도 100ms 내외로 잘 가져오는 것을 확인할 수 있었다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 Cloudflare는 어떨까?&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_839152ee583b73cc.png&quot; alt=&quot;&quot; &#x2F;&gt;
+최초에 찌를 때는 당연히 느리다. 비슷하게 0.8초쯤 걸렸다.&lt;br &#x2F;&gt;
+CF-Cache-Status: Miss라고 뜨는게 캐시 미스가 났다는 뜻이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 여기서 주목할건 CF-RAY라는 응답 헤더다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_93ca8d39f2ceac94.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이건 각 요청에 대한 trace ID 같은건데, 저기 뒤에 붙은 ICN이 리전명이다.&lt;br &#x2F;&gt;
+그리고 ICN이 한국이다.&lt;br &#x2F;&gt;
+사실 다른 사람들 글 보니까 홍콩 리전에 붙고 그러던데, 나는 이것저것 반복적으로 찔러봐도 ICN에만 붙었다. 리전이 선정되는 기준을 잘 모르겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;아무튼 반복적으로 찔러보면, 캐시 HIT이 되니까 빨라지긴 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1b5300753f9b6e55.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c364546d528498c6.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bb38764426bfd019.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ba87688dc2dd49b1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8c181ababa11f2cb.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 AWS에 비하면 그 레이턴시의 안정성이 확연히 떨어진 것을 볼 수 있었다.&lt;br &#x2F;&gt;
+빠를때는 100ms로 오기도 하는데, 300ms대로 오기도 했다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;junggan-imiji-6mb&quot;&gt;중간 이미지 (6mb)&lt;&#x2F;h2&gt;
+&lt;p&gt;AWS Cloudfront로 먼저 찔렀다.&lt;br &#x2F;&gt;
+중간 크기 이미지의 경우에는 크기 자체가 좀 있어서인지, 캐시를 타든 안타든간에 500~900ms 정도는 걸렸다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1a52e643d3358527.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6c7829a22137f3d4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_457c575267612a30.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;여기서는 cloudflare와 aws의 성능차가 그다지 눈에 띄지는 않았다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eacd348e13dda693.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_09204274abc5a682.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6ec406b4c30a8953.png&quot; alt=&quot;&quot; &#x2F;&gt;
+거의 비슷하더라&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;keun-imiji-17mb&quot;&gt;큰 이미지 (17mb)&lt;&#x2F;h2&gt;
+&lt;p&gt;AWS의 경우&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0ef844647d705ca7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a4aeebef2551ae7f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_de205170817a0aff.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;cloudflare의 경우&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0056f49d95d18020.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3523c6d1bf61b825.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5207fd977d9120b3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;매우 작을때는 좀 차이가 나지만 애매한 크기로 가면 성능차가 두드러지지는 않는 것 같았다.&lt;br &#x2F;&gt;
+파일이 더 커지면 벌어질 수도 있을 것 같긴 한데, 시도해보지는 않았다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;boryu&quot;&gt;보류&lt;&#x2F;h2&gt;
+&lt;p&gt;사실 국내 CDN 안타서 느리다고 하길래 얼마나 느린지, 그래도 쓸만은 한 정도인지 실험해보려 한건데, 너무 빠르고 국내 CDN도 잘 타는거 같아서 좀 당황했다.&lt;&#x2F;p&gt;
+&lt;p&gt;국내 CDN을 안타는 조건이 따로 또 있는건지, 버그인건지 아직까지도 잘 모르겠다.&lt;br &#x2F;&gt;
+시간을 두고 한번 더 확인을 해봐야 할 것 같다. 실험은 잠시 중지다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;fundamentals&#x2F;reference&#x2F;http-headers&#x2F;#cf-ray&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;fundamentals&#x2F;reference&#x2F;http-headers&#x2F;#cf-ray&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;marinesnow34.github.io&#x2F;2023&#x2F;09&#x2F;23&#x2F;s3r2&#x2F;&quot;&gt;https:&#x2F;&#x2F;marinesnow34.github.io&#x2F;2023&#x2F;09&#x2F;23&#x2F;s3r2&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>AWS Lambda =&gt; Cloudflare Worker 비용 최적화 사례.link (80%)</title>
+        <published>2024-11-10T00:00:00+00:00</published>
+        <updated>2024-11-10T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223654776784/"/>
+        <id>https://myyrakle.github.io/blog/223654776784/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223654776784/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;80-percent-lower-cloud-cost-how-baselime-moved-from-aws-to-cloudflare&#x2F;&quot;&gt;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;80-percent-lower-cloud-cost-how-baselime-moved-from-aws-to-cloudflare&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] Page: 프로덕션 브랜치 변경</title>
+        <published>2024-08-08T00:00:00+00:00</published>
+        <updated>2024-08-08T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223541452707/"/>
+        <id>https://myyrakle.github.io/blog/223541452707/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223541452707/">&lt;p&gt;안타깝게도, 기본 제공 프레임워크를 쓰지 않기 위해 Direct Upload로 Page를 만든다면, 기본 프로덕ㄱ션 브랜치는 main으로 고정된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7339b52fa540ea4a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+UI에서는 이걸 바꿀 방법도 딱히 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;이걸 바꾸려면 우선 API를 써서 PATCH로 프로덕션 브랜치를 변경해야 한다.&lt;br &#x2F;&gt;
+API 토큰 따거나 식별번호 찾는 법 등은 별도 포스트를 참조한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222952119633&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222952119633&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;YOUR_API_TOKEN_HERE, YOUR_ACCOUNT_IDENTIFIER_HERE, YOUR_PROJECT_IDENTIFIER_HERE 3개 채워서 치환하고 날리면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;curl&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;request PATCH \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;url https&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;api.cloudflare.com&#x2F;client&#x2F;v4&#x2F;accounts&#x2F;YOUR_ACCOUNT_IDENTIFIER_HERE&#x2F;pages&#x2F;projects&#x2F;YOUR_PROJECT_IDENTIFIER_HERE \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;header&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;Content-Type: application&#x2F;json&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;header&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;Authorization: Bearer YOUR_API_TOKEN_HERE&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;data&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;{ &amp;quot;production_branch&amp;quot;: &amp;quot;master&amp;quot; }&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ab9938062b577d97.png&quot; alt=&quot;&quot; &#x2F;&gt;
+에러 없으면 잘 된 것이고&lt;&#x2F;p&gt;
+&lt;p&gt;Action을 통해서도 브랜치를 설정해서 올리면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0154fbe2f5011fa5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_13268ce3db11b990.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이제는 될 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;cloudflare&#x2F;pages-action&#x2F;issues&#x2F;63&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;cloudflare&#x2F;pages-action&#x2F;issues&#x2F;63&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;community.cloudflare.com&#x2F;t&#x2F;how-to-change-production-branch-for-pages&#x2F;612097&quot;&gt;https:&#x2F;&#x2F;community.cloudflare.com&#x2F;t&#x2F;how-to-change-production-branch-for-pages&#x2F;612097&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;cloudflare&#x2F;pages-action&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;cloudflare&#x2F;pages-action&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Cloudflare가 난수를 만드는 방법.link</title>
+        <published>2023-11-03T00:00:00+00:00</published>
+        <updated>2023-11-03T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223254389763/"/>
+        <id>https://myyrakle.github.io/blog/223254389763/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223254389763/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.cloudflare.com&#x2F;ko-kr&#x2F;learning&#x2F;ssl&#x2F;lava-lamp-encryption&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.cloudflare.com&#x2F;ko-kr&#x2F;learning&#x2F;ssl&#x2F;lava-lamp-encryption&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_659c5d9a7727e5e8.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+램프 껐다키면서 사진찍기&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_94009eec466599b5.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+(런던지사) 이중 진자 시스템의 사진을 찍기&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d8d9eac65775a254.jpeg&quot; alt=&quot;&quot; &#x2F;&gt;
+(싱가포르 지사) 우라늄 펠릿의 방사성 붕괴를 측정하기&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>얼마 전에 한국에서 Cloudflare가 차단당했던 이유</title>
+        <published>2023-09-29T00:00:00+00:00</published>
+        <updated>2023-09-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223224618663/"/>
+        <id>https://myyrakle.github.io/blog/223224618663/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223224618663/">&lt;p&gt;관련 링크&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;news.hada.io&#x2F;topic?id=11000&quot;&gt;https:&#x2F;&#x2F;news.hada.io&#x2F;topic?id=11000&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 답&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ce5d5f13e8a1fa37.jpg&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] Worker KV</title>
+        <published>2023-08-20T00:00:00+00:00</published>
+        <updated>2023-08-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223188202549/"/>
+        <id>https://myyrakle.github.io/blog/223188202549/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223188202549/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a9bcae0e8cc463a9.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Work KV는 클라우드플레어에서 자체적으로 제공하는 K-Value 데이터베이스 시스템이다.&lt;br &#x2F;&gt;
+일반적으로 Cloudflare Worker에서 사용하도록 설계되어있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gujo&quot;&gt;구조&lt;&#x2F;h2&gt;
+&lt;p&gt;Worker K&#x2F;V는 Redis 같은 다른 K&#x2F;V와 동일하게 생각하면 안된다. 구조나 동작이 조금 다르다.&lt;&#x2F;p&gt;
+&lt;p&gt;Work KV는 기본적으로 글로벌 데이터 시스템이다.&lt;br &#x2F;&gt;
+하지만 저장소 자체는 단 하나에 둔다. 중앙 저장소를 두고 필요한 엣지 서버마다 캐시를 두는 식이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4fe1076869e3549b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그래서 쓰기가 발생한 이후, 캐시가 되지 않은 상태에서 읽기를 하는 것은 좀 느리고 비효율적이다.&lt;&#x2F;p&gt;
+&lt;p&gt;수정이나 생성이 매우 드물게 발생하고 단순 읽기가 매우 많은 경우에 적합한 시스템이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;biyong&quot;&gt;비용&lt;&#x2F;h2&gt;
+&lt;p&gt;당연히 공짜가 아니다. 하지만 무료 사용량이 넉넉하고 저렴한 편이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;platform&#x2F;pricing&#x2F;&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;platform&#x2F;pricing&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;읽기는 매일 10만건당 무료, 쓰기는 매일 1000건 무료 제공하고, 그 이상은 요금을 부과한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2a582843fa2987b9.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 그것도 그리 비싸진 않다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;kv-neimseupeiseu-mandeulgi&quot;&gt;KV 네임스페이스 만들기&lt;&#x2F;h2&gt;
+&lt;p&gt;KV는 데이터베이스 단위를 네임스페이스라 부른다.&lt;br &#x2F;&gt;
+worker KV 페이지로 이동해서&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b6625b564d3b23aa.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;네임스페이스를 생성해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1848ee24a5731f9e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이름만 적당히 지어주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4c33813692205cb2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이렇게 생길 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8d7f5d7c5d7f4f66.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gabs-cuga&quot;&gt;값 추가&lt;&#x2F;h2&gt;
+&lt;p&gt;콘솔에서 바로 값을 추가, 수정, 삭제하거나 조회할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_088d3e2e525fd22e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+추가하면&lt;&#x2F;p&gt;
+&lt;p&gt;이제 아래에 뜨고, 검색 기능으로 조회해볼 수도 있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_99a7b3d555aeb4c2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;workere-yeondonghagi&quot;&gt;Worker에 연동하기&lt;&#x2F;h2&gt;
+&lt;p&gt;Worker KV는 Worker를 위해서 만들어진 기능이다.&lt;br &#x2F;&gt;
+그래서 worker에서만 사용 가능한데, 추가로 설정할게 또 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;연동할 worker 설정에 들어가서 바인딩을 해줘야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6e793b5732774610.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;나는 방금 만들었던 test_data라는 네임스페이스를 FOO라는 이름으로 바인딩하려 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_913acedc51075c38.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 워커 코드에서 이런식으로 가져다가 꺼내쓸 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eafc87a5bbe5a281.png&quot; alt=&quot;&quot; &#x2F;&gt;
+방금 넣었든 APP_VERISON이라는 키값을 가져오려 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3cfa0c602e5ca7f6.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 기대한대로 동작할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이외에도 자주 쓸만한건 아니지만 .put, .delete 같은 함수들도 쓸 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;더 많은 기능들은 문서를 참고하면 좋겠다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;kv&#x2F;&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;kv&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;learning&#x2F;how-kv-works&#x2F;&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;learning&#x2F;how-kv-works&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;kv&#x2F;&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;kv&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] Redirection Rule</title>
+        <published>2023-04-20T00:00:00+00:00</published>
+        <updated>2023-04-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223079895284/"/>
+        <id>https://myyrakle.github.io/blog/223079895284/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223079895284/">&lt;p&gt;클라우드플레어는 자체적인 URL 리다이렉트 기능도 제공한다.&lt;br &#x2F;&gt;
+비용은 따로 없다. 공짜다.&lt;&#x2F;p&gt;
+&lt;p&gt;내 경우에는 내가 갖고있는 도메인을 이 블로그 URL 앞에다 달아서 리다이렉트를 시키려고 했다.&lt;br &#x2F;&gt;
+&lt;code&gt;blog.myyrakle.com -&amp;gt; blog.naver.com&#x2F;sssang97&lt;&#x2F;code&gt; 이렇게 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;먼저 보유한 도메인 레코드 관리에서, 원하는 서브도메인을 다음과 같은 형태로 깔아준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c38102fa9f3558a8.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저 아이피는 크게 중요하지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 리디렉션 규칙으로 이동해서&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e25a2caa0d2137db.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;다음과 같은 형태로 깔아주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_129b113b120050ab.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;concat&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; http&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;request&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;uri)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그럼 될 것이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.myyrakle.com&#x2F;&quot;&gt;https:&#x2F;&#x2F;blog.myyrakle.com&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] R2</title>
+        <published>2023-04-18T00:00:00+00:00</published>
+        <updated>2023-04-18T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223077815906/"/>
+        <id>https://myyrakle.github.io/blog/223077815906/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223077815906/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b6c2745b8bd41d74.png&quot; alt=&quot;&quot; &#x2F;&gt;
+R2는 Cloudflare의 파일 스토리지 서비스다.&lt;br &#x2F;&gt;
+주로 이미지같은걸 올려쓸때 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;S3와 완전 호환된다고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;비용도 매우 저렴하고, 성능도 나쁘지 않아서 static file serving에는 이만한게 없는 것 같다.&lt;br &#x2F;&gt;
+개인적으로 S3에 올려쓰던것도 점차 옮길까 생각중이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;biyong&quot;&gt;비용&lt;&#x2F;h2&gt;
+&lt;p&gt;AWS S3 등의 타사 스토리지에 비하면 압도적으로 저렴한 편이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5f036bf3a2c0ab74.png&quot; alt=&quot;&quot; &#x2F;&gt;
+일단, 리소스를 조회할 때 발생하는 데이터 전송은 무료다. 다른 서비스들은 대부분 유료다.&lt;&#x2F;p&gt;
+&lt;p&gt;스토리지는 10기가까지는 무료고, 그 이상부터 기가당 0.015달러=20원이다. AWS S3의 경우는 무료 사용량 없이 기가당 0.025 달러로 더 비싸다.&lt;&#x2F;p&gt;
+&lt;p&gt;Class A Operation은 파일 업로드 같은 가변작업 요청이다. 100만건당 4.5달러=6000원&lt;br &#x2F;&gt;
+Class B Operation은 읽기작업이다. 100만건당 0.36 달러=500원&lt;&#x2F;p&gt;
+&lt;p&gt;자세한건 상세 사이트를 참고한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;r2&#x2F;pricing&#x2F;&quot;&gt;Pricing · Cloudflare R2 docs&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gyejeong-hwalseonghwa&quot;&gt;계정 활성화&lt;&#x2F;h2&gt;
+&lt;p&gt;먼저 R2 구독을 활성화해야 한다.&lt;br &#x2F;&gt;
+클플은 서비스마다 결제가 격리되어있기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4acad709353ffac9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1913b85401517065.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;어차피 비용은 0원부터 시작하니까 그냥 구매처리하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3231703c56bf8b60.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_27c91111e95125aa.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;beokis-mandeulgi&quot;&gt;버킷 만들기&lt;&#x2F;h2&gt;
+&lt;p&gt;대략적인 사용법은 S3 등과 다를것이 없다.&lt;br &#x2F;&gt;
+먼저 버킷을 만든다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0cc5e343377535ca.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이름 짓고 만들면 끝이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fc075faf9236f257.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이런 모양의 콘솔이 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_424c55329dbd351a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;imiji-eobrodeu&quot;&gt;이미지 업로드&lt;&#x2F;h2&gt;
+&lt;p&gt;이번에는 이미지를 올려보자.&lt;br &#x2F;&gt;
+cli를 써도 되겠지만, 웹 콘솔로도 이정도는 무리없이 할 수 있다.&lt;br &#x2F;&gt;
+파일을 선택해서 업로드한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2b4ad688e06532b0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이렇게 리소스가 추가될 것인데&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_23593d384d992ed6.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;저 링크로는 데이터에 접근을 할 수가 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ef61edcbecbd8799.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저건 내부용 URL이기 때문이다.&lt;br &#x2F;&gt;
+R2는 S3와 다르게 public endpoint를 자체적으로 제공하지는 않고, 도메인을 추가적으로 연동해서 쓰는걸 권장한다.&lt;br &#x2F;&gt;
+없으면 사자&lt;&#x2F;p&gt;
+&lt;p&gt;엔드포인트를 설정하려면, 설정 탭에서 보유하고 있는 도메인을 기반으로 도메인을 설정한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f041c0d875ca24c8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 도메인 설정을 뒷단에서 해주고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0302c2076d714ee1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 활성화가 되면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_04223c04756113e2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 조회해볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8a88466c489f8d0d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;어렵지 않다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] 이메일에 도메인 연결</title>
+        <published>2023-03-07T00:00:00+00:00</published>
+        <updated>2023-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223037282287/"/>
+        <id>https://myyrakle.github.io/blog/223037282287/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223037282287/">&lt;p&gt;이런저런 서비스 사이트들을 보다보면, @gmail.com같은게 아니라 자체 도메인으로 이메일 주소가 쓰여있는 것을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_db846a82035cae79.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이건 기본적으로 도메인이 있으면 도메인 제공자 사이트를 통해 설정할 수가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기에서는 Cloudflare를 통해서 이메일에 도메인을 연동하는 것을 시도해보겠다.&lt;br &#x2F;&gt;
+먼저 도메인이 있어야 한다.&lt;br &#x2F;&gt;
+해당 도메인 페이지로 이동해서 &quot;이메일 라우팅&quot; 탭 클릭&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_25140679dd3d22ca.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Get Started를 누르고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_44b74ed456ef6528.png&quot; alt=&quot;&quot; &#x2F;&gt;
+원하는 커스텀 주소와, 연동할 원본 이메일 주소를 적어준다.&lt;br &#x2F;&gt;
+저러면 &quot;email@tokkitang.com&quot; 주소로 보내면 sssang97@naver.com 주소로 전달해주는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2be1ce693a724ded.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그러면 원본 이메일 주소로 검증용 메일이 간다. 그거 잘 클릭해주고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_887b9466bb5a548d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Add records를 누르면 필요한건 알아서 다 깔아준다.&lt;&#x2F;p&gt;
+&lt;p&gt;이제 저 도메인으로 보내면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ff3c6bfe7ccd9595.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;잘 받아질 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5ce6f5d8f664968c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;ko-kr&#x2F;introducing-email-routing-ko-kr&#x2F;&quot;&gt;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;ko-kr&#x2F;introducing-email-routing-ko-kr&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] Pages &amp; Functions: Nextjs 구축하기</title>
+        <published>2022-12-12T00:00:00+00:00</published>
+        <updated>2022-12-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222952892800/"/>
+        <id>https://myyrakle.github.io/blog/222952892800/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222952892800/">&lt;p&gt;Cloudflare 페이지는 단순한 정적 렌더링만 되는게 아니라, Nextjs 같은 서버사이드 렌더링 시스템도 구축해서 사용할 수가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;그게 어떻게 가능한가 하면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a71f3393795e7be5.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Function이라는 부가적인 서버 처리 기능을 제공하기 때문에 가능한 부분이다.&lt;br &#x2F;&gt;
+이런걸 흔히 Edge 런타임이라고 부르는데, AWS에 비슷한 놈으로 Lambda Edge가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;원래 있던건 아니고, 2022년 6월부터 지원이 시작된 따끈따끈한 기능이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;biyong&quot;&gt;비용&lt;&#x2F;h2&gt;
+&lt;p&gt;이런걸 써보려면 당연히 비용을 생각하지 않을 수 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;Pages의 Functions는 Cloudflare worker 기반으로 요금이 청구된다.&lt;br &#x2F;&gt;
+다행히도 Workers는 다른 서버리스 서비스들과 비교하면 거저라고 생각될 정도로 매우 저렴한 가격을 자랑한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_604c41cb9468ac3b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+매일마다 10만건이 무료고, 그 이후로도 100만건에 1달러도 안한다.&lt;br &#x2F;&gt;
+cloudflare의 엄청난 적자가 아마 다 이런데서 나올 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;soseukodeu-setinghagi&quot;&gt;소스코드 세팅하기&lt;&#x2F;h2&gt;
+&lt;p&gt;github 레포 하나 파고, 템플릿 만들어서 코드를 넣어주자.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;npx create&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;next&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;app&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;example&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; with&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;static&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;export&lt;&#x2F;span&gt;&lt;span&gt; cloudflare&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;nextjs&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_37e50bf8091ad868.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이거면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pages-mandeulgi&quot;&gt;Pages 만들기&lt;&#x2F;h2&gt;
+&lt;p&gt;cloudflare 콘솔에 들어가서 Pages를 만들어주자&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ee9afb2593145db0.png&quot; alt=&quot;&quot; &#x2F;&gt;
+레포지토리 고르고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_218fc0265481ab63.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Nextjs를 선택해준다.&lt;br &#x2F;&gt;
+Statis HTML export로 골라주자.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c6ee1d73a94a2c72.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그리고 환경변수로 노드 버전을 설정해줘야 한다.&lt;br &#x2F;&gt;
+안그러면 제멋대로 레거시한 버전으로 세팅해서 컴파일이 다 터질 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9994a5d124a193b6.png&quot; alt=&quot;&quot; &#x2F;&gt;
+알아서 빌드해서 올려줄 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;아주 편리하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eeb1bfb2e9507c2e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;pages&#x2F;framework-guides&#x2F;deploy-a-nextjs-site&#x2F;&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;pages&#x2F;framework-guides&#x2F;deploy-a-nextjs-site&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;pages&#x2F;platform&#x2F;functions&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;pages&#x2F;platform&#x2F;functions&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;remix-run&#x2F;remix&#x2F;issues&#x2F;3095&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;remix-run&#x2F;remix&#x2F;issues&#x2F;3095&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;next-on-pages&#x2F;&quot;&gt;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;next-on-pages&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] Pages 배포 자동화하기 (Github Action)</title>
+        <published>2022-12-11T00:00:00+00:00</published>
+        <updated>2022-12-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222952119633/"/>
+        <id>https://myyrakle.github.io/blog/222952119633/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222952119633/">&lt;p&gt;원래 Github Page로 배포해놓고 쓰던 정적사이트가 하나 있었는데, 너무 불편하고 제약도 많아서 cloudflare page로 옮기게 됐다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 CI&#x2F;CD는 github action으로 쓰려 한다.&lt;br &#x2F;&gt;
+github action 코드는 대충 이런식이면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8ed4352b85ad8dd8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# This is a basic workflow to help you get started&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; with&lt;&#x2F;span&gt;&lt;span&gt; Actions&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; CI&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# Controls when the workflow will run&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  # Triggers the workflow on push or pull request events but only for the main branch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  push&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    branches&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; [ master ]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  workflow_dispatch&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;jobs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  build&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    runs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;on&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; ubuntu&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;latest&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    steps&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; uses&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; actions&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;checkout@v2&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; uses&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; actions&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;setup&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;node@v2&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;        with&lt;&#x2F;span&gt;&lt;span&gt;: &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          node&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;version&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;16&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;      # Runs a single command&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; using&lt;&#x2F;span&gt;&lt;span&gt; the runners shell&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; install &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        run&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; npm install&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; build&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        run&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; npm run build&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;      -&lt;&#x2F;span&gt;&lt;span&gt; name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; Publish to Cloudflare Pages&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        uses&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; cloudflare&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;pages&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;action@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;        with&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          apiToken&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; $&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{{&lt;&#x2F;span&gt;&lt;span&gt; secrets&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;CLOUDFLARE_API_TOKEN&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; }}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          accountId&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; $&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{{&lt;&#x2F;span&gt;&lt;span&gt; secrets&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;CLOUDFLARE_ACCOUNT_ID&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; }}&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          projectName&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 프로젝트명&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          directory&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 배포경로&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;          gitHubToken&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; $&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{{&lt;&#x2F;span&gt;&lt;span&gt; secrets&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;GITHUB_TOKEN&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; }}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;저기서 CLOUDFLARE_API_TOKEN와 CLOUDFLARE_ACCOUNT_ID란 것만 잘 찾아서 깃헙 시크릿에 넣어주면 된다.&lt;br &#x2F;&gt;
+cloudflare 페이지로 가보자&lt;&#x2F;p&gt;
+&lt;p&gt;account id는 아무 도메인 리소스로 이동해서&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b40cfc7a1464e900.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_09c08ee883a4ea3f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저기 우측에 모자이크쳐놓은 Account ID를 가져다쓰면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;토큰은 직접 만들어야 한다.&lt;br &#x2F;&gt;
+내 프로필에서 API Tokens로 이동하고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_111edb8782363d84.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;생성&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a72ff3800ae38c6b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;커스텀 생성&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_68e81b4679597d80.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Pages 권한을 넣어주고 만들면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_29c34265db465c9e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이렇게 토큰값을 보여줄 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ad30da3820155626.png&quot; alt=&quot;&quot; &#x2F;&gt;
+한번만 보여주고 마니, 잘 저장해놓자.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 저 두개를&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_06ae22c644afea90.png&quot; alt=&quot;&quot; &#x2F;&gt;
+시크릿에 저장하고 배포만 하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;난 잘 됐다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7e6b8d3446503cd9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e9138042131769cd.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;danjeom&quot;&gt;단점&lt;&#x2F;h2&gt;
+&lt;p&gt;이걸 쓰면 무조건 배포 브랜치가 main으로 고정되고, 바꿀 수가 없다.&lt;br &#x2F;&gt;
+브랜치를 마음대로 하려면 github action이 아니라 cloudflare에서 빌드를 돌려야 한다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] Pages</title>
+        <published>2022-10-25T00:00:00+00:00</published>
+        <updated>2022-10-25T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222910469422/"/>
+        <id>https://myyrakle.github.io/blog/222910469422/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222910469422/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9eb222b0aaac3440.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Pages는 cloudflare의 정적호스팅 서비스다.&lt;&#x2F;p&gt;
+&lt;p&gt;기존에 github page 공짜로 쓰던걸 도메인 세팅을 바꿔야하는데, 얘네들이 좀 세팅이 번거로워서 그냥 cloudflare로 이전하기로 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;클플도 무료 사용량을 둔 채로 제공해준다.&lt;br &#x2F;&gt;
+일일 10만 리퀘스트다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b11752108d0a2456.png&quot; alt=&quot;&quot; &#x2F;&gt;
+생성버튼 누르고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_548ae4da92a1de0b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+기존 레포지토리에서 바로 가져올 거라면 convert to git을, 그냥 파일업로드를 할거라면 아래 버튼을 누른다.&lt;br &#x2F;&gt;
+내 경우엔 전자다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4fec70f482d2874a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+깃허브 연결해준다음에&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b8873241d03600f0.png&quot; alt=&quot;&quot; &#x2F;&gt;
+레포지토리 고르고 셋업버튼을 누른다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e34d43ab2f1c7ffa.png&quot; alt=&quot;&quot; &#x2F;&gt;
+빌드작업이 필요하다면 빌드커맨드로 빌드작업을 수행한 다음에 그 dist 경로를 넣어서 올리게 해줄 수 있다.&lt;br &#x2F;&gt;
+빌드환경에는 npm이 기본적으로 제공된다.&lt;&#x2F;p&gt;
+&lt;p&gt;내 경우엔 해당 레포에 결과물이 다 있어서 빌드 없이 루트경로로만 제공했다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_abe02da06af8bf6d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그렇게 완료버튼 누르면 프로세스가 돌고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_41a62996231fff53.png&quot; alt=&quot;&quot; &#x2F;&gt;
+배포가 될 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_08b5a8f2d54d1d81.png&quot; alt=&quot;&quot; &#x2F;&gt;
+짜잔&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;cloudflare-jacedomein-butigi&quot;&gt;cloudflare 자체도메인 붙이기&lt;&#x2F;h2&gt;
+&lt;p&gt;cloudflare에서 구입한 도메인을 갖고있다면, 붙이는건 몹시도 간단하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_37d17b1a5ecc7227.png&quot; alt=&quot;&quot; &#x2F;&gt;
+원하는 도메인명 써주고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ef58ab05403f6361.png&quot; alt=&quot;&quot; &#x2F;&gt;
+체크버튼만 눌러주면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ade81be98b9e1fc8.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+몹시 잘된다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] Worker</title>
+        <published>2022-06-29T00:00:00+00:00</published>
+        <updated>2022-06-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222792851847/"/>
+        <id>https://myyrakle.github.io/blog/222792851847/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222792851847/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_178e921fb2cba5cd.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_61499c42653c882d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Worker는 클라우드플레어의 서버리스 펑션 서비스다. 본인들은 엣지 서버라고 부른다.&lt;br &#x2F;&gt;
+조금 다르긴 하지만 AWS의 Lambda 등과 대치된다고 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;언어는 Javascript 뿐이고, 모듈 import는 제한적으로 사용이 가능하다.&lt;br &#x2F;&gt;
+그래서 정말 가볍고 단순한 작업을 하는데 적절하다.&lt;&#x2F;p&gt;
+&lt;p&gt;보통 권장하는 사용법은, 요청과 응답을 중간에 가로채서 변조를 가하는 것이다. 그래서 A&#x2F;B 테스트를 구현할때 자주 사용한다고 한다. A&#x2F;B 테스트에 대한 로직을 워커에 캡슐화해서 빠르게 배포, 전환할 수 있기 때문이다.&lt;br &#x2F;&gt;
+이게 배포가 정말 빠르다.&lt;&#x2F;p&gt;
+&lt;p&gt;내 경우에는 크롤링용으로 많이 쓰고있었다.&lt;br &#x2F;&gt;
+클라우드플레어 대역을 막아놓은데가 거의 없어서.. 잘 통한다.&lt;&#x2F;p&gt;
+&lt;p&gt;처음 진입하면 요금제를 선택하라고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_58b2a4fd87ef37fa.png&quot; alt=&quot;&quot; &#x2F;&gt;
+소규모로만 사용할거라면 무료로도 사용이 가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;유로로 쓰더라도 요금은 타사 대비 매우 저렴한 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_943fe4d6a7fc4e26.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;weokeo-saengseong&quot;&gt;워커 생성&lt;&#x2F;h2&gt;
+&lt;p&gt;워커를 하나 생성해보자.&lt;br &#x2F;&gt;
+서비스 생성 버튼을 누른다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b8a55ea6a521d7dc.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;워커의 이름과 아이디가 워커 URL의 서브도메인이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ad5430b8ffc278ec.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그냥 기본값으로 생성해도 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이런식으로 생성될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4b33eab57b3533b8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 저기 생성된 경로로 접속하면 기본 텍스트가 출력될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_de18849d2f0dfa7d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;soseukodeu-pyeonjib&quot;&gt;소스코드 편집&lt;&#x2F;h2&gt;
+&lt;p&gt;리소스에서 &quot;빠른 편집&quot; 버튼을 클릭하면 에디터로 이동할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c3ecb4a6922d9740.png&quot; alt=&quot;&quot; &#x2F;&gt;
+다소 특이한 구조를 갖고있는 것을 볼 수 있다.&lt;br &#x2F;&gt;
+fetch 이벤트에다 핸들러 함수를 걸어놓고, 핸들러 함수로 요청과 응답을 처리한다.&lt;br &#x2F;&gt;
+요청, 응답값에 대한 명세는 문서를 참조하길 바란다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;request&#x2F;&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;request&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;response&#x2F;&quot;&gt;https:&#x2F;&#x2F;developers.cloudflare.com&#x2F;workers&#x2F;runtime-apis&#x2F;response&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;콘솔로그나 예외는 저기 개발자도구처럼 생긴데서 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9255a11b574ec953.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;소스코드의 배포는 저기 아래 배포버튼 누르면 된다.&lt;br &#x2F;&gt;
+간단하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ae406e81e04d575f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;eungdab-yoceong-ceorihaebogi&quot;&gt;응답, 요청 처리해보기&lt;&#x2F;h2&gt;
+&lt;p&gt;Response 객체는 기본적으로 텍스트만 받는다.&lt;br &#x2F;&gt;
+만약 json으로 반환하고 싶다면 다음과 같이 하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_18b22e24a68de17c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0640b090068f412d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;URL 파라미터같은걸 가져오려면 직접 파싱을 해줘야 한다.&lt;br &#x2F;&gt;
+덧셈을 처리해주는 api를 만든다면, 다음과 같이 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a869591a124a9913.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bb2a809495a51200.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;teurigeo&quot;&gt;트리거&lt;&#x2F;h2&gt;
+&lt;p&gt;워커는 트리거를 걸어서 시간 주기로 자동으로 돌게 하는 것이 가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ef19b397b505967e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;단순 시간 단위로도 되고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f1a7cbcc8a07e210.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;크론식도 사용할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4f38bf9a8d749453.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 서비스 특성상 이걸 쓸일이 있을지는 잘 모르겠다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Cloudflare] 도메인 장만하기</title>
+        <published>2022-06-26T00:00:00+00:00</published>
+        <updated>2022-06-26T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222789743330/"/>
+        <id>https://myyrakle.github.io/blog/222789743330/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222789743330/">&lt;p&gt;도메인을 하나 장만하긴 해야하는데, 구글과 클플 사이에서 고민하다가 관리가 여러모로 편하다고 해서 클플로 선택했다.&lt;br &#x2F;&gt;
+사실 더 조금 싼데도 많기는 하다. 근데 이왕 돈주고 사는거 편하고 좋은게 좋지 않겠는가.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a1e3f25bde05788b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+회원가입을 먼저 하고, Register Domains 탭으로 이동해서&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7519465ad6c4161e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+사고싶은 도메인 이름을 검색한다.&lt;br &#x2F;&gt;
+내 경우에는 닉네임인 myyrakle로 구입을 하려고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 살수 있는 목록이 쭉 나온다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cf4f6e9305531f48.png&quot; alt=&quot;&quot; &#x2F;&gt;
+가격도 천차만별이니, 잘 선택해서 구입 버튼을 누른다.&lt;br &#x2F;&gt;
+나는 com으로 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4f411b0065841d04.png&quot; alt=&quot;&quot; &#x2F;&gt;
+구입정보 잘 입력해서&lt;br &#x2F;&gt;
+결제하면 끝이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a84a074e5464a40a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 왜인지는 모르겠는데 국내용 신용카드는 잘 안먹히는 것 같다.&lt;br &#x2F;&gt;
+신한 신용카드로 긁었더니 빠꾸먹이고, 체크로 하니까 되더라&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>2022.06.21 클라우드플레어 장애 리포트</title>
+        <published>2022-06-22T00:00:00+00:00</published>
+        <updated>2022-06-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222783769552/"/>
+        <id>https://myyrakle.github.io/blog/222783769552/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222783769552/">&lt;p&gt;포스트&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;cloudflare-outage-on-june-21-2022&#x2F;?_gl=1*ur9tkx*_ga*MTcyNTAzMTUzNi4xNjU1Nzk1MDMz*_gid*MTc4MTgxMzcwMC4xNjU1Nzk1MDMz&quot;&gt;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;cloudflare-outage-on-june-21-2022&#x2F;?_gl=1&lt;em&gt;ur9tkx&lt;&#x2F;em&gt;_ga&lt;em&gt;MTcyNTAzMTUzNi4xNjU1Nzk1MDMz&lt;&#x2F;em&gt;_gid*MTc4MTgxMzcwMC4xNjU1Nzk1MDMz&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;어제 네트워크 관련 대빵 중 하나인 클라우드플레어가 터짐에 따라, 수많은 사이트와 서비스들이 중단되는 초유의 사태가 발생했다. 다행히 1시간 안에 수습되긴 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d0a1cd4383501cc2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;위에 리포트 들어가면 볼 수 있는데, 악의적인 공격이나 물리적인 문제가 있던건 아니고, 그냥 뭐 기능 좀 고치다가 잘못해서 뻑하고 터진거라고 한다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

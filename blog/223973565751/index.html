@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] Asynchronous Insert | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223973565751/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] Asynchronous Insert">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223973565751/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-08-17T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223973565751/">[Clickhouse] Asynchronous Insert</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-17T00:00:00+00:00"><time datetime="2025-08-17T00:00:00+00:00">2025.08.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="277 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223973565751" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Clickhouse는 잦은 Insert 패턴에 최적화되어있는 DB는 아니다. RDB를 비롯한 주류 DB들에 비하면 더욱 그렇다.</p>
+<p>그래서 1000개의 행을 하나씩 1000번 넣는것보다 한번에 넣는 것이 훨씬 좋고, 웬만하면 1초에 여러개의 INSERT를 하지 않는 것을 권장한다.</p>
+<p>근데 이런걸 일일이 지키기는 아무래도 어려운 경우가 많다. 예를 테면 writer가 단일 클라이언트가 아닌 상황에서, 각각의 클라이언트가 메트릭이나 로그를 INSERT하는 경우가 있을 수 있다.</p>
+<p>이를 위한 보조 기능 중 하나가 바로 async insert 기능이다. 이 옵션을 사용하면 clickhouse는 insert를 바로 처리하지 않고 buffer에 쌓아둔 다음에 적당히 모아서 flush를 한다.</p>
+<p><img src="/images/img_c54d102a9dca1796.png" alt="" />
+흔히 시계열 데이터베이스들이 쓰기 처리량을 높이고자 사용하는 방식과 동일하다/</p>
+<p>실시간 데이터 반영 수준은 전보다 못하겠지만, 그래도 write 처리량이나 write에 따른 부하는 줄일 수 있다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="sayongbeob">사용법</h2>
+<p>사용자 자체에 async_insert를 활성화할 수도 있고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER USER</span><span style="color: #CBA6F7;"> default</span><span> SETTINGS async_insert</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span></code></pre>
+<p>커넥션 수준에서 async insert를 활성화할 수도 있으며</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #A6E3A1;">&quot;jdbc:ch://HOST.clickhouse.cloud:8443/?user=default&amp;password=PASSWORD&amp;ssl=true&amp;custom_http_params=async_insert=1,wait_for_async_insert=1&quot;</span></span></code></pre>
+<p>INSERT 쿼리 수준에서도 활성화할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSERT INTO</span><span style="color: #89B4FA;font-style: italic;"> table_name</span><span>(</span><span style="color: #94E2D5;">...</span><span>) SETTINGS async_insert</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span> wait_for_async_insert</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span><span style="color: #89B4FA;font-style: italic;"> VALUES</span><span> (</span><span style="color: #94E2D5;">...</span><span>)</span></span></code></pre>
+<p>이러면 async 모드로 INSERT를 시도한다.</p>
+<p>async_insert는 ASYNC 모드로 insert를 한다는 것이다.</p>
+<p>중요한게 wait_for_async_insert라는 옵션인데, 0으로 하면 클라이언트는 insert를 날린 다음에 그냥 잊어버린다. 성공했는지 실패하는지 기다리지 않는 모드라서 데이터 손실이 발생해도 괜찮은 경우에만 사용해야 한다.</p>
+<p>일반적인 경우에는 wait_for_async_insert=1로 설정하는 것이 권장된다. 이러면 실제로 클라언트가 디스크에 flush되기까지를 기다리고, 성공했는지 실패했는지도 알 수 있다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="ceoriryang-bigyo">처리량 비교</h2>
+<p>실제로 async insert 여부에 따라서 얼마나 처리량이 차이가 나나 비교를 해봤다.<br />
+1000만개를 별도 insert로 밀어넣을 때, non-async는 초당 300개 정도 쓰기가 가능했고</p>
+<p><img src="/images/img_81a8b34a556251b9.jpg" alt="" />.png?type=w800)</p>
+<p>async는 초당 2000개 정도 쓰기가 가능했다.</p>
+<p><img src="/images/img_6a968d75a2a51bb7.png" alt="" />
+확실히 유의미하게 차이가 나긴 한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/optimize/asynchronous-inserts">https://clickhouse.com/docs/optimize/asynchronous-inserts</a><br />
+<a rel="external" href="https://www.glassflow.dev/blog/asynchronous-inserts-clickhouse">https://www.glassflow.dev/blog/asynchronous-inserts-clickhouse</a><br />
+<a rel="external" href="https://clickhouse.com/blog/asynchronous-data-inserts-in-clickhouse">https://clickhouse.com/blog/asynchronous-data-inserts-in-clickhouse</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223973801785/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Elasticsearch] 인덱스의 수명(lifecycle)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223971971418/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 재귀 타입 (Recursive Type)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

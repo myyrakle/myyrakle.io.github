@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[LLM] 멀티 에이전트 시스템 구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223884516216/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[LLM] 멀티 에이전트 시스템 구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223884516216/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-06-01T00:00:00+00:00">
+    <meta property="article:tag" content="LLM">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223884516216/">[LLM] 멀티 에이전트 시스템 구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-01T00:00:00+00:00"><time datetime="2025-06-01T00:00:00+00:00">2025.06.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="483 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/llm/">LLM</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223884516216" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>LLM이나 채팅에 대한 hype이 미친듯이 차오르면서, 실제로 이를 이용한 서비스를 만들어서 제공하는 사례가 꽤 늘고 있다. 보통 간단한 고객문의 시스템이나, 특정 도메인에 최적화된 정보를 제공해주는 helper 같은 것들이다.</p>
+<p>여기서는 LLM을 이용해서 전문화된 채팅 시스템을 만들게 될 경우, 고려해야할 부분과 일반적인 구현 방향성에 대해서 간략히 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-golgyeog">기본 골격</h2>
+<p>사실 뭐 이것저것 고려하지 않는다면, LLM을 쓴다고 해서 시스템 구조가 크게 달라지지는 않는다.<br />
+그냥 일반적인 외부 API 쓰듯이 서버가 LLM에 요청을 보내고, 응답을 받아와서 적절히 처리하는 것이다.</p>
+<p><img src="/images/img_50e275a384a528bf.png" alt="" />
+차이점을 꼽자면, LLM 서비스들 특유의 느린 성능, 불안정성, 비용 등이 기존의 API들과 다른 부분이다.</p>
+<p>근데 여기서 "비용"이나 특유의 느린 성능 때문에 아키텍쳐를 기형적으로 가져가야 하는 부분이 있다.<br />
+이건 아래에서 이어서 설명하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="peurompeuteuwa-biyong">프롬프트와 비용</h2>
+<p>LLM은 입력이 정형적이지 않고, 출력 또한 정형적이지 않다. 양쪽 다 규칙 없는 텍스트다.<br />
+LLM에 텍스트 입력을 어떻게 보낼지에 대한 작업을 "프롬프트 엔지니어링"이라고 부른다.</p>
+<p>보통 프롬프트는 이런 느낌으로 작성이 된다.</p>
+<p><img src="/images/img_e1a425961633ce2c.png" alt="" />
+맨 위에 LLM에 원하는 조건들을 쭉 나열한 다음에, 맨 밑에 사용자의 실제 요청을 이어붙이는 식이다.</p>
+<p>만약 대화에 필요한 도메인 정보가 있다면, 그 정보에 대한 거대한 텍스트를 프롬프트에 넣을 수도 있다.</p>
+<p><img src="/images/img_675866f4b4ae53f1.png" alt="" />
+이런 것도 RAG라고 부른다.</p>
+<p>아무튼, 문제는 사용사례에 따라서 "프롬프트" 텍스트는 커질 수 있는데, 비용이나 처리 속도도 프롬프트 텍스트의 크기에 비례한다는 것이다.<br />
+그래서 프롬프트의 크기를 얼마나 줄이고 단순하게 유지하는지에 따라서 실제 품질이나 비용 절감 정도가 달라진다.</p>
+<br>
+<br>
+<br>
+<h2 id="multi-agent-siseutem">Multi Agent 시스템</h2>
+<p>근데, 만약 이 채팅 시스템에 여러가지 역할을 부여해서 다양한 기능을 제공하고 싶다면 어떻게 해야할까?<br />
+그냥 하나의 프롬프트에 각 기능 정의를 다 때려넣을 수도 있겠지만, 그러면 모든 요청이 너무 무겁고, 느리고, 비싸질 것이다. 게다가 결과의 품질 또한 장담할 수 없다.</p>
+<p>그래서 이 경우 권장되는 설계 방식 중 하나가 multi agent 구조다. 각 기능 역할을 Agent라는 단위로 추상화하고, 각자 역할에 맞게 전문화된 프롬프트를 관리하도록 하는 것이다. 인프라 수준의 분리는 아니다.</p>
+<p>그리고 가장 앞단에서 유저 입력의 컨텍스트를 파악하는 Agent를 하나 두고(가칭 Intro Agent), 그 응답에 따라서 전문화된 Agent에 요청을 다시 또 전달하도록 한다. 일종의 Routing이다.</p>
+<p>만약 기존에 쇼핑 서비스가 있고, 여기에 보조용 채팅 시스템을 설계한다면 이런 느낌이 될 수 있다.</p>
+<p><img src="/images/img_81149274bdfce590.png" alt="" />
+그래서 "오늘 날씨 어떄?" 같은 일상적인 대화가 들어왔다면,</p>
+<ol>
+<li>Intro Agent가 talk로 판단</li>
+<li>Talk Agent에 다시 입력 텍스트 전송</li>
+<li>Talk Agent의 응답을 최종 응답으로 사용<br />
+정도가 될 것이다.<br />
+다른 대화 맥락도 마찬가지다.</li>
+</ol>
+<p>이렇게 했을 때의 장점은</p>
+<ol>
+<li>
+<p>각 호출당 프롬프트 크기를 최소화할 수 있다. 가능한 경우 Intro Agent 단에서 빠르게 종료될 수도 있다.</p>
+</li>
+<li>
+<p>코드베이스 관리나 최적화가 용이해진다. 특정 작업을 건드린다면 그 작업에 해당하는 에이전트 코드만 건드리면 되기 때문이다.</p>
+</li>
+<li>
+<p>각 Agent별로 다른 모델을 사용해서 비용/성능을 세심하게 튜닝할 수 있다.</p>
+</li>
+</ol>
+<br>
+<p>정도가 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="multi-agent-raibeureorideul">Multi Agent 라이브러리들</h2>
+<p>사실 저 Multi Agent 라는게 막 엄청 대단한 것까지는 아닌데, 또 직접 코드 구조를 짜려면 귀찮은 것은 맞아서 라이브러리들이 나온게 몇가지 있다.</p>
+<p>Langgraph나 CrewAI, 근래에 나온 Google의 ADK(Agent Development Kit) 등이 이런 코드베이스를 패턴화한 라이브러리다.</p>
+<p>그리고 다 파이썬이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://google.github.io/adk-docs/agents/#core-agent-categories">https://google.github.io/adk-docs/agents/#core-agent-categories</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223888652770/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] 원격 접속 설정<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223884530176/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>C++ =&gt; Rust Cookbook.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] 리소스 제한: CPU와 메모리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223659644778/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] 리소스 제한: CPU와 메모리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223659644778/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-11-14T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223659644778/">[k8s] 리소스 제한: CPU와 메모리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-14T00:00:00+00:00"><time datetime="2024-11-14T00:00:00+00:00">2024.11.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="525 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223659644778" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>k8s는 기본적으로 컨테이너 관리자이기 때문에, 하나의 노드에 여러개의 컨테이너를 띄워서 갈라먹을 때가 매우 많다.</p>
+<p>근데 메모리나 CPU 자원을 어떻게 분산해줘야 할까? 달라는대로 다 줘서는 특정 서버만 메모리를 다 먹고 다른 서버는 메모리가 부족해서 돌지도 못하는 문제가 일어날 수도 있을 것이다.</p>
+<p>k8s는 "request"와 "limit"을 통해서 컨테이너의 사용량을 제한하고 분배한다.</p>
+<br>
+<br>
+<br>
+<h2 id="request-limit">Request &amp; Limit</h2>
+<p>Request와 Limit은 개별 컨테이너 스펙에 정의되는 리소스 사용량 옵션이다.<br />
+아래는 그에 대한 간단한 예제다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">---</span></span>
+<span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Pod</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> frontend</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> app</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> images</span><span style="color: #94E2D5;">.</span><span>my</span><span style="color: #94E2D5;">-</span><span>company</span><span style="color: #94E2D5;">.</span><span>example</span><span style="color: #94E2D5;">/</span><span>app</span><span style="color: #9399B2;">:</span><span>v4</span></span>
+<span class="giallo-l"><span>    resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      requests</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        memory</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;64Mi&quot;</span></span>
+<span class="giallo-l"><span>        cpu</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;250m&quot;</span></span>
+<span class="giallo-l"><span>      limits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        memory</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;128Mi&quot;</span></span>
+<span class="giallo-l"><span>        cpu</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;500m&quot;</span></span></code></pre>
+<p>간단히 분석해보자</p>
+<p><strong>- requests</strong><br />
+requests은 쉽게 말해 최소 사용량이다.<br />
+이 컨테이너는 기본적으로 메모리 64Mi와 CPU 250m를 사용할 수 있지만, 다른 Pod가 별로 없고 노드에 리소스가 넉넉하다면 더 사용할 수도 있다. 그래서 이건 느슨한 사용량 제한이고, 어느 노드에 띄울지를 선택할 때의 근거값으로 주로 쓰인다.<br />
+만약 pod request의 총합이 노드의 메모리 제한을 넘는다면, k8s 스케줄러는 실제 사용량과 별개로 pod를 추가로 띄우지 않는다.</p>
+<p><strong>- limit</strong><br />
+limit는 최대 사용량이다.<br />
+이 컨테이너는 사용량이 아무리 많아져도 메모리 128Mi와 CPU 500m 이상을 사용할 수 없다.<br />
+메모리 사용량이 정해진 limit을 넘으면 kubelet은 해당 컨테이너를 OOM으로 죽여버린다.<br />
+request가 없고 limit만 있다면 limit 값을 request 값으로 사용한다.</p>
+<br>
+<br>
+<br>
+<h2 id="cpu-sayongryang">CPU 사용량</h2>
+<p>CPU 사용량은 단순 숫자, 혹은 밀리(m) 접미사가 붙은 숫자로 표현할 수 있다.<br />
+1는 1000m와 같다.</p>
+<p>메모리는 사용량을 측정하고 제한하는 것이 비교적 직관적이고 단순하지만, CPU 리소스는 경우가 다르다.</p>
+<p>k8s에서 1 CPU는 하나의 물리 코어가 가지는 연산능력을 뜻한다. 이건 상대값이 아니라 절대값임에 유의한다.<br />
+따라서 cpu: "500m"는 "CPU를 0.5개 정도 쓰는 수준"이라고 이해할 수 있다.</p>
+<p>Memory Limit은 초과시에 컨테이너를 종료시키지만, CPU Limit에 걸렸고 노드에도 자원이 부족한 경우에는 종료시키지는 않고 throttle을 건다.</p>
+<br>
+<br>
+<br>
+<h2 id="cpu-limit-canban">CPU Limit - 찬반</h2>
+<p>Pod가 CPU Limit에 걸리면 스로틀을 걸어서 사용량을 제한한다고 했었다.</p>
+<p>근데 사실 CPU 리소스는 "압축 가능한(compressible)" 자원이기 때문에 Limit을 전혀 걸지 않아도 Pod가 다른 Pod를 방해하는 일이 두드러지지 않는다. Pod들이 알아서 서로 CPU 자원을 적당히 갈라먹으면서 분배될 수 있다.<br />
+게다가 request를 잘 설정했다면 request 값을 기준으로 우선순위를 매겨서 CPU 리소스를 분배한다.</p>
+<p>오히려 CPU Limit을 도배할 경우 cgroup 기반의 자체적인 소프트 스로틀링 때문에 전체적인 성능 저하가 발생할 수 있다.</p>
+<p>그래서 devops들 사이에서는 "CPU Limit은 걸지 않는게 좋다"는 의견들이 꽤 모이는 것 같더라.<br />
+물론 이게 아주 정설인건 아니고, 반론도 있긴 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="juyihal-jeom">주의할 점</h2>
+<p>컨테이너 기술은 기본적으로 느슨한 격리다.<br />
+그래서 사실 완전히 격리된 것처럼 생각하고 시스템을 설계했다가는 낭패를 볼 수 있다.</p>
+<p>예를 들어, limit에 cpu를 1개로 제한한다고 하더라도, 실제로 컨테이너에 cpu가 하나만 할당되는 것은 아니다.<br />
+limit이 걸려있더라도 컨테이너는 노드에 물리코어가 8개 있다는 것을 알 수 있다.</p>
+<p>그래서 만약 리소스의 최대치를 기반으로 뭔가 프로그램을 구성한다면 예상치 못한 부작용에 부딪칠 수 있다.</p>
+<p>예를 들면 전체 물리코어 갯수를 기반으로 스레드를 생성하다거나, JVM 힙 크기를 전체 메모리 크기로 맞춘다거나 하는 행위들 말이다. 이럴 때는 노드 정보가 아닌 컨테이너 limit을 기반으로 동작하도록 주의를 기울여야 한다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/configuration/manage-resources-containers/">https://kubernetes.io/ko/docs/concepts/configuration/manage-resources-containers/</a><br />
+<a rel="external" href="https://learnk8s.io/setting-cpu-memory-limits-requests">https://learnk8s.io/setting-cpu-memory-limits-requests</a><br />
+<a rel="external" href="https://cloud.google.com/blog/products/containers-kubernetes/kubernetes-best-practices-resource-requests-and-limits?hl=en">https://cloud.google.com/blog/products/containers-kubernetes/kubernetes-best-practices-resource-requests-and-limits?hl=en</a><br />
+<a rel="external" href="https://dnastacio.medium.com/why-you-should-keep-using-cpu-limits-on-kubernetes-60c4e50dfc61">https://dnastacio.medium.com/why-you-should-keep-using-cpu-limits-on-kubernetes-60c4e50dfc61</a><br />
+<a rel="external" href="https://dev-whoan.xyz/110">https://dev-whoan.xyz/110</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223659611646/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] Kustomization<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223659652492/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Postgres 사용 팁.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

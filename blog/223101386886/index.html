@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Network Policy | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223101386886/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Network Policy">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223101386886/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-14T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223101386886/">[k8s] Network Policy</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-14T00:00:00+00:00"><time datetime="2023-05-14T00:00:00+00:00">2023.05.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="440 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223101386886" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>k8s를 통한 자체 클라우드 구축에 있어서 중요한 것 중 하나는, 당연히 보안이다.</p>
+<p>network policy은 Pod 간 네트워크 통신에 있어서 인바운드와 아웃바운드 제한을 설정하고 관리하는 방법이다.<br />
+AWS를 써봤다면, VPC에서 다루는 보안그룹과 동치라고 할 수 있다.</p>
+<p><img src="/images/img_0ebcc64745904f6b.jpg" alt="" />
+<a rel="external" href="https://medium.com/google-cloud/deep-dive-kubernetes-network-policy-in-gke-e9842ec6b1be">https://medium.com/google-cloud/deep-dive-kubernetes-network-policy-in-gke-e9842ec6b1be</a><br />
+단, networkpolicy는 pod들 간의 내부 통신에만 관여한다는 점을 알아두길 바란다.<br />
+외부 통신에 대한 제어는 신경쓰지 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-dongjag">기본 동작</h2>
+<p>별다른 설정을 하지 않으면, Pod들끼리는 내부 IP를 통한 통신이 전부 뚫려있다.</p>
+<p>예를 들어 이렇게 Pod들이 있을 때</p>
+<p><img src="/images/img_a8b12367efde2ee9.png" alt="" />
+nginx-pod에 들어가면 나머지 test-deploy pod들에 대해서도 요청을 쏘고 응답을 받아볼 수 있는 것이다.</p>
+<br>
+<p><img src="/images/img_772742900c473fa1.png" alt="" />
+이렇게 말이다.</p>
+<p>network policy는 쉽게 말해서 방화벽을 깔아주는 기능을 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="networkpolicy-hwalseonghwa">NetworkPolicy 활성화</h2>
+<p>networkpolicy를 사용하려면 먼저 클러스터 단위에서 기능을 활성화해야 한다.</p>
+<p>방법은 네트워크 구성 환경에 따라서 다르며, CNI 구성에 따라서는 아예 사용이 불가능할 수도 있다.<br />
+대표적으로 flannel은 Network Policy 기능을 지원하지 않는 CNI다.</p>
+<p>GKE를 사용할 경우에는 다음 CLI 명령을 사용하거나</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>gcloud container clusters create CLUSTER_NAME</span><span style="color: #94E2D5;"> --</span><span>enable</span><span style="color: #94E2D5;">-</span><span>network</span><span style="color: #94E2D5;">-</span><span>policy</span><span style="color: #94E2D5;"> --</span><span>region</span><span style="color: #94E2D5;">=</span><span>리전</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>예)</span></span>
+<span class="giallo-l"><span>gcloud container clusters create cluster</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> --</span><span>enable</span><span style="color: #94E2D5;">-</span><span>network</span><span style="color: #94E2D5;">-</span><span>policy</span><span style="color: #94E2D5;"> --</span><span>region</span><span style="color: #94E2D5;">=</span><span>us</span><span style="color: #94E2D5;">-</span><span>central1</span><span style="color: #94E2D5;">-</span><span>c</span></span></code></pre>
+<p>콘솔에서 저 옵션을 켜면 된다.</p>
+<p><img src="/images/img_e399f11a4c56f48c.png" alt="" /></p>
+<p>이후에는 강제 업그레이드 같은걸 통해서 node가 재배치되도록 유도해야 한다.<br />
+node를 지우고 다시 띄워야 반영이 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>gcloud container clusters upgrade CLUSTER_NAME</span><span style="color: #94E2D5;"> --</span><span>master</span><span style="color: #94E2D5;"> --</span><span>region</span><span style="color: #94E2D5;">=</span><span>리전</span></span></code></pre>
+<p><img src="/images/img_fac27f78eb5c8480.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="inbaundeu-jeonbu-maggi">인바운드 전부 막기</h2>
+<p>추가설정을 하지 않으면, 모든 pod들끼리는 제한없이 통신을 주고받을 수 있다.</p>
+<p>이렇게 말이다.</p>
+<p><img src="/images/img_c2771b8e70af349e.png" alt="" />
+근데 이건 보안적인 관점에서 좋지 않은 구조고.. 방화벽과 마찬가지로 보통은 전부 다 막는게 기본이다.<br />
+전부 막은 다음에 필요한 것만 선택적으로 여는 것이다.</p>
+<p>모든 인바운드를 막으려면, 다음과 같이 NetworkPolicy를 정의해서 생성한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> networking</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> NetworkPolicy</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span><span style="color: #94E2D5;">-</span><span>deny</span><span style="color: #94E2D5;">-</span><span>ingress</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  podSelector</span><span style="color: #9399B2;">: {}</span></span>
+<span class="giallo-l"><span>  policyTypes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> Ingress</span></span></code></pre>
+<p>podSelector를 비워두면 모든 default 네임스페이스의 파드를 조건으로 걸게 되고, ingress에 대한 상세 설정값을 주지 않았기 때문에 모든 파드가 막히는 것이다.</p>
+<p>여기서 유의할 점은, NetworkPolicy는 네임스페이스 단위로만 동작한다는 것이다. default에 만들었으면 default의 Pod에 대해서만 제약을 건다.<br />
+물론 다른 네임스페이스에서 default로 들어오는 요청은 통제할 수 있다.</p>
+<p>아무튼 저대로 policy를 띄우고</p>
+<p><img src="/images/img_773478cdece743df.png" alt="" /></p>
+<p>다시 요청을 쏴보면</p>
+<p><img src="/images/img_4c168582ff5be7c2.png" alt="" />
+막힌 것을 확인할 수 있을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="inbaundeu-heoyonghagi">인바운드 허용하기</h2>
+<p>이번에는 부분적으로 인바운드를 허용하도록 구성해보자<br />
+java-server에서만 node-server에 통신을 할 수 있고, 다른 pod들은 접속이 불가능하도록 구성하려 한다.</p>
+<p>그럼 이런 식으로 구성할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> networking</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> NetworkPolicy</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>network</span><span style="color: #94E2D5;">-</span><span>policy</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  podSelector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> node</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  policyTypes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> Ingress</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> Egress</span></span>
+<span class="giallo-l"><span>  ingress</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> from</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> podSelector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>            matchLabels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              app</span><span style="color: #9399B2;">:</span><span> java</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>      ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>          port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>  egress</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> to</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> podSelector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>            matchLabels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              app</span><span style="color: #9399B2;">:</span><span> java</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>      ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> protocol</span><span style="color: #9399B2;">:</span><span> TCP</span></span>
+<span class="giallo-l"><span>          port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span></code></pre>
+<p>보통은 위와 같이 label을 이용해 파드를 지정하는 것이 좋다.<br />
+java-server 레이블을 가진 파드에 대해서만 http 인바운드와 아웃바운드를 허가해준 것이다.<br />
+원한다면 IP 단위로도 설정이 가능하긴 하다.</p>
+<p>저 상태로 policy를 띄우고</p>
+<p><img src="/images/img_6075458d07f7f39c.png" alt="" /></p>
+<p>자바 서버에 들어가서 노드서버에 호출을 하면 잘 될 것이고</p>
+<p><img src="/images/img_aaf77c237ef19590.png" alt="" /></p>
+<p>nginx 등의 다른 pod에서 하면 막힐 것이다.</p>
+<p><img src="/images/img_f9ba04f6cff72b6c.png" alt="" /></p>
+<p>이런식으로 응용하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/services-networking/network-policies/">https://kubernetes.io/ko/docs/concepts/services-networking/network-policies/</a><br />
+<a rel="external" href="https://medium.com/google-cloud/deep-dive-kubernetes-network-policy-in-gke-e9842ec6b1be">https://medium.com/google-cloud/deep-dive-kubernetes-network-policy-in-gke-e9842ec6b1be</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223103962534/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Terraform] module<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223101655611/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] EC2 기반의 서버 구성<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

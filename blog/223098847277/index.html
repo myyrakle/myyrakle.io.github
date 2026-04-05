@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Fargate Spot instance | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223098847277/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Fargate Spot instance">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223098847277/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-11T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223098847277/">[AWS] Fargate Spot instance</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-11T00:00:00+00:00"><time datetime="2023-05-11T00:00:00+00:00">2023.05.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="317 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223098847277" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_5b6b5229a346b053.png" alt="" />
+Fargate는 AWS에서 제공하는 멋진 기반서비스 중 하나다.<br />
+Docker 기반 컨테이너를 다루는 시스템이라면, 대부분 Fargate를 통해 구동된다.</p>
+<p>하지만 Fargate의 가장 큰 단점은.. 비용이다.<br />
+EC2를 띄워서 사용하는 것에 비하면 조금 비싼 편이기 때문이다.</p>
+<p>그래서 AWS는 2020년부터 Fargate에 Spot 요금제를 추가했다.<br />
+이게 뭐냐면, 더 싼 가격에 제공하는 대신에 AWS에서 자원이 모자랄 경우에 "강제로 종료될 수 있다."는 것이다.</p>
+<p>그래도 리스크를 감수할만큼 가격이 꽤 싸긴 하다.</p>
+<p><img src="/images/img_cb207bdcc9ae3eff.png" alt="" />
+기본비용이 이런데</p>
+<br>
+<p><img src="/images/img_043cb3f814a64bcc.png" alt="" />
+Spot을 쓰면 3배 정도 싸다.</p>
+<p>만약 vcpu 한개와 4기가 메모리를 쓴다면,<br />
+기본 Farate는 한달에 (0.04656 * 24 * 30) + (0.001533 * 4 * 24 * 30) =&gt; 37.93824달러 = 50000원이고<br />
+Spot은 (0.013968 * 24 * 30) + (0.001533 * 4 * 24 * 30) =&gt; 14.472달러 = 19000원이 드는 셈이다.</p>
+<p>거의 3배 가까이 싸다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongbeob">사용법</h2>
+<p>먼저 ECS 클러스터 단위에서 공급자 전략을 수정해줘야 한다.</p>
+<p><img src="/images/img_d4e09dbb10e416af.png" alt="" />
+이런식으로 추가할 수 있는데, 아무래도 통째로 Spot을 띄우는건 좀 위험한 구성이다보니</p>
+<br>
+<p><img src="/images/img_126c2e358e11ced4.png" alt="" />
+이런식으로 섞어서 쓰는게 좋다. 가중치가 높을수록 퍼센트가 높아지는 것이다.<br />
+이러면 인스턴스가 2개 필요할때, 하나는 Spot, 하나는 기본으로 띄워서 혹시라도 SPOT이 죽어도 전부 다 죽지는 않게 된다.</p>
+<p>그리고 SPOT이 강제로 죽더라도, ECS가 그 빈자리를 기본 Fargate로 다시 프로비저닝해줄 것이다.</p>
+<p>서비스를 생성할 때도 클러스터의 기본값을 따르도록 한다.</p>
+<p><img src="/images/img_b1763226238737b7.png" alt="" /></p>
+<p>이미지는 그냥 nginx 갖다썼다.</p>
+<p><img src="/images/img_26d568e7041dec95.png" alt="" />
+그리고 태스크는 2개만 띄웠다.</p>
+<br>
+<p><img src="/images/img_b8e924755092e405.png" alt="" />
+가중치를 1:1로 설정했으니, 특별한 상황이 아니라면</p>
+<br>
+<p><img src="/images/img_ea85080a6f5ef92e.png" alt="" />
+하나는 SPOT</p>
+<br>
+<p><img src="/images/img_8e5cdbbb217ff3ba.png" alt="" />
+하나는 기본으로 뜬다.</p>
+<br>
+<br>
+<br>
+<h2 id="alrimbadgi">알림받기</h2>
+<p>근데 뭐 ECS 스케일링으로 어떻게 터지는 상황을 면피할 수는 있다고 해도, 터졌을때 대처를 할 수는 있어야 한다.<br />
+다행히도 AWS는 스팟을 터뜨리기 전에 터뜨릴거라고 알림을 보내준다.</p>
+<p>이런식으로 말이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;0&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;id&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;a99d3f53-4a7c-4153-a1a5-48957fc83b8f&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;detail-type&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;ECS Task State Change&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;source&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;aws.ecs&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;account&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;1111222233334444&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;resources&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;arn:aws:ecs:ap-southeast-2:1111222233334444:task/4be29e5b-b05c-42a2-a596-be62090eea9b&quot;</span></span>
+<span class="giallo-l"><span>  ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;detail&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;clusterArn&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-southeast-2:1111222233334444:cluster/default&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;createdAt&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2022-02-25T10:13:08.455Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;desiredStatus&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;STOPPED&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;lastStatus&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;RUNNING&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;stoppedReason&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Your Spot Task was interrupted.&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;stopCode&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;SpotInterruption&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;taskArn&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-southeast-2:1111222233334444:task/4be29e5b-b05c-42a2-a596-be62090eea9bEXAMPLE&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    ...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그래서 저걸 트리거하고 싶다면 eventbridge rule을 만들어서</p>
+<p><img src="/images/img_acb166aeb0d8aa5f.png" alt="" /></p>
+<p>이벤트를 이런식으로 넣어준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;source&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;aws.ecs&quot;</span></span>
+<span class="giallo-l"><span>  ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;detail-type&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;ECS Task State Change&quot;</span></span>
+<span class="giallo-l"><span>  ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;detail&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;stopCode&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;SpotInterruption&quot;</span></span>
+<span class="giallo-l"><span>    ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;clusterArn&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;arn:aws:ecs:리전:계정번호:cluster/클러스터명&quot;</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그리고 필요에 따라 SNS 같은걸 붙여서 이메일로 확인할 수 있게 하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/korea/aws-fargate-spot-now-generally-available/">https://aws.amazon.com/ko/blogs/korea/aws-fargate-spot-now-generally-available/</a><br />
+<a rel="external" href="https://repost.aws/knowledge-center/fargate-spot-termination-notice">https://repost.aws/knowledge-center/fargate-spot-termination-notice</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223098812722/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] API Gateway<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223098863299/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>DNSSEC<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

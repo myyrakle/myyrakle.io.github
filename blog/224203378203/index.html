@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] 리소스 제한: 디스크와 네트워크 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224203378203/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] 리소스 제한: 디스크와 네트워크">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224203378203/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-03-04T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224203378203/">[k8s] 리소스 제한: 디스크와 네트워크</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-04T00:00:00+00:00"><time datetime="2026-03-04T00:00:00+00:00">2026.03.04</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="440 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224203378203" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223659644778">https://blog.naver.com/sssang97/223659644778</a><br />
+보통 리소스의 분배나 제한을 걸게되면 cpu/메모리를 기준으로 고려를 하는 경우가 대부분이다.</p>
+<p>하지만 그게 리소스의 전부는 아니다. I/O 또한 CPU와 마찬가지로 사용량의 한도가 명확히 존재하는 자원이고, 경우에 따라서는 I/O에 대해서 제한을 걸고 싶을 수도 있는 것이다.</p>
+<p>일단, 쿠버네티스 코어 모듈에서는 I/O limit과 관련된 기능을 직접적으로 제공하지 않는다. 추가 서드파티 지원을 찾거나 직접 뭔가를 만들어야 할 확률이 높다.</p>
+<br>
+<br>
+<br>
+<h2 id="imsi-diseukeu-gonggan-yeyag-jehan">임시 디스크 공간 예약/제한</h2>
+<p>Pod의 임시 디스크 공간은 기본 Core 모듈에서 지원하는 영역에 속한다.<br />
+이건 Pod가 디스크를 얼마나 쓸지, 얼마나 제한할지를 정의할 수 있다. 사용법은 memory와 비슷하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  requests</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    ephemeral</span><span style="color: #94E2D5;">-</span><span>storage</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;1Gi&quot;</span></span>
+<span class="giallo-l"><span>  limits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    ephemeral</span><span style="color: #94E2D5;">-</span><span>storage</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;2Gi&quot;</span></span></code></pre>
+<p>이러면 쿠버네티스는 Pod가 1Gi 정도 쓴다고 가정하고 스케줄링을 시도한다. 디스크 용량을 고려해서 말이다.<br />
+그리고 2Gi에 도달하면 스로틀링을 건다. 2Gi를 쓴 상태에서 추가 쓰기를 시도하면 "No space left on device"와 같은 오류를 보게 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="diseukeu-i-o-jehan-disk-iops">디스크 I/O 제한 (Disk IOPS)</h2>
+<p>그럼 디스크에 대한 접근 횟수를 제한하려고 하면 어떻게 할 수 있을까?<br />
+AWS의 EBS만 하더라도 초당 I/O 성능(IOPS)에 대한 제한을 빡세게 걸고 확장 비용을 받는다. 그만큼 확장에 어려움이 있는 리소스라는 것이다.</p>
+<p>만약 AWS 같은 클라우드를 쓴다고 하면 그냥 명시적으로 제한하거나 돈 더 내서 늘릴 수 있지만, 온프레미스 클러스터에서는 그렇게 쉽지는 않다.</p>
+<p>상기했듯 이건 쿠버네티스의 기본 기능이 아니기 때문에, 별도 스토리지 계층에서의 기능 지원이 필요하다.<br />
+IOPS 제한을 지원하는 시스템은 대표적으로 오픈소스 스토리지 시스템인 ceph가 있다.<br />
+ceph RBD를 사용하면 특정 볼륨 마운트(PVC)나, 그룹(pool) 단위로 IOPS 제한을 걸 수 있다.</p>
+<p>ceph가 이런저런 고통스런 관리 지점들이 많음에도 쓰는 이유가, 이런 고급 기능이 많기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="neteuweokeu-i-o-jehan-bandwidth">네트워크 I/O 제한 (bandwidth)</h2>
+<p>디스크 I/O 제한을 구성하는 방법이 스토리지 시스템(Ceph)에 종속적인 것과 마찬가지로, 네트워크에 대한 고급 제어 기능들도 CNI에 매여있다.<br />
+그래서 어떤 CNI 구성을 쓰는지에 따라서 제한이 불가능할 수도 있고, 가능한 기능 범위도 다를 수 있다.</p>
+<p>근데 그래도 이건 쿠버에서 공식적으로 정의해둔 인터페이스가 있더라.</p>
+<p><img src="/images/img_d6b96e6eb6968689.png" alt="" />
+이런 식이다. engress는 아웃바운드 트래픽에 대한 제한, ingress는 인바운드 트래픽에 대한 제한이다.<br />
+cpu limit과 마찬가지로 정의한 수치를 초과하면 스로틀링을 건다.</p>
+<p>그리고 다른 리소스들과는 다르게 스케줄링을 위한 request 값이 없다.</p>
+<p>k3s에서 쓰는 flannel은 기본적으로 이와 같은 기능을 제공하지 않는다. 추가 플러그인을 설치하면 될 수도 있는데, 그게 기본값은 아니다. 그래서 이런 고급 기능이 필요한 사례에는 그닥 맞지 않는다.</p>
+<p>calico는 관련된 기본 모듈에 포함되어있다. 즉시 limit을 구성해서 사용할 수 있다.<br />
+Cilium도 calico와 마찬가지로 기본 지원한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/kubernetes/kubernetes/issues/92287">https://github.com/kubernetes/kubernetes/issues/92287</a><br />
+<a rel="external" href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/">https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/</a><br />
+<a rel="external" href="https://gemtd-dev.tistory.com/127">https://gemtd-dev.tistory.com/127</a><br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/">https://kubernetes.io/ko/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224203343028/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[HAProxy] 에러 로그가 TTY 세션에 침범하는 문제<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224200719515/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] HorizontalPodAutoscaler<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

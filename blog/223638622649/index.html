@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ECS: 작업정의 정보 조회하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223638622649/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ECS: 작업정의 정보 조회하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223638622649/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-10-29T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223638622649/">[AWS] ECS: 작업정의 정보 조회하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-29T00:00:00+00:00"><time datetime="2024-10-29T00:00:00+00:00">2024.10.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="148 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223638622649" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>ECS-Fargate에는 작은 한계점이 있는데, Docker 기반 스택들(cgroup)의 일반적인 명세들을 완전히 지키는게 아니란 것이다.<br />
+그래서 cgroup 기반으로 현재 컨테이너의 메모리 제한 등을 가져오는게 어렵고, 메모리 제한 기반의 GC 설정이나 Alert를 구현하는데 약간의 문제가 있다. K8S 기반으로 만들어진 몇몇 모니터링 라이브러리는 사용할 수 없을 것이다.</p>
+<p>하지만 방법이 없는건 아닌데,<br />
+ECS 나름대로 컨테이너 자체에 대한 메타 정보를 조회하는걸 로컬 API의 형태로 제공한다.</p>
+<p>아래는 그걸 수행하는 간단한 코드다. 언어는 Go다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>    awsMetadataURI</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> os</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Getenv</span><span>(</span><span style="color: #A6E3A1;">&quot;ECS_CONTAINER_METADATA_URI_V4&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;========================================&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;AWS ECS Metadata URI: &quot;</span><span style="color: #9399B2;">,</span><span> awsMetadataURI)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	resp</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(awsMetadataURI</span><span style="color: #94E2D5;"> +</span><span style="color: #A6E3A1;"> &quot;/task&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">New</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatalf</span><span>(</span><span style="color: #A6E3A1;">&quot;err get task metadata: %v&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span>	defer resp</span><span style="color: #94E2D5;">.</span><span>Body</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	bodyBytes</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> io</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ReadAll</span><span>(resp</span><span style="color: #94E2D5;">.</span><span>Body)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">New</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatalf</span><span>(</span><span style="color: #A6E3A1;">&quot;err read task metadata: %v&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;========================================&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;AWS ECS Task Metadata: &quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> string</span><span>(bodyBytes))</span></span></code></pre>
+<p>ECS_CONTAINER_METADATA_URI_V4라는 환경 변수에 로컬 API의 엔드포인트가 있는데, 저기서 /task라는 API를 쏘면 정보를 JSON으로 말아서 준다.</p>
+<p>ECS에 올려서 돌려보면</p>
+<p><img src="/images/img_1b951bcc8fcd2632.png" alt="" />
+URL은 이런 식으로 나오고</p>
+<br>
+<p><img src="/images/img_8ec04013dc5121cd.png" alt="" />
+메타데이터는 엄청 크다.</p>
+<p>아래는 전체 포맷이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;Cluster&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;arn:aws:ecs:ap-northeast-2:?:cluster/클러스터명&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;TaskARN&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;arn:aws:ecs:ap-northeast-2:?:task/태스크명/c4e2ca26f6e84102945e205a581ebaee&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;Family&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;서비스명&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;Revision&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;929&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;DesiredStatus&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;RUNNING&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;KnownStatus&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;RUNNING&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;Limits&quot;</span><span>:</span><span style="color: #9399B2;"> {</span><span style="color: #A6E3A1;"> &quot;CPU&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 0.25</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Memory&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 512</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;PullStartedAt&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2024-10-29T10:07:32.652212009Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;PullStoppedAt&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2024-10-29T10:07:42.014789788Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;AvailabilityZone&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;ap-northeast-2a&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;LaunchType&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;FARGATE&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;Containers&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;DockerId&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;c4e2ca26f6e84102945e205a581ebaee-1009763361&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;metricbeat&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;DockerName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;metricbeat&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Image&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;?.dkr.ecr.ap-northeast-2.amazonaws.com/...&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;ImageID&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;sha256:eb72f4fe8a8121dfb20e8a25c380244b909fab44202caf4dca4866f768538d18&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Labels&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.cluster&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-northeast-2:?:cluster/...&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.container-name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;metricbeat&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.task-arn&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-northeast-2:?:task/?.../c4e2ca26f6e84102945e205a581ebaee&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.task-definition-family&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;?...-api-dev&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.task-definition-version&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;929&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;DesiredStatus&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;RUNNING&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;KnownStatus&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;RUNNING&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Limits&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span style="color: #A6E3A1;"> &quot;CPU&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;CreatedAt&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2024-10-29T10:07:42.734988634Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;StartedAt&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2024-10-29T10:07:42.734988634Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;NORMAL&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;ContainerARN&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-northeast-2:?:container/?.../c4e2ca26f6e84102945e205a581ebaee/ddc91943-89de-42f8-809c-4b5ef1bced0f&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Networks&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;NetworkMode&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;awsvpc&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;IPv4Addresses&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;172.31.1.129&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;AttachmentIndex&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;MACAddress&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;02:72:65:f3:98:65&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;IPv4SubnetCIDRBlock&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;172.31.0.0/20&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;DomainNameServers&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;172.31.0.2&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;DomainNameSearchList&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;ap-northeast-2.compute.internal&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;PrivateDNSName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ip-172-31-1-129.ap-northeast-2.compute.internal&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;SubnetGatewayIpv4Address&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;172.31.0.1/20&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>      ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Snapshotter&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;overlayfs&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;DockerId&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;c4e2ca26f6e84102945e205a581ebaee-3941558923&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;?...-api-dev-container&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;DockerName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;?...-api-dev-container&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Image&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;?.dkr.ecr.ap-northeast-2.amazonaws.com/?...:1aeb1a27336b155f10e845f4ff795a962a26c595&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;ImageID&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;sha256:9b6d61130cb38f0f177aa5ecd35c84f3a6d6a954896267d02b891100b0161b47&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Labels&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.cluster&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-northeast-2:?:cluster/?...&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.container-name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;?...-api-dev-container&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.task-arn&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-northeast-2:?:task/?.../c4e2ca26f6e84102945e205a581ebaee&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.task-definition-family&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;?...-api-dev&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;com.amazonaws.ecs.task-definition-version&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;929&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;DesiredStatus&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;RUNNING&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;KnownStatus&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;RUNNING&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Limits&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span style="color: #A6E3A1;"> &quot;CPU&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;CreatedAt&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2024-10-29T10:07:43.325165757Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;StartedAt&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2024-10-29T10:07:43.325165757Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;NORMAL&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;LogDriver&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;awslogs&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;LogOptions&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;awslogs-create-group&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;true&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;awslogs-group&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;/ecs/?...-api-dev&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;awslogs-region&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ap-northeast-2&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;awslogs-stream&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ecs/?...-api-dev-container/c4e2ca26f6e84102945e205a581ebaee&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;ContainerARN&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:ecs:ap-northeast-2:?:container/?.../c4e2ca26f6e84102945e205a581ebaee/a8b1842a-25f2-4c14-9b82-5f70993d6d11&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Networks&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;NetworkMode&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;awsvpc&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;IPv4Addresses&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;172.31.1.129&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;AttachmentIndex&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;MACAddress&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;02:72:65:f3:98:65&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;IPv4SubnetCIDRBlock&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;172.31.0.0/20&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;DomainNameServers&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;172.31.0.2&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;DomainNameSearchList&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;ap-northeast-2.compute.internal&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;PrivateDNSName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ip-172-31-1-129.ap-northeast-2.compute.internal&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;SubnetGatewayIpv4Address&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;172.31.0.1/20&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>      ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Snapshotter&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;overlayfs&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>  ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;ClockDrift&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;ClockErrorBound&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 0.4183675</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;ReferenceTimestamp&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2024-10-29T10:07:28Z&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;ClockSynchronizationStatus&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;SYNCHRONIZED&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;EphemeralStorageMetrics&quot;</span><span>:</span><span style="color: #9399B2;"> {</span><span style="color: #A6E3A1;"> &quot;Utilized&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 590</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Reserved&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 20496</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>개인적인 정보들은 마스킹했다.</p>
+<p>여기서 가장 유용한 것은 아마 Limits일 것이다.</p>
+<p>이거 말고도 API는 몇가지 더 있다. 더 많은 정보를 원한다면 문서를 참조한다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonECS/latest/developerguide/task-metadata-endpoint-v4.html">https://docs.aws.amazon.com/ko_kr/AmazonECS/latest/developerguide/task-metadata-endpoint-v4.html</a></p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223637506065/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] EFS (Elastic File Storage)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223637437385/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Amazon Managed Prometheus (AMP)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,644 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - InfluxDB</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/influxdb/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-01-04T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/influxdb/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[InfluxDB] 데이터베이스 구조</title>
+        <published>2025-01-04T00:00:00+00:00</published>
+        <updated>2025-01-04T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223714242935/"/>
+        <id>https://myyrakle.github.io/blog/223714242935/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223714242935/">&lt;p&gt;influxDB가 다른 범용 DB 시스템들과 비교해서 무엇이 다르고, 어떤 특징과 한계를 가지고 있는지 정리해본다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;mogpyo&quot;&gt;목표&lt;&#x2F;h2&gt;
+&lt;p&gt;influxDB와 같은 시계열DB가 목표로 하는 것은 극단적으로 높은 append 처리량이다.&lt;br &#x2F;&gt;
+다른 많은 것들을 희생하는 대신, 초당 10만~100만건의 삽입도 감당하는 쓰기 처리량을 얻을 수 있었다.&lt;&#x2F;p&gt;
+&lt;p&gt;또한 시계열, 시간값을 기준으로 하는 조회 연산의 성능이 꽤 뛰어나다.&lt;br &#x2F;&gt;
+하지만 시간이 기준이 되지 않는다면 성능을 장담할 수 없다. 시간 요소를 배제한 일반적인 필터나 집계는 사실 제대로 처리하지 못한다고 봐도 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 저장공간에 대한 절약도 주요한 부분 중 하나다. 시간이 지날 경우에 대한 만료 처리를 지원하며, 데이터 압축을 통한 저장 효율화를 제공한다.&lt;br &#x2F;&gt;
+테라바이트-페타바이트 급의 대규모 데이터 세트도 효율적으로 관리할 수 있어야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;아무튼 그래서 influxDB와 같은 시계열 데이터베이스는 비즈니스 로직을 담당하는 메인 DB로 사용하는 것은 거의 불가능하고, 2차 가공을 위한 데이터 수집에 주로 사용된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;modeun-geoseun-siganeul-gijuneuro&quot;&gt;모든 것은 시간을 기준으로&lt;&#x2F;h2&gt;
+&lt;p&gt;시계열은 모든 데이터의 기준이 시간이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 기본 키(Primary Key)와 같은 것이 따로 존재하지 않고, 타임스탬프 값이 해당 데이터 row의 기준이 된다.&lt;br &#x2F;&gt;
+시간값은 최대 나노세컨드 단위까지 표현할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;물론 시간만을 기준으로 하면 동일 시간에 삽입된 데이터가 여러개 있을 수 있기 때문에, 태그라는 필터용 값을 두고서 유일성을 판단한다.&lt;br &#x2F;&gt;
+그러니까, 타임스탬프+태그값을 기준으로 개별 데이터 row를 식별할 수 있다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 타임스탬프 값은 구조상의 한계로 항상 오름차순으로 append되어야만 최상의 성능이 나온다. 중간에 끼워넣을 수도 있긴 하지만, 그러면 시계열을 쓰는 의미가 퇴색된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;tsm-time-structured-merge-tree&quot;&gt;TSM (Time-Structured Merge Tree)&lt;&#x2F;h2&gt;
+&lt;p&gt;InfluxDB는 데이터를 실제로 파일로 저장할때 TSM이라는 인덱스 구조를 사용한다.&lt;br &#x2F;&gt;
+이건 사실 저장 단위를 시간으로 한  LSM의 변종이라고 할 수 있다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223232181952&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223232181952&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+데이터가 들어오면 먼저&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;인메모리 캐시에 기록하고&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;거의 동시에 WAL도 생성한다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;시간이 지나면 완전한 파일 단위로 모아서 저장한다. (TSM)&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;그래서 쓰기가 발생하더라도 바로 디스크에 반영하지는 않고, 메모리에 쌓아뒀다가 주기적으로 병합해서 디스크에 저장하는 방식을 취한다. 이를 통해 RDB 대비해서 높은 쓰기 처리량을 감당할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;TSM 파일들은 사실상 읽기 전용 블록이며, 최적화를 명목으로 삭제나 수정에 대한 고려가 별로 되어있지는 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;TSM 파일은 3가지 압축 단계로 나뉜다. (L2-&amp;gt;L3-&amp;gt;L4)&lt;br &#x2F;&gt;
+시간이 지나면 지날수록 작은 단위들을 더 큰 단위로 합치고 압축한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;wal-write-ahead-log&quot;&gt;WAL (Write Ahead Log)&lt;&#x2F;h2&gt;
+&lt;p&gt;influxDB는 쓰기를 최적화하기 위해서 WAL 개념을 중간에 넣어놨다.&lt;br &#x2F;&gt;
+큰 파일로 합치기 전에 일단 빠르게 쓰기 위해서 자잘한 파일들을 별도로 생성하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;쓰기가 들어오면 먼저 인메모리에 데이터를 넣고, 그와 거의 동시에 WAL에도 데이터를 쓴다.&lt;&#x2F;p&gt;
+&lt;p&gt;각 WAL 세그먼트 파일은 10mb를 넘지 않는다. 제한에 도달하면 새로운 WAL 세그먼트를 만들어서 이어붙인다.&lt;&#x2F;p&gt;
+&lt;p&gt;WAL에 기록된 파일들은 주기적으로 TSM 파일로 flush되어서 합쳐진다.&lt;br &#x2F;&gt;
+WAL-&amp;gt;TSM flush 주기는 wal-fsync-delay 옵션을 통해 조절할 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteoyi-sujeonggwa-sagje&quot;&gt;데이터의 수정과 삭제&lt;&#x2F;h2&gt;
+&lt;p&gt;influxDB에서 특정 데이터에 대한 삭제는 매우 비효율적으로 동작한다. 그래서 만료를 제외한 삭제 기능은 거의 없다고 생각하는 것이 좋다.&lt;br &#x2F;&gt;
+수정도 마찬가지다. 새 데이터의 insert만을 처리하는 것이 권장되는 사용 형태다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sseugi-dilrei&quot;&gt;쓰기 딜레이&lt;&#x2F;h2&gt;
+&lt;p&gt;InfluxDB는 Elasticsearch 등과 비슷하게 쓰기의 반영에 항상 딜레이가 있을 수 있다.&lt;br &#x2F;&gt;
+데이터를 insert하고 바로 조회해도 그 값이 반환되지 않을 수 있다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;쓰기 처리량을 최적화하기 위해서 기본적으로 쓰기를 모아서 처리하는 방식을 취하기 때문이다.&lt;br &#x2F;&gt;
+과부하가 걸린다면 그 딜레이는 더 커질 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;syadeu-shard&quot;&gt;샤드 (Shard)&lt;&#x2F;h2&gt;
+&lt;p&gt;InfluxDB는 데이터를 효율적으로 저장하고 조회하게 하기 위해서 샤딩이 기본 동작이다.&lt;br &#x2F;&gt;
+특정 기간 범위에 속하는 데이터 그룹마다 하나의 샤드로 만든다.&lt;&#x2F;p&gt;
+&lt;p&gt;데이터 양을 기준으로 고르게 분산하는 다른 데이터베이스들과 다르게, InfluxDB는 오직 시간만을 기준으로 샤드를 나누고 분산한다. 샤드를 나누는 범위를 지정하는 옵션을 Shard Group Duration이라고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들어, Shard Group Duration이 1일이라면 1일 범위의 데이터 그룹 하나마다 하나의 샤드가 되는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1a7c06cd7950a746.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;샤드 범위를 넓게 잡아서 하나의 샤드에 많은 데이터가 저장되게 한다면, 압축 효율성이 올라가서 저장공간 절약 효과를 볼 수 있다는 장점이 있다. 조회 쿼리 성능이 올라갈 수도 있다.&lt;br &#x2F;&gt;
+샤드 범위를 좁게 잡아서 하나의 샤드 크기가 줄어들면 만료시 데이터 삭제 성능이 올라간다. 찾아서 지우는게 아니라 그냥 샤드 단위 자체를 통째로 지울 수도 있기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;샤드에 대한 설정은 Retention policy를 통해서 이루어진다. 이걸로 데이터 보존 정책, 샤드 범위, 복제(Replication)을 정의할 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;syadeu-abcug&quot;&gt;샤드 압축&lt;&#x2F;h2&gt;
+&lt;p&gt;시계열 데이터베이스라 해도 처음부터 압축해서 저장하는건 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;최근의 샤드에 데이터를 데이터를 append할때는, 압축되지 않은 상태로 샤드에 데이터를 밀어넣는다.&lt;br &#x2F;&gt;
+압축되지 않은 상태의 샤드를 Hot Shard라고 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;이후에 시간이 지나고 특정 샤드에 쓰기가 들어오지 않는다면 고정되었다고 판단하고 샤드를 다시 압축해서 저장한다. 이 샤드 고정 시기를 판단하는 시간 옵션이 compact-full-write-cold-duration인데, 기본값은 4시간이다.&lt;br &#x2F;&gt;
+4시간동안 쓰기가 없으면 일단 압축을 시도하는 것이다.&lt;br &#x2F;&gt;
+이 시점부터는 Cold Shard라고 부른다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;bogje-replication&quot;&gt;복제 (Replication)&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터를 샤드로 쪼개는 것은 단순히 큰 데이터를 나눠서 저장하고 write 성능과 부분 조회의 성능을 끌어올리기 위해서다.&lt;br &#x2F;&gt;
+데이터의 유실을 예방하려면 Shard와는 별개로 복제 또한 고려해야 한다. 이를 통해 혹시라도 데이터가 유실거나 특정 노드에 장애가 발생했을 경우, 다른 노드의 복제 데이터를 가져와서 문제없이 처리할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;데이터베이스 노드가 4개 이상이라면 기본적으로 3개의 복제본을 서로 다른 노드에 복제하고, 4개 미만이라면 노드 개수와 동일한 복제본을 만든다. 그러니까, 노드 하나마다 복제를 하나씩 두는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;bunsansiseutemgwa-cap&quot;&gt;분산시스템과 CAP&lt;&#x2F;h2&gt;
+&lt;p&gt;influxDB는 대규모 세트를 처리하고 보관하기 위한 용도로 만들어졌기 때문에, 수평 확장과 가용성 증가를 위한 분산시스템 구조를 기본적으로 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;influxDB의 분산 구조는. read&#x2F;write 같은 기본적인 부분에 대해서는 AP라고 보는게 맞다.&lt;br &#x2F;&gt;
+시계열 데이터베이스의 사용사례에서 일관성은 크게 중요하지 않기 때문이다. 애초에 단일노드 환경에서도 쓰기 딜레이가 발생할 수 있는데...&lt;br &#x2F;&gt;
+그래서 노드 하나 뻗어도 그냥 다른 노드에 쓰면 되고, 다른 노드의 복제본에서 읽어오면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 클러스터 전체 메타데이터. 예를 들어 샤드 그룹, 노드-샤드 매핑 정보, 샤드 보존 정책 같은 것들은 CP 방식으로 동작한다.&lt;br &#x2F;&gt;
+핵심이 되는 부분이기 때문에 일관성이 깨질 바에야 실패하고 재시도하는 것이 낫기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;복제 방식 자체는 꽤 직관적인 편이다. 클러스터에 공유된 샤드 매핑 정보를 통해서 write를 받은 노드가 복제 대상 노드들에 직접 복제를 수행한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e61265543bb9f3ac.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_331a1825a5bb3c9c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이것도 쓰기시의 consistency level을 통해서, 최종 클라이언트가 복제를 다 기다릴지, 과반수 복제만 기다릴지, 복제를 기다리지 않을지를 선택할 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;kadineolriti-munje&quot;&gt;카디널리티 문제&lt;&#x2F;h2&gt;
+&lt;p&gt;높은 카디널리티 상황에서의 심각한 성능 저하 문제는 influxDB의 고질적인 한계였다.&lt;&#x2F;p&gt;
+&lt;p&gt;influx에서 말하는 카디널리티란게 무엇이냐 하면, 예를 들어보겠다.&lt;br &#x2F;&gt;
+태그 값 email과 status를 가진 시리즈 6개가 있다고 가정해보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bcdffa7306abd687.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여기서 email의 고유한 값은 3개고, status의 고유한 값은 2개다.&lt;br &#x2F;&gt;
+그러면 여기에서의 카디널리티는 3x2 = 6이다.&lt;&#x2F;p&gt;
+&lt;p&gt;influx는 tag로도 빠른 필터가 가능하게 tag index라는 걸 별도로 관리하는데, 이것 때문에 카디널리티가 커질수록 tag index의 크기가 급증하고 메모리 사용량이 대폭 늘어나는 문제가 있는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 태그에 사용되는 값들에는 지나치게 고유한 값들이 들어가도록 하지 않는 것이 좋다.&lt;br &#x2F;&gt;
+타임스탬프나 기타 고유코드 같은 것들은 가급적 넣지 말아야하고, 어느 정도 고정된 범위의 메타데이터만이 들어가야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;schema_and_data_layout&#x2F;&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;schema_and_data_layout&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;insights_tradeoffs&#x2F;&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;insights_tradeoffs&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;35428606&#x2F;difference-between-time-series-database-and-relational-database&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;35428606&#x2F;difference-between-time-series-database-and-relational-database&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;storage_engine&#x2F;&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;storage_engine&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;write-data&#x2F;best-practices&#x2F;resolve-high-cardinality&#x2F;&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;write-data&#x2F;best-practices&#x2F;resolve-high-cardinality&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;reference&#x2F;internals&#x2F;shards&#x2F;&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;reference&#x2F;internals&#x2F;shards&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;query_language&#x2F;manage-database&#x2F;#replication&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;query_language&#x2F;manage-database&#x2F;#replication&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;schema_and_data_layout&#x2F;#avoid-too-many-series&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;concepts&#x2F;schema_and_data_layout&#x2F;#avoid-too-many-series&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;troubleshooting&#x2F;frequently-asked-questions&#x2F;#how-does-influxdb-handle-duplicate-points&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v1&#x2F;troubleshooting&#x2F;frequently-asked-questions&#x2F;#how-does-influxdb-handle-duplicate-points&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;write-data&#x2F;best-practices&#x2F;resolve-high-cardinality&#x2F;&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;write-data&#x2F;best-practices&#x2F;resolve-high-cardinality&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.influxdata.com&#x2F;blog&#x2F;influxdb-clustering-design-neither-strictly-cp-or-ap&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.influxdata.com&#x2F;blog&#x2F;influxdb-clustering-design-neither-strictly-cp-or-ap&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[InfluxDB] Client CLI 설치</title>
+        <published>2024-07-27T00:00:00+00:00</published>
+        <updated>2024-07-27T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223526923320/"/>
+        <id>https://myyrakle.github.io/blog/223526923320/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223526923320/">&lt;p&gt;InfluxDB는 v1와 v2가 존재하는데, 서버 내부 동작만 다른게 아니라 클라이언트도 완전 다르다.&lt;&#x2F;p&gt;
+&lt;p&gt;보통 리눅스 배포판에서 기본 패키지 매니저를 통해 설치를 하면 v1만 깔린다.&lt;br &#x2F;&gt;
+v2에 대해서 상호작용을 하려면 직접 스크립트 돌려서 깔아야 한다. 아래는 amd64 linux의 설치 스크립트다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;wget https&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;download.influxdata.com&#x2F;influxdb&#x2F;releases&#x2F;influxdb2-client-2.7.5-linux-amd64.tar.gz&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;tar xvzf&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; .&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;influxdb2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;client&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;2.7&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;5&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;linux&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;amd64&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;tar&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;gz&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo cp&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; .&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &#x2F;&lt;&#x2F;span&gt;&lt;span&gt;usr&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;local&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;bin&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0d4ac9c0215a143f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;나머지 버전은 아래 링크에서 확인하면 된다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;tools&#x2F;influx-cli&#x2F;?t=Linux&quot;&gt;https:&#x2F;&#x2F;docs.influxdata.com&#x2F;influxdb&#x2F;v2&#x2F;tools&#x2F;influx-cli&#x2F;?t=Linux&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 v2 CLI에서도 v1와의 호환을 위해서 약간의 기능을 제공한다.&lt;br &#x2F;&gt;
+v1 shell을 치면 이전 방식대로 사용할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_34e14983fd1df87e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+인증 방식이나 그런것부터 완전 달라서 똑같지는 않지만 비슷한 느낌으로는 쓸 수 있다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[InfluxDB] k8s에 설치하기</title>
+        <published>2024-07-26T00:00:00+00:00</published>
+        <updated>2024-07-26T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223525737052/"/>
+        <id>https://myyrakle.github.io/blog/223525737052/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223525737052/">&lt;p&gt;쿠버네티스 환경에서 influxDB를 구성하는 방법을 간단히 정리해본다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;helmeul-tonghan-seolci&quot;&gt;helm을 통한 설치&lt;&#x2F;h2&gt;
+&lt;p&gt;helm을 사용하면 statefulset 세팅부터 service 구성까지 간단하게 처리해줄 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;vi influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;config&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;yaml&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;setDefaultUser&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  enabled&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; true&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  user&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    username&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;admin&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    password&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; q1w2e3r4&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_271d1a86c0effd18.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;helm repo add influxdata https&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F;helm.influxdata.com&#x2F;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;helm upgrade&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;install influx influxdata&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;influxdb2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;values influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;config&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;yaml&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cbf2ec3ba44bfaa6.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_486443d875addc70.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_63ce28ebf6ab12f6.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그래서 이렇게 sevice까지 잘 뜨면 잘 설치된 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pvc-guseong-onpeuremiseuyi-gyeongu&quot;&gt;PVC 구성 (온프레미스의 경우)&lt;&#x2F;h2&gt;
+&lt;p&gt;클라우드 호스팅 클러스터를 쓴다면 그냥 생각없이 띄워도 알아서 볼륨 붙여주는데, 온프레미스면 보통 손으로 세팅을 해줘야 한다.&lt;br &#x2F;&gt;
+내 경우엔 좀 간단한 편인 NFS를 통해서 정적 생성을 처리했다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223495801532&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223495801532&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;PV를 적당히 만들어준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f96afdbe92e0c8f1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+기본 설정으로는 이정도 스펙을 요구하기에&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;vi influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;pv&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;yaml&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;apiVersion&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; v1&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;kind&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; PersistentVolume&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;metadata&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  labels&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    app&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;kubernetes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;io&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;instance&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; influx&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    app&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;kubernetes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;io&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; influxdb2&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; nfs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;pv&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;influx&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  namespace&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; default&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;spec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  storageClassName&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; nfs&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  capacity&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    storage&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; 50Gi&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  volumeMode&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; Filesystem&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  accessModes&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;    -&lt;&#x2F;span&gt;&lt;span&gt; ReadWriteOnce&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  persistentVolumeReclaimPolicy&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; Retain&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  nfs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    server&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 192.168&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1.2&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    path&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &#x2F;&lt;&#x2F;span&gt;&lt;span&gt;home&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;nfs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;influx&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8241e29537a4e3d1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+적당히 맞춰주면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fb190948573da399.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그리고 컨테이너 띄웠을때 바운딩되면 잘 되는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;endeupointeu-ddulhgi&quot;&gt;엔드포인트 뚫기&lt;&#x2F;h2&gt;
+&lt;p&gt;DB 접속 경로를 public으로 열고 싶다면, 다음과 같이 서비스 타입을 변경하면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;kubectl patch svc influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;influxdb2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;n&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; default&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;p&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;{&amp;quot;spec&amp;quot;: {&amp;quot;type&amp;quot;: &amp;quot;LoadBalancer&amp;quot;}}&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_08ee2a55b87b4027.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;helm을 기반으로 적용하고 싶다면 이렇게 추가해서&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;setDefaultUser&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  enabled&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; true&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  user&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    username&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;admin&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    password&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; q1w2e3r4&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;service&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  type&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; LoadBalancer&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;먹이면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;helm upgrade&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;install influx influxdata&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;influxdb2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;values influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;config&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;yaml&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2f0898eb3ff949c7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;참고로, 클라우드의 경우에는 클라우드가 알아서 로드밸런서를 프로비저닝해서 붙여주는데, 온프레미스는 직접 해줘야 한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223330537493&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223330537493&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sikeuris-ddagi&quot;&gt;시크릿 따기&lt;&#x2F;h2&gt;
+&lt;p&gt;원한다면 시크릿 정보에서 자동 생성된 어드민 접속정보를 추출할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8329c4a5f38bae2c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이건 persistence 구성으로 생성했다면 최초 생성시에만 초기화되고 변경되지 않는다.&lt;br &#x2F;&gt;
+별다른 설정 없이 띄우면 그냥 persistence 구성으로 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 시크릿 정보 다 까보려면 그냥 까면 되고&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;kubectl get secret influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;influxdb2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;auth&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;o yaml&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_832f4e3ea90fc59c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+토큰과 패스워드가 나온다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;echo&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; $&lt;&#x2F;span&gt;&lt;span&gt;(kubectl get secret influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;influxdb2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;auth&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;o&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;jsonpath={.data[&amp;#39;admin-password&amp;#39;]}&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;namespace default&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; |&lt;&#x2F;span&gt;&lt;span&gt; base64&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;decode)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_310fa9dcf1507a60.png&quot; alt=&quot;&quot; &#x2F;&gt;
+패스워드만 따려면 이렇게 날리면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jeobsog&quot;&gt;접속&lt;&#x2F;h2&gt;
+&lt;p&gt;influx-client를 깔고 열어놓은 서비스 포트로 기어들어가면 된다. 80포트로 열린다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_254005d76ea3222e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+설정했던 username, password 넣고 들어가면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6f8e84d3970e9921.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;CLI에서 접근하려면 토큰을 만들어서 쓰는 것이 좋다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b5895aa7e1182388.png&quot; alt=&quot;&quot; &#x2F;&gt;
+토큰을 만들어서&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3df770b28b080362.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_96d2a3a83b8fcf96.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그걸 실행할때 꽂으면 인증이 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;cuga-seoljeong&quot;&gt;추가 설정&lt;&#x2F;h2&gt;
+&lt;p&gt;뭔가 더 옵션을 주고싶은게 있다면&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;artifacthub.io&#x2F;packages&#x2F;helm&#x2F;influxdata&#x2F;influxdb&quot;&gt;https:&#x2F;&#x2F;artifacthub.io&#x2F;packages&#x2F;helm&#x2F;influxdata&#x2F;influxdb&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+이거 참조해서 yaml 만들고&lt;&#x2F;p&gt;
+&lt;p&gt;upgrade 날리면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c0cac96f05905a82.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;influxdata&#x2F;helm-charts&#x2F;tree&#x2F;master&#x2F;charts&#x2F;influxdb2&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;influxdata&#x2F;helm-charts&#x2F;tree&#x2F;master&#x2F;charts&#x2F;influxdb2&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[InfluxDB] v3: Rust로 재작성</title>
+        <published>2023-11-06T00:00:00+00:00</published>
+        <updated>2023-11-06T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223256618264/"/>
+        <id>https://myyrakle.github.io/blog/223256618264/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223256618264/">&lt;p&gt;대표적인 시계열 데이터베이스인 Influx가 새 버전 v3에서 Go를 버리고 Rust로 다시 만들었다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_187f3db8b768672d.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+사실 언어를 바꾼다는 결정은 저 바닥에서 좀처럼 보지 못했던 것인데, 꽤나 신선한 충격이었다.&lt;&#x2F;p&gt;
+&lt;p&gt;현재 전반적인 재작성은 다 끝난 상태고, 레포에 들어가도 Go가 하나도 없다.&lt;br &#x2F;&gt;
+다만 아직 버전 3을 공식적으로 출시한건 아니다. 올해가 가기 전에 낼거라고 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;wae-geuraesseulgga&quot;&gt;왜 그랬을까?&lt;&#x2F;h2&gt;
+&lt;p&gt;본인들이 하는 말에 따르면 충동적인 결정은 아니고, 당초의 로드맵을 따라서 계획대로 한거라고 한다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;어차피 아키텍쳐 수준의 재작성을 할 예정이라서 언어를 바꾸는게 큰 리스크는 아니었고&lt;&#x2F;li&gt;
+&lt;li&gt;C&#x2F;C++ 코드를 비교적 자유롭게 갖다쓸 수 있는 Rust의 장점과&lt;&#x2F;li&gt;
+&lt;li&gt;Rust 특유의 성능과 안정성 등..&lt;br &#x2F;&gt;
+때문에 결정했다고 한다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;벤치 결과도 그럭저럭 괜찮게 나오는가보다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_888cb43ef597d178.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+아키텍처 수준의 최적화도 있지만, GC 타임도 줄어들테니, 그 덕을 보는갑다.&lt;&#x2F;p&gt;
+&lt;p&gt;이게 성공적인 사례가 될지는 내년쯤 되어봐야 알 수 있을 것 같다.&lt;br &#x2F;&gt;
+과연..?&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.datastep.world&#x2F;blog-1&#x2F;influxdb%EA%B0%80-go%EC%97%90%EC%84%9C-rust%EB%A1%9C-%EC%A0%84%ED%99%98&quot;&gt;https:&#x2F;&#x2F;www.datastep.world&#x2F;blog-1&#x2F;influxdb%EA%B0%80-go%EC%97%90%EC%84%9C-rust%EB%A1%9C-%EC%A0%84%ED%99%98&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;rust&#x2F;comments&#x2F;16v13l5&#x2F;influxdb_officially_made_the_switch_from_go_rust&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;rust&#x2F;comments&#x2F;16v13l5&#x2F;influxdb_officially_made_the_switch_from_go_rust&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>시계열 DB. InfluxDB와 TimescaleDB</title>
+        <published>2023-07-19T00:00:00+00:00</published>
+        <updated>2023-07-19T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223160157134/"/>
+        <id>https://myyrakle.github.io/blog/223160157134/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223160157134/">&lt;p&gt;대표적인 시계열 DB인 InfluxDB가 기존의 DB와 어떤 구조를 갖고 있으며, 어떤 장점과 단점을 갖고 있는지, 그리고 그에 대항하는 TimescaleDB은 어떤 녀석인지 한번 분석해보는 시간을 가지겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sigyeyeol-deiteobeiseu-time-series-database&quot;&gt;시계열 데이터베이스(time series database)&lt;&#x2F;h2&gt;
+&lt;p&gt;시계열 데이터베이스는 기본적으로 데이터 저장의 기준을 시간(time)으로 삼는 것이다. 기본키를 전부 타임스탬프 같은 값으로 삼는다는 뜻이다.&lt;&#x2F;p&gt;
+&lt;p&gt;시계열DB가 가장 처음 사용된 분야는 여러가지 수치값들이 실시간으로 쌓이는 환경이었다. 예를 들어, 센서로 측정된 수치들을 시간대별로 저장한다든가 하는 것들 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 현재에 이르러서는 &quot;시간&quot;이 중요한 시스템에서는 꽤나 광범위하게 사용되는 편이다. 예를 들어 &quot;주식 거래&quot;나 &quot;암호화폐 거래&quot; 등의 거래 시간이 중요한 경우에는 시계열을 활용할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 대체로, 데이터 저장에 압축을 좀더 적극적으로 하는 편이라 대형 데이터 저장에도 유리한 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 시계열의 표준이 있는 것도 아니라서, DB마다 개성이 뚜렷하고 차이점이 굉장히 크다. 그래서 시계열이 딱 뭐라고 명확하게 정의하기는 힘들다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;influxdb&quot;&gt;InfluxDB&lt;&#x2F;h2&gt;
+&lt;p&gt;InfluxDB는 명실상부한 시계열의 대표주자다. 가장 유명하고, 가장 많이 사용된다.&lt;br &#x2F;&gt;
+주변환경이 튼튼하고, 전용 클라우드 서비스도 잘 제공하는 편이다. (논란이 많긴 하지만)&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;influxdb-vs-rdbms&quot;&gt;InfluxDB vs RDBMS&lt;&#x2F;h4&gt;
+&lt;p&gt;기존의 RDB들이 Tree 기반의 인덱스를 통해 저장이 된다면, InfluxDB를 위시한 시계열 DB들은 오직 &quot;시간&quot;에 기반해서 데이터를 저장한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7cb5943f9ce630dc.png&quot; alt=&quot;&quot; &#x2F;&gt;
+출처 &lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;devconnected.com&#x2F;the-definitive-guide-to-influxdb-in-2019&#x2F;&quot;&gt;https:&#x2F;&#x2F;devconnected.com&#x2F;the-definitive-guide-to-influxdb-in-2019&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+그런데 왜 이렇게 해야할까?&lt;&#x2F;p&gt;
+&lt;p&gt;기본적으로 RDB들은 단일 노드에서 초당 20000-100000 수준의 insert도 곧잘 감당해내곤 한다.&lt;br &#x2F;&gt;
+하지만 RDB에는 맹점이 상당히 많은데, 주로 사용하는 B-Tree 기반의 인덱스는 시간이 지나고 데이터 집합이 커짐에 따라 insert 성능이 계속해서 떨어질 수 있다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;반면 시계열 DB는 일정하고 빠른 수집에 최적화된 데이터 구조를 가진다. 타임스탬프 인덱스에 B-Tree를 사용하지 않아서 느린 Rebalancing 동작이 없기 때문이다. 대신 Time Structured Merge Tree라고 부르는 특수화된 구조를 사용한다.&lt;br &#x2F;&gt;
+그래서 단일 노드당 50000-100000건 정도의 insert를 무리없이 감당할 수 있다.&lt;br &#x2F;&gt;
+RDB와 성능이 아주 크게 차이나는 것은 아니지만, 안정적으로 그 성능이 계속 유지된다는 점이 주효하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0ee50fe4158b19c3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;jangjeom&quot;&gt;장점&lt;&#x2F;h4&gt;
+&lt;p&gt;지속적인 데이터 대량수집에 유리하다.&lt;br &#x2F;&gt;
+InfluxDB 그룹의 기술지원을 받을 수 있다. (유료)&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;danjeom&quot;&gt;단점&lt;&#x2F;h4&gt;
+&lt;p&gt;시리즈 카디널리티, 그러니까 태그나 필드에 의해 인덱싱되는 경우의 수가 높아질수록? insert나 read 쿼리가 심각하게 느려지고 리소스를 과도하게 소모한다.&lt;br &#x2F;&gt;
+심각한 경우에는 수백만-수천만개가 되는 상태에서 약간의 분석 쿼리만 사용해도 수십초-분 단위까지 시간이 걸릴 수 있다.&lt;br &#x2F;&gt;
+이건 데이터 자체를 시간으로만 저장하기 때문에 생기는 한계인데, 무조건 풀스캔을 때려서 메모리에 로드하고 분석을 처리하기 때문이기도 하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;timescaledb&quot;&gt;TimescaleDB&lt;&#x2F;h2&gt;
+&lt;p&gt;TimescaleDB는 PostgreSQL 엔진을 기반으로 만들어진 시계열 데이터베이스다.&lt;br &#x2F;&gt;
+그래서 기본적인 저장 전략은 기존의 RDB들과 크게 다를 것은 없다. 여러가지 트릭들과 중간 추상화를 적용해서 시계열 DB처럼 &quot;보이게&quot; 구현한 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래도 있을 것은 다 있다.&lt;br &#x2F;&gt;
+시계열 DB들 특유의 데이터 압축을 통한 저장공간 효율화도 제공하고, 아주 훌륭한 SQL 기반의 분석 기능도 제공한다. RDB를 그대로 갖다썼으니 당연히 RDB 수준의 분석성능을 가지고 있다.&lt;br &#x2F;&gt;
+InfluxDB가 가지고 있는 카디널리티 문제가 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 B-Tree 인덱스를 그대로 사용하지만, Tree에 시간 값에 기반한 Chunk 단위로 데이터를 분할 저장해서 시계열 특유의 안정적인 insert 성능도 보장한다.&lt;&#x2F;p&gt;
+&lt;p&gt;여러모로 InfluxDB의 단점들을 잘 극복한 훌륭한 시계열DB로 평가를 받는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;아래는 InfluxDB와 벤치마크를 돌린 표다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cef5aa34e9ffb81b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.timescale.com&#x2F;blog&#x2F;timescaledb-vs-influxdb-for-time-series-data-timescale-influx-sql-nosql-36489299877&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.timescale.com&#x2F;blog&#x2F;timescaledb-vs-influxdb-for-time-series-data-timescale-influx-sql-nosql-36489299877&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+카디널리티가 낮을 때는 InfluxDB가 더 빠르지만, 카디널리티가 조금만 더 올라가도 timescaleDB의 성능이 더 높아지는 면이 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;jangjeom-1&quot;&gt;장점&lt;&#x2F;h4&gt;
+&lt;p&gt;RDB의 풍부한 기능을 전부 다 활용할 수 있다. 인덱스 추가를 통한 read 쿼리 최적화에도 제한이 없다.&lt;br &#x2F;&gt;
+카디널리티 문제가 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;danjeom-1&quot;&gt;단점&lt;&#x2F;h4&gt;
+&lt;p&gt;카디널리티가 낮을 때는 InfluxDB보다 느릴 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;34492966&#x2F;what-is-time-series-database&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;34492966&#x2F;what-is-time-series-database&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;47581703&#x2F;influx-index-and-high-cardinality&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;47581703&#x2F;influx-index-and-high-cardinality&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Influx DB] 소개 및 설치</title>
+        <published>2021-12-07T00:00:00+00:00</published>
+        <updated>2021-12-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222588600814/"/>
+        <id>https://myyrakle.github.io/blog/222588600814/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222588600814/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c65006b474650f5f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+influxdb는 가장 대표적인 시계열 데이터베이스 시스템 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;2013년에 출시되었으며, Go로 작성되었다고 한다. 그리고 당연히 오픈소스다.&lt;&#x2F;p&gt;
+&lt;p&gt;시계열 데이터베이스란, 말 그대로 시간을 관점으로 해서 데이터를 관리하는 데이터베이스 시스템이다.&lt;br &#x2F;&gt;
+시간에 따라 변화하는 값들을 저장하고 다루는 것에 최적화되어있다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 시간에 따른 값들을 쌓아놓고 그에 대한 분석을 하기에 용이하다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 그렇게 특화된만큼, 단점도 당연히 두드러진다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;일단 insert, select에만 집중해서, update와 delete와 관련된 기능이.. 그냥 없다.&lt;br &#x2F;&gt;
+냅다 집어넣고 읽는게 다다.&lt;&#x2F;li&gt;
+&lt;li&gt;트랜잭션같은게 없다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;그래서 메인DB로 쓸수있는 그런 성질의 시스템은 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;한번 설치해서 간단히 다뤄보도록 하겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;seolci-ubuntu&quot;&gt;설치 (Ubuntu)&lt;&#x2F;h2&gt;
+&lt;p&gt;테스트 환경은 우분투 18이다.&lt;&#x2F;p&gt;
+&lt;p&gt;우분투에서는 다음과 같이 간단하게 설치가 가능하다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo apt install influxdb&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e7d192ca5a6b6195.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 아래 명령들을 사용해 자동으로 시작되도록 할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo systemctl stop influxdb &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo systemctl start influxdb &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo systemctl enable&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;now influxdb&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo systemctl is&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;enabled influxdb&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그래서 다음과 같이 상태가 &quot;active&quot;로 뜨면 성공적으로 설치된 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5d532163a0107e92.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;keulraieonteu-seolci-mic-jeobsog&quot;&gt;클라이언트 설치 및 접속&lt;&#x2F;h2&gt;
+&lt;p&gt;그런데 저거는 데이터베이스 서버를 올리는 것 뿐이라, 접속을 하려면 클라이언트가 또 필요하다.&lt;br &#x2F;&gt;
+클라이언트는 다음과 같이 설치할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo apt&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;get install influxdb&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;client&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_de22072d6fce4c72.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 influx 커맨드를 통해 접속을 할 수 있게 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f636a71de5056e1b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;외부에서 접속하고 싶다면 다음과 같이 호스트와 포트로 접속을 하면 된다.&lt;br &#x2F;&gt;
+인플럭스의 기본 포트는 8086이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;influx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;host localhost&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;port&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 8086&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_485e0d06ef5ff5ac.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;br &#x2F;&gt;
+다음 포스트부터 본격적으로 쿼리를 날리는 법과 구조 등을 다뤄보도록 하겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;websiteforstudents.com&#x2F;how-to-install-influxdb-on-ubuntu-18-04-16-04&#x2F;&quot;&gt;https:&#x2F;&#x2F;websiteforstudents.com&#x2F;how-to-install-influxdb-on-ubuntu-18-04-16-04&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Influx DB] 데이터베이스</title>
+        <published>2021-12-07T00:00:00+00:00</published>
+        <updated>2021-12-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222588606750/"/>
+        <id>https://myyrakle.github.io/blog/222588606750/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222588606750/">&lt;p&gt;인플럭스도 여타 RDB들처럼 기본적으로 데이터베이스를 가장 바깥 레이어로 깔고 시작한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteobeiseu-saengseong&quot;&gt;데이터베이스 생성&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터베이스의 생성은 create database 명령으로 수행할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create database 데이터베이스명&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그럼 다음과 같이 데이터베이스가 생성될 것이다.&lt;br &#x2F;&gt;
+데이터베이스 목록은 show databases로 조회할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d4d338ae62448c97.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteobeiseu-jeobsog&quot;&gt;데이터베이스 접속&lt;&#x2F;h2&gt;
+&lt;p&gt;생성한 데이터베이스에 접속하려면 use 명령을 사용한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;use 데이터베이스명&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0f1c487c13c0c0db.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteobeiseu-sagje&quot;&gt;데이터베이스 삭제&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터베이스를 삭제하는 것도 간단하다.&lt;br &#x2F;&gt;
+drop database 명령을 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;drop database 데이터베이스명&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d8ba095d3a48de82.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Influx DB] measurement</title>
+        <published>2021-12-07T00:00:00+00:00</published>
+        <updated>2021-12-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222588621170/"/>
+        <id>https://myyrakle.github.io/blog/222588621170/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222588621170/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_87a1f22538183e97.png&quot; alt=&quot;&quot; &#x2F;&gt;
+measurement은 RDB들의 테이블과 대치되는 개념이다.&lt;br &#x2F;&gt;
+하나의 데이터베이스 안에 하나 이상 존재할 수 있으며, 실제 데이터의 그룹이라고 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 형태가 좀 다르고,&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteoyi-sabib&quot;&gt;데이터의 삽입&lt;&#x2F;h2&gt;
+&lt;p&gt;measurement은 미리 정의해서 만들거나 하는 것이 아니라, 삽입과 함께 자동으로 생성이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;삽입 쿼리는 다음과 같은 형태를 가진다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;INSERT ﻿measurement명&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt;태그컬럼1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;태그값1 컬럼1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;값1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 컬럼2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;값2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; ...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;태그는 일반 컬럼과는 좀 다른 성질의 것인데, 저건 차후 다루도록 하겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 시간에 따라 늘어나는 코로나 확진자수를 저장하고 싶다면,&lt;br &#x2F;&gt;
+이런 식으로 데이터를 넣을 수 있다. 한국과 세계 값 2가지를 넣었다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_92b52f0aa98b3d98.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteoyi-johoe&quot;&gt;데이터의 조회&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터를 읽어올 때는 select 명령어를 사용하는데, RDB들의 select문과 거의 유사하다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select 컬럼1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 컬럼2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; ...&lt;&#x2F;span&gt;&lt;span&gt; from measurement명 where 조건&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;...&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ee29c04ac7ef6d07.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그런데 방금 넣은 데이터를 보면 time이라는 값이 갑자기 튀어나온 것을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;인플럭스는 값의 기본 키로 항상 &quot;시간&quot; 값을 사용하고, 이 시간 값을 서버 시간 기준으로 해서 항상 자동으로 넣어주기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 where 절도 SQL과 유사한 형태로 사용할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a56de3c9212722f2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sigangabs-jijeonghagi&quot;&gt;시간값 지정하기&lt;&#x2F;h2&gt;
+&lt;p&gt;권장되진 않지만, 시간값을 명시적으로 지정해서 넣을 수도 있다.&lt;br &#x2F;&gt;
+insert의 마지막 인자로 UTC 값을 넣어주면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4f0dfefb518a0eaf.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+</content>
+        
+    </entry>
+</feed>

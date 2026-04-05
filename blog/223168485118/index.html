@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[RabbitMQ] 기본 구조 및 사용법 (with Go) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223168485118/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[RabbitMQ] 기본 구조 및 사용법 (with Go)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223168485118/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-07-28T00:00:00+00:00">
+    <meta property="article:tag" content="RabbitMQ">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223168485118/">[RabbitMQ] 기본 구조 및 사용법 (with Go)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-07-28T00:00:00+00:00"><time datetime="2023-07-28T00:00:00+00:00">2023.07.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="232 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rabbitmq/">RabbitMQ</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223168485118" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>RabbitMQ를 제대로 사용하기 위해서는 그 구조를 개략적으로나마 알아두는 것이 좋다.<br />
+일반적인 큐들과 마찬자기로 Pub/Sub 형태로 데이터를 주고받고, 주고받는 데이터는 Queue 내부에 디스크로 저장한다.</p>
+<p><img src="/images/img_f84f16217228a076.png" alt="" />
+조금 특이한 점은 큐에 바로 꽂는게 아니라 Exchange라는 중간 레이어를 통해서 메시지가 큐에 전송된다는 점이다. Exchange를 통해서 추가적인 라우팅을 수행하도록 할 수 있다.<br />
+하나의 메시지가 여러개의 큐에 fanout 전송이 되도록 할 수도 있고, 그냥 하나의 큐에 가게 할 수도 있다.</p>
+<p>그리고 consumer가 여러개라도 하나의 메시지는 하나의 consumer에게만 전송되는 것이 보장된다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-guseong-with-go">기본 구성 (with Go)</h2>
+<p>Go에서 공식 모듈을 사용해서 큐를 생성하고 메세지를 전송해보도록 하겠다.</p>
+<p>우선 커넥션을 맺어야 한다.<br />
+다음과 같이 URL을 정의하고, 패스워드까지 넣어서 커넥션을 생성해준다.</p>
+<p><img src="/images/img_24272c8530cc21e4.png" alt="" /></p>
+<p>그다음에는 채널을 생성해준다.<br />
+실제로 브로커 수준에서 제공하는 채널은 아니고, I/O를 효율적으로 받아오기 위한 중간 레이어다.</p>
+<p><img src="/images/img_db426f5c2c34e35f.png" alt="" /></p>
+<p>그 다음에는 실제로 사용할 큐를 정의한다.<br />
+이름은 대충 hello로 했다.</p>
+<p><img src="/images/img_5174998038b5d9f3.png" alt="" />
+여러가지 옵션이 있는데, 일단은 대충 무시하고 넘어가도 된다. 기본값으로 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="consumer-guhyeonhagi">Consumer 구현하기</h2>
+<p>큐에서 메세지를 읽어오는 간단한 프로그램을 먼저 작성해봤다.</p>
+<p><img src="/images/img_b30777df3526192d.png" alt="" />
+채널로 뱅뱅 돌면서 값을 로그로 찍도록 했다.</p>
+<p>아래는 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	amqp</span><span style="color: #A6E3A1;"> &quot;github.com/rabbitmq/amqp091-go&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> USER</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;tester&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> PASSWORD</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;q1w2e3r4&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	url</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span><span style="color: #A6E3A1;">&quot;amqp://%s:%s@localhost:5672/&quot;</span><span style="color: #9399B2;">,</span><span> USER</span><span style="color: #9399B2;">,</span><span> PASSWORD)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// RabbitMQ에 연결한다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> connection *amqp.Connection</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> conn</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> amqp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Dial</span><span>(url)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to connect to RabbitMQ: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		connection</span><span style="color: #94E2D5;"> =</span><span> conn</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	defer connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 채널을 열어서 메시지를 받아올 준비를 한다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> channel *amqp.Channel</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> ch</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Channel</span><span>()</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to open a channel: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		channel</span><span style="color: #94E2D5;"> =</span><span> ch</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span>	defer channel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 큐를 선언한다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> queue amqp.Queue</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> q</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> channel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">QueueDeclare</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;hello&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // name</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // durable</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // delete when unused</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // exclusive</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // no-wait</span></span>
+<span class="giallo-l"><span>		nil</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">     // arguments</span></span>
+<span class="giallo-l"><span>	)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to declare a queue: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		queue</span><span style="color: #94E2D5;"> =</span><span> q</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 큐로부터 메시지를 받아온다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> messages</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> channel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Consume</span><span>(</span></span>
+<span class="giallo-l"><span>		queue</span><span style="color: #94E2D5;">.</span><span>Name</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // queue</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">         // consumer</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		true</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">       // auto-ack</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">      // exclusive</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">      // no-local</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">      // no-wait</span></span>
+<span class="giallo-l"><span>		nil</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">        // args</span></span>
+<span class="giallo-l"><span>	)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to publish a message: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 채널을 range로 돌면서 메시지를 받아온다.</span></span>
+<span class="giallo-l"><span>		for message</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> range messages</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Printf</span><span>(</span><span style="color: #A6E3A1;">&quot;Received message with body: %s&quot;</span><span style="color: #9399B2;">,</span><span> message</span><span style="color: #94E2D5;">.</span><span>Body)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이대로 실행해도 당장 뭐가 로그에 찍히지는 않을 것이다.<br />
+메세지를 보내지 않았으니까!</p>
+<p>저대로 조회하면 아마 어드민 페이지에 커넥션이 추가될 것이고</p>
+<p><img src="/images/img_ce3042cdf260de8c.png" alt="" /></p>
+<p>큐도 생성된 것을 볼 수 있을 것이다.</p>
+<p><img src="/images/img_caffae9b7dc68f0d.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="producer-mandeulgi">producer 만들기</h2>
+<p>이번에는 메세지를 전송해주도록 하겠다.<br />
+그냥 텍스트를 적절히 직렬화해서 보내도록 하면 된다.</p>
+<p><img src="/images/img_ee503c9cc50e45ba.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	amqp</span><span style="color: #A6E3A1;"> &quot;github.com/rabbitmq/amqp091-go&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> USER</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;tester&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> PASSWORD</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;q1w2e3r4&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	url</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span><span style="color: #A6E3A1;">&quot;amqp://%s:%s@localhost:5672/&quot;</span><span style="color: #9399B2;">,</span><span> USER</span><span style="color: #9399B2;">,</span><span> PASSWORD)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// RabbitMQ에 연결한다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> connection *amqp.Connection</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> conn</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> amqp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Dial</span><span>(url)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to connect to RabbitMQ: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		connection</span><span style="color: #94E2D5;"> =</span><span> conn</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	defer connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 채널을 열어서 메시지를 보낼 준비를 한다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> channel *amqp.Channel</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> ch</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Channel</span><span>()</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to open a channel: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		channel</span><span style="color: #94E2D5;"> =</span><span> ch</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span>	defer channel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 큐를 선언한다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> queue amqp.Queue</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> q</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> channel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">QueueDeclare</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;hello&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // name</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // durable</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // delete when unused</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // exclusive</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // no-wait</span></span>
+<span class="giallo-l"><span>		nil</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">     // arguments</span></span>
+<span class="giallo-l"><span>	)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to declare a queue: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		queue</span><span style="color: #94E2D5;"> =</span><span> q</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 메시지를 보낸다.</span></span>
+<span class="giallo-l"><span>	body</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &quot;Hello World!&quot;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> channel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Publish</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">         // exchange</span></span>
+<span class="giallo-l"><span>		queue</span><span style="color: #94E2D5;">.</span><span>Name</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // routing key</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">      // mandatory</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">		false</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">      // immediate</span></span>
+<span class="giallo-l"><span>		amqp</span><span style="color: #94E2D5;">.</span><span>Publishing</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>			ContentType</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;text/plain&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			Body</span><span style="color: #94E2D5;">:</span><span>        []</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(body)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span><span>)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Panicf</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to publish a message: %s&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Printf</span><span>(</span><span style="color: #A6E3A1;">&quot; [x] Sent %s&quot;</span><span style="color: #9399B2;">,</span><span> body)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>저렇게 실행해보면</p>
+<p><img src="/images/img_a78a7c380c3d0ecc.png" alt="" /></p>
+<p>컨슈머에도 메세지가 날라올 것이다.</p>
+<p><img src="/images/img_cfcdc842690f6c4f.png" alt="" /></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223168305029/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[RabbitMQ] 시작<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223167562185/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>이슈노트 #7: AWS RabbitMQ 큐가 자꾸 터져요<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

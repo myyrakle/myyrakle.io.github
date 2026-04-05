@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Concurrency: Pipeline pattern | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223367371674/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Concurrency: Pipeline pattern">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223367371674/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-02-28T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223367371674/">[Go] Concurrency: Pipeline pattern</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-02-28T00:00:00+00:00"><time datetime="2024-02-28T00:00:00+00:00">2024.02.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="222 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223367371674" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>파이프라인 패턴은 List 형태의 벡터 데이터를 연속적으로 가공할 때 사용하기 적당한 동시성 처리 패턴이다.</p>
+<p>구현 방식은 조금씩 다르지만 이건 다른 언어들에서도 범용적으로 쓰이는 개념이다. Rust의 async Stream, Node.js의 Stream 등과도 유사하다.</p>
+<p>기본적인 원리는 이렇다.<br />
+배열이란 데이터의 개념을 "채널"로서 감싸고, 그걸 통해서 연쇄적으로 chaining 호출을 할 수 있도록 하는 것이다.</p>
+<p>먼저 파이프라인 채널을 생성하는 generator 함수가 있어야 한다.</p>
+<p><img src="/images/img_b9db6c66fa9f3aea.png" alt="" />
+가변인자를 받아서 그걸 기반으로 채널을 만들고 반환해주도록 했다.<br />
+물론 이 채널의 완성은 비동기적으로 이루어진다. 그래도 괜찮다.</p>
+<p>다음과 같이 파이프라인 스트림을 초기화할 수 있다.</p>
+<p><img src="/images/img_f0e5fea7b4853f63.png" alt="" /></p>
+<p>이 다음에는 파이프라인 연산을 구현해야 한다.<br />
+여기서는 덧셈과 곱셈 연산 2가지를 만들어보겠다.</p>
+<p><img src="/images/img_4baf475431240ddb.png" alt="" /></p>
+<p><img src="/images/img_5b614d4691bde9d0.png" alt="" />
+둘이 구조나 원리는 같다.<br />
+기존 스트림 채널을 파라미터로 전달받고, 그걸 뺑뺑 돌면서 새 스트림을 생성해서 반환한다.</p>
+<p>이 또한 처리가 비동기적으로 완성되나, 어차피 채널을 통해 핸들링하므로 신경쓸 것이 없다.</p>
+<p>그러면 이제 아래와 같은 형태로 스트림을 넣고, 다시 반환받고, 넣고 반환받는 식으로 연쇄적으로 병렬 호출을 이어나갈 수 있다.</p>
+<p><img src="/images/img_e5ba5724b1b81522.png" alt="" />
+이러한 형태로 파이프라이닝 비스무리하게 할 수 있기 때문에 파이프라인 패턴이라 부르는 것이다.<br />
+각 step은 완벽하게 동시적으로 실행되며 각 요소의 순서 또한 보장된다.</p>
+<p>실행해보면</p>
+<p><img src="/images/img_8f38e6dbeace5ea9.png" alt="" />
+기대한 대로 동작한다.<br />
+곱셈 2가 수행된 이후에 덧셈이 잘 붙어있다.</p>
+<p>물론 이 예제처럼 간단한 연산만을 한다면 이걸 쓰는 의미가 없다. 그냥 채널 없이 동기적으로 실행하는 것이 훨씬 빠를 것이다. 이건 각 요소별 생성시간이나 연산시간이 길어져서 대기시간이 늘어질 수 있을 때 유용하다.</p>
+<p>아래는 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func gererateStream[T any](done</span><span style="color: #94E2D5;"> &lt;-</span><span>chan struct</span><span style="color: #9399B2;">{},</span><span> values</span><span style="color: #94E2D5;"> ...</span><span>T)</span><span style="color: #94E2D5;"> &lt;-</span><span>chan T</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	stream</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(chan T)</span></span>
+<span class="giallo-l"><span>	go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		defer</span><span style="color: #89B4FA;font-style: italic;"> close</span><span>(stream)</span></span>
+<span class="giallo-l"><span>		for _</span><span style="color: #9399B2;">,</span><span> value</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> range values</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			select</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			case</span><span style="color: #94E2D5;"> &lt;-</span><span>done</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			case</span><span> stream</span><span style="color: #94E2D5;"> &lt;-</span><span> value</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> stream</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> multiply</span><span>(done</span><span style="color: #94E2D5;"> &lt;-</span><span>chan struct</span><span style="color: #9399B2;">{},</span><span> valueStream</span><span style="color: #94E2D5;"> &lt;-</span><span>chan int</span><span style="color: #9399B2;">,</span><span> multiplier int)</span><span style="color: #94E2D5;"> &lt;-</span><span>chan int</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	multipliedStream</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(chan int)</span></span>
+<span class="giallo-l"><span>	go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		defer</span><span style="color: #89B4FA;font-style: italic;"> close</span><span>(multipliedStream)</span></span>
+<span class="giallo-l"><span>		for value</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> range valueStream</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			select</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			case</span><span style="color: #94E2D5;"> &lt;-</span><span>done</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			case</span><span> multipliedStream</span><span style="color: #94E2D5;"> &lt;-</span><span> value</span><span style="color: #94E2D5;"> *</span><span> multiplier</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> multipliedStream</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> add</span><span>(done</span><span style="color: #94E2D5;"> &lt;-</span><span>chan struct</span><span style="color: #9399B2;">{},</span><span> valueStream</span><span style="color: #94E2D5;"> &lt;-</span><span>chan int</span><span style="color: #9399B2;">,</span><span> additive int)</span><span style="color: #94E2D5;"> &lt;-</span><span>chan int</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	addedStream</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(chan int)</span></span>
+<span class="giallo-l"><span>	go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		defer</span><span style="color: #89B4FA;font-style: italic;"> close</span><span>(addedStream)</span></span>
+<span class="giallo-l"><span>		for value</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> range valueStream</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			select</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			case</span><span style="color: #94E2D5;"> &lt;-</span><span>done</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				return</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			case</span><span> addedStream</span><span style="color: #94E2D5;"> &lt;-</span><span> value</span><span style="color: #94E2D5;"> +</span><span> additive</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> addedStream</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	done</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(chan struct</span><span style="color: #9399B2;">{}</span><span>)</span></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> close</span><span>(done)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	intStream</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> gererateStream</span><span>(done</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 5</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	multipliedStream</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> multiply</span><span>(done</span><span style="color: #9399B2;">,</span><span> intStream</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span>)</span></span>
+<span class="giallo-l"><span>	addedStream</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> add</span><span>(done</span><span style="color: #9399B2;">,</span><span> multipliedStream</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	for result</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> range addedStream</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		println</span><span>(result)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223367348242/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] DDL: IF NOT EXISTS 절<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223364212028/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Docker] 빌드 로그 보기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

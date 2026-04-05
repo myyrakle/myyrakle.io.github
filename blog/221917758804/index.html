@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 비동기 러스트: Future (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221917758804/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 비동기 러스트: Future (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221917758804/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2020-04-20T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221917758804/">[Rust] 비동기 러스트: Future (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-04-20T00:00:00+00:00"><time datetime="2020-04-20T00:00:00+00:00">2020.04.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="868 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221917758804" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>https://rust-<a rel="external" href="http://lang.github.io/async-book/02_execution/02_future.html">lang.github.io/async-book/02_execution/02_future.html</a></p>
+<p>Future 트레잇은 러스트에서의 비동기 프로그래밍에서 중심을 차지하는 녀석입니다.</p>
+<p>Future는 값을 산출할 수 있는 비동기적 계산도구에요. () 등으로 값이 비어있는 경우에도 잘 동작하죠.</p>
+<p>future 트레잇의 간단한 버전은 이렇게 표현할 수 있습니다.</p>
+<p>**trait SimpleFuture **<br />
+**{ **<br />
+**    type Output; **<br />
+**    fn poll(&amp;mut self, wake: fn()) -&gt; Poll<a href="Self::Output">Self::Output</a>; **<br />
+**} **</p>
+<p>**enum Poll<T> **<br />
+**{ **<br />
+**    Ready(T), **<br />
+**    Pending, **<br />
+**} **</p>
+<p>Future는 poll 메서드를 호출하는 것으로 상태가 진행될 수 있는데요. 이건 future가 최대한 완료되도록 유도할 겁니다.</p>
+<p>future가 완료되면 poll 메서드는 Poll::Ready(result)를 반환할 것이고.<br />
+아직 완료되지 않았다면 Poll::Pending 반환하고 Future가 더 진행될 준비가 되었을 때 wake() 함수가 호출되도록 정렬합니다.<br />
+-&gt;If the future is not able to complete yet, it returns Poll::Pending and arranges for the wake() function to be called when the Future is ready to make more progress.</p>
+<p>wake()가 호출되면, executor는 Future가 poll을 다시 호출하도록 유도합니다. Future가 더 진행될 수 있게끔요.</p>
+<p>wake()가 없다면, executor는 특정 future가 언제 진행됐는지를 알 방법이 없고, 모든 future를 지속적으로 polling해야만 할겁니다.<br />
+wake()가 있으면 future들이 polling할 준비가 되었는지를 정확하게 알 수 있고요.</p>
+<p>가령, 데이터를 사용할 수 있거나 없는 소켓에서 데이터를 읽어올 경우를 생각해봅시다.<br />
+데이터가 있다면 그냥 읽어서 Poll::Ready(data)을 반환하면 됩니다. 하지만 준비된 데이터가 없다면 future는 블럭되고 더이상의 진전이 없을 거에요.</p>
+<p>사용가능한 데이터가 없을 경우엔, 데이터가 소켓에 준비될 때 호출될 wake를 등록해야만 합니다. 그건 executor에게 future가 진행될 준비가 됐는지를 말해줄 거에요.</p>
+<p>여기에 간단한 SocketRead future 코드가 있습니다.</p>
+<p>**pub struct SocketRead&lt;'a&gt; **<br />
+**{ **<br />
+**    socket: &amp;'a Socket, **<br />
+**} **</p>
+<p>**impl SimpleFuture for SocketRead&lt;'_&gt; **<br />
+**{ **<br />
+**    type Output = Vec<u8>; **<br />
+**    fn poll(&amp;mut self, wake: fn()) -&gt; Poll<a href="Self::Output">Self::Output</a> **<br />
+**    { **<br />
+**        if <strong><a rel="external" href="http://self.socket.has_data_to_read">self.socket.has_data_to_read</a></strong>() **<br />
+**        { **<br />
+**            <strong><strong>// 소켓에 데이터가 있음. **<br />
+**            // 버퍼에서 읽어서 그것을 반환함</strong>.<br />
+**            <strong><a rel="external" href="http://Poll::Ready(self.socket.read_buf)**()">Poll::Ready(self.socket.read_buf</a> **<br />
+**        } **<br />
+**        else **<br />
+**        { **<br />
+**            <strong><strong>// 소켓에 아직 데이터가 없음.</strong><br />
+**            // **<br />
+**            // 데이터가 사용가능해지면 wake가 호출됨</strong><br />
+**            // 그리고 이 Future의 사용자는 다시 poll을 호출.</strong><br />
+**            // 데이터를 받아옴</strong><br />
+**            <strong><a rel="external" href="http://self.socket.">self.socket.</a><br />
+<a rel="external" href="http://self.socket.set_readable_callback">set_readable_callback</a></strong>(wake); **<br />
+**            Poll::Pending **<br />
+**        } **<br />
+**    } **<br />
+**} **</p>
+<p>Future의 이러한 모델은 중간 할당(intermediate allocations) 없이도 여러개의 비동기 연산과 함께 구성될 수 있습니다.</p>
+<p>여러개의 future를 한번에 실행하거나 함께 묶는(chain) 것은 아래와 같은 allocation-free 상태머신으로 구현될 수 있고요.</p>
+<p><strong>/// 2개의 다른 future를 동시에 실행하는 SimpleFuture</strong><br />
+<strong>/// **<br />
+<strong>/// 병행성은 각 future의 poll을 호출이</strong><br />
+<strong>/// interleave될 수 있다는 사실을 통해 달성됩니다.</strong><br />
+<strong>/// 그리고 각 future는 각자의 속도로 진행될 수 있습니다.</strong><br />
+<strong>pub struct Join&lt;FutureA, FutureB&gt; **<br />
+<strong>{ **<br />
+**   **** // 각 필드는 실행될 future를 포함합니다.</strong><br />
+**    // future가 이미 완료됐다면, 그 필드는 None이 될거에요.</strong><br />
+**    // 이건 future가 완료된 이후에도</strong><br />
+**    // future를 polling하는 것을 방지합니다.**<br />
+**    // 그건 Future 트레잇의 규칙을 위반하는 거니까요.**<br />
+**    a: Option<FutureA>, **<br />
+**    b: Option<FutureB>, **<br />
+**} **</p>
+<p>**impl&lt;FutureA, FutureB&gt; SimpleFuture for Join&lt;FutureA, FutureB&gt; **<br />
+**where **<br />
+**FutureA: SimpleFuture&lt;Output = ()&gt;, **<br />
+**FutureB: SimpleFuture&lt;Output = ()&gt;, **<br />
+**{ **<br />
+**    type Output = (); **<br />
+**    fn poll(&amp;mut self, wake: fn()) -&gt; Poll<a href="Self::Output">Self::Output</a> **<br />
+**    { **<br />
+**      ****  // future <code>a</code> 완료 시도. **<br />
+**        if let Some(a) = &amp;mut self.a **<br />
+**        { **<br />
+**            if let Poll::Ready(()) = a.poll(wake) **<br />
+**            { **<br />
+**                <strong><a rel="external" href="http://self.a.take">self.a.take</a></strong>(); **<br />
+**            } **<br />
+**        } **<br />
+**        <strong><strong>// future <code>b</code> 완료 시도. **<br />
+**        if let Some(b) = &amp;mut self.b **<br />
+**        { **<br />
+**            if let Poll::Ready(()) = b.poll(wake) **<br />
+**            { **<br />
+**                <strong><a rel="external" href="http://self.b.take">self.b.take</a></strong>(); **<br />
+**            } **<br />
+**        } **<br />
+**        if self.a.is_none() &amp;&amp; self.b.is_none() **<br />
+**        { **<br />
+**           **** // future 둘다 완료됨</strong><br />
+**            // 성공적으로 반환할 수 있음</strong><br />
+**            Poll::Ready(()) **<br />
+**        } **<br />
+**        else **<br />
+**        { **<br />
+**            **<strong>// future 하나 이상이 <code>Poll::Pending</code>을 반환하고, 여전히 작동중에 있음.</strong><br />
+<strong>// 진척이 있으면 wake()를 호출</strong>/<br />
+**            Poll::Pending **<br />
+**         } **<br />
+**    } **<br />
+**} **</p>
+<p>이건 여러개의 future들이 어떻게 별도의 할당 없이 동시에 실행될 수 있는지를 보여주고, 더 효율적인 비동기 프로그램을 만들게 해줍니다.</p>
+<p>비슷하게, 여러개의 연속된 future들은 연달아 실행되게 할 수 있습니다. 이렇게요.</p>
+<p><strong>/// 뒤이어 이후에 2개의 future를 실행하는</strong><strong><strong>SimpleFuture</strong></strong>**.**<br />
+<strong>// **<br />
+<strong>// 이 예제의 목적을 위해, <strong><strong><strong>AndThenFut</strong></strong></strong>이 **<br />
+<strong>// first와 second future 둘다 생성 시에 바로</strong><br />
+<strong>// 사용이 가능하다고 가정합니다.</strong><br />
+<strong>// 실제 AndThen combinator는 **<br />
+<strong>// first future이 출력값에 기반해서 **<br />
+<strong>// second future를 생성하게 합니다.</strong><br />
+<strong>// 이것처럼요.</strong></strong></strong> <code>get_breakfast.and_then(|food| eat(food))</code></strong></strong></p>
+<p>**pub struct AndThenFut&lt;FutureA, FutureB&gt; **<br />
+**{ **<br />
+**    first: Option<FutureA>, **<br />
+**    second: FutureB, **<br />
+**} **</p>
+<p>**impl&lt;FutureA, FutureB&gt; SimpleFuture for AndThenFut&lt;FutureA, FutureB&gt; **<br />
+**where **<br />
+**FutureA: SimpleFuture&lt;Output = ()&gt;, **<br />
+**FutureB: SimpleFuture&lt;Output = ()&gt;, **<br />
+<strong>{ **<br />
+**    type Output = (); **<br />
+**    fn poll(&amp;mut self, wake: fn()) -&gt; Poll<a href="Self::Output">Self::Output</a> **<br />
+**    { **<br />
+**        if let Some(first) = &amp;mut <strong><a rel="external" href="http://self.first">self.first</a></strong> **<br />
+**        { **<br />
+**            match <strong><a rel="external" href="http://first.poll">first.poll</a></strong>(wake) **<br />
+**            { **<br />
+**                <strong><strong>// first future가 완료됨.</strong><br />
+**                // 제거하고 second 시작!</strong><br />
+**                Poll::Ready(()) =&gt; <strong><a rel="external" href="http://self.first.take">self.first.take</a></strong>(), **<br />
+**               **** // 아직 first future가 완료되지 않음</strong><br />
+**                Poll::Pending =&gt; return Poll::Pending, **<br />
+**              }; **<br />
+**        } **<br />
+**        **<strong>// 이제 first future가 완료됨.</strong><br />
+**        // second 완료를 시도.          **** **<br />
+**        <strong><a rel="external" href="http://self.second.poll">self.second.poll</a></strong>(wake) **<br />
+**    } **<br />
+**} **</p>
+<p>These examples show how the Future trait can be used to express asynchronous control flow without requiring multiple allocated objects and deeply nested callbacks.<br />
+이 예제들은 Future 트레잇이 중복할당된 객체와 깊게 중복된 콜백 없이 비동기 제어흐름을 표현하는 방법을 보여줍니다.</p>
+<p>이번엔 이런 기본적인 제어흐름에서 벗어나서 실제 Future 트레잇은 무엇이 다른지를 이야기해보죠.</p>
+<p>**trait Future **<br />
+**{ **<br />
+**    type Output; **<br />
+**    fn poll( **<br />
+**        ****// <strong><strong><strong>&amp;mut self</strong></strong></strong>에서 ******Pin&lt;&amp;mut Self&gt;<strong><strong><strong>로 바꿈</strong><br />
+**        self: Pin&lt;&amp;mut Self&gt;, **<br />
+**        <strong><strong>// wake</strong></strong>: fn()는 **<strong>cx</strong>:</strong>&amp;mut Context&lt;'_&gt;로 바꿈</strong><br />
+**        cx: &amp;mut Context&lt;'_&gt;, **<br />
+**      ) -&gt; Poll<a href="Self::Output">Self::Output</a>; **<br />
+**} **</p>
+<p>첫번째 인자를 보죠. self 타입으로 더이상 &amp;mut self를 쓰지 않고 Pin&lt;&amp;mut self&gt;로 바뀌었습니다.<br />
+Pinning에 대한 자세한 이야기는 해당 챕터에서 다룰텐데요. 일단은 이동이 불가능한 Future를 생성하게 해주는 거라고만 알아둡시다.</p>
+<p>이동불가능한 객체들은 그 필드 사이에 포인터를 저장할 수 있게 됩니다. 이렇게요.<br />
+struct MyFut { a: i32, ptr_to_a: *const i32 }.</p>
+<p>Pinning은 async/await에 있어서는 필수적인 녀석입니다.</p>
+<p>두번째로, wake: fn()는 &amp;mut Context&lt;'_&gt;로 바뀌었는데요.<br />
+SimpleFuture에서 우리는 함수포인터 fn()로의 호출을 사용해서 future executor에게 해당 future를 polling해야함을 말해줬습니다.<br />
+하지만 fn()는 그냥 함수포인터일 뿐이라, wake를 호출한 Future에 대해 그 어떤 데이터도 저장할 수 없어요.</p>
+<p>현실의 시나리오에서 웹서버 같은 복잡한 애플리케이션은 wakeup이 따로 관리되어야 하는 수천개의 서로 다른 연결이 있을 수 있습니다.</p>
+<p>Context 타입은 이러한 문제를 Waker 타입 값의 접근을 제공하는 것으로 해결합니다. Waker는 지정된 task를 wake up할 수 있게 해주죠.<br />
+-&gt;The Context type solves this by providing access to a value of type Waker, which can be used to wake up a specific task.</p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221920874441/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>node.js의 장단점.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221917830051/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[SQL] 최적화 기본<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

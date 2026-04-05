@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Lock | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222910699714/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Lock">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222910699714/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-10-26T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222910699714/">[PostgreSQL] Lock</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-10-26T00:00:00+00:00"><time datetime="2022-10-26T00:00:00+00:00">2022.10.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="571 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222910699714" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>lock은 동시성 제어에서, 동시에 어떤 항목에 접근을 시도할때 어떻게 충돌을 방지하거나 허용할 것인지에 대한 기능이다.</p>
+<br>
+<br>
+<h2 id="teibeul-lock-geolgi">테이블 Lock 걸기</h2>
+<p>이게 왜 필요하고, 어떨때 사용하는지부터 사용사례를 한번 간략하게 보겠다.</p>
+<p>만약 데이터 풀을 관리하는 테이블이 하나 있고,</p>
+<p><img src="/images/img_90aed0e126a961e3.png" alt="" />
+어떤 서버에서 이걸 순서대로 하나씩 꺼내쓴다고 생각해보자.<br />
+꺼내쓰고 나서는 used에 true값을 새겨주고, 한번에 여러 요청에서 동일한 값을 가져와서는 안 된다.</p>
+<p>아무 생각없이 이런식으로 하나씩 꺼내쓰는 것은 문제의 소지가 많다.</p>
+<p><img src="/images/img_cfdc2700ccbf29c2.png" alt="" />
+무작정 used가 false인 것들을 가져오다보니, 여러개의 요청에서 동시에 동일한 pool 데이터를 읽고, 동일한 pool 데이터에 used true를 새길 수가 있는 것이다.</p>
+<p>그래서 저러면 그냥..</p>
+<p><img src="/images/img_fceba0c8e59e43db.png" alt="" /></p>
+<p><img src="/images/img_da62f651fd3a714a.png" alt="" />
+9개가 데이터 행 하나만 쓰고 만다.</p>
+<p>이런 경우에 필요한 것이 Lock이다.<br />
+table lock을 사용하면 현재 트랜잭션이 종료되기 전까지는 다른 트랜잭션에서 접근을 할 수가 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>lock table 테이블명</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_51acb9e137c97864.png" alt="" />
+항상 트랜백션 구문 안에서 사용되어야 한다는점 있지 말자.</p>
+<p>이렇게 했다면 이제</p>
+<p><img src="/images/img_eea6faab527c64d8.png" alt="" /></p>
+<p><img src="/images/img_70ac70e42afbb1e7.png" alt="" />
+순차적으로 잘 접근이 되었을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="haeng-danwi-lock">행 단위 lock</h2>
+<p>그런데 사실, 저 행 하나씩 써먹는데 한 쿼리 돌때마다 테이블 전체를 lock해버리는건 다소 낭비일 수도 있다.<br />
+사실, 같은 행에 동시접근만 하지 않고, 다른 행은 접근해도 되는게 아닌가?</p>
+<p>그래서 이런 케이스에는 행 단위 lock을 거는 편이 보다 자연스럽다.<br />
+대략적인 사용법은 이렇다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">...</span><span> 쿼리</span><span style="color: #94E2D5;"> ...</span><span> for update</span></span></code></pre>
+<p><img src="/images/img_d6090dcea74d2f30.png" alt="" />
+이러면 저 조건에 의해 가져온 항목들은 현재 트랜잭션이  끝날 때까지 lock이 걸려서 접근하지 못한다.</p>
+<p>이 케이스에서는 사실 처음 쿼리를 돌릴때는 전부 첫번째 행을 가리켜서 실제 동작은 다르지 않겠지만, 다른 외부시스템에서 다른 행들에 대해서는 접근을 할 수 있다는 것이 달라졌다.</p>
+<br>
+<br>
+<br>
+<h2 id="lockyi-jongryu">Lock의 종류</h2>
+<p>락 수준에는 꽤나 다양한 옵션이 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>lock table 테이블명 [ IN lockmode MODE ]</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이것도 꽤 종류가 많다.</p>
+<br>
+<h4 id="1-access-share">1. ACCESS SHARE</h4>
+<p>가장 쉬운 수준의 락이다.<br />
+ACCESS EXCLUSIVE와만 충돌하고, 그게 아니라면 언제든 접근이 가능하다.<br />
+일반적으로 테이블을 읽기만 하고 테이블을 수정하지 않는 모든 쿼리는 이 락으로 동작한다.</p>
+<br>
+<h4 id="2-row-share">2. ROW SHARE</h4>
+<p>EXCLUSIVE, ACCESS EXCLUSIVE 락과 충돌한다.<br />
+for update 같은 행 단위 lock을 걸 경우에 이게 붙는다.</p>
+<br>
+<h4 id="3-row-exclusive">3. ROW EXCLUSIVE</h4>
+<p>SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE, ACCESS EXCLUSIVE와 충돌한다.<br />
+UPDATE, DELETE, INSERT 등의 수정 쿼리가 기본적으로 이걸로 동작한다.</p>
+<br>
+<h4 id="4-share-update-exclusive">4. SHARE UPDATE EXCLUSIVE</h4>
+<p>SHARE UPDATE EXCLUSIVE, SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE, ACCESS EXCLUSIVE 락과 충돌한다.</p>
+<p>VACUUM, ANALYZE, CREATE INDEX CONCURRENTLY, CREATE STATISTICS, COMMENT ON, REINDEX CONCURRENTLY, 일부 ALTER INDEX에 의해 획득된다.</p>
+<br>
+<h4 id="5-share">5. SHARE</h4>
+<p>ROW EXCLUSIVE, SHARE UPDATE EXCLUSIVE, SHARE ROW EXCLUSIVE, EXCLUSIVE, ACCESS EXCLUSIVE와 충돌 한다.<br />
+이 모드는 동시 데이터 변경으로부터 테이블을 보호한다.</p>
+<p>CREATE INDEX 등에 의해 동작한다.</p>
+<br>
+<h4 id="6-share-row-exclusive">6. SHARE ROW EXCLUSIVE</h4>
+<p>ROW EXCLUSIVE, SHARE UPDATE EXCLUSIVE, SHARE, SHARE ROW EXCLUSIVE, EXCLUSIVE, ACCESS EXCLUSIVE와 충돌한다.</p>
+<p>CREATE TRIGGER나 일부 ALTER TABLE 쿼리에 붙는다.</p>
+<br>
+<h4 id="7-exclusive">7. EXCLUSIVE</h4>
+<p>이게 락을 잡고 있는 경우에는 ACCESS SHARE lock을 들고있는 트랜잭션만 접근이 가능하고, 그 외엔 접근이 막힌다.</p>
+<br>
+<h4 id="8-access-exclusive">8. ACCESS EXCLUSIVE</h4>
+<p>가장 강한 수준의 lock으로, 모든 읽기든 쓰기든 간에 동시에 지금 돌고 있는 하나의 트랜잭션만 해당 테이블에 접속이 가능하다.<br />
+락 수준을 지정하지 않고 lock 구문을 사용한다면 이게 기본값으로 들어간다.<br />
+그리고 테이블 전체에 많은 영향을 주는 alter index나 alter table 쿼리의 기본 락 설정이 이거다.</p>
+<p>좀더 이해를 돕기 쉽게 만들어놓은 표다.</p>
+<p><img src="/images/img_95276743ff6a45e5.png" alt="" />
+어떤 lock이 어떤 lock에 접근이 가능한지를 표현해놨다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/47441027/pessimistic-locking-vs-serializable-transaction-isolation-level">https://stackoverflow.com/questions/47441027/pessimistic-locking-vs-serializable-transaction-isolation-level</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/22646226/how-are-locking-mechanisms-pessimistic-optimistic-related-to-database-transact">https://stackoverflow.com/questions/22646226/how-are-locking-mechanisms-pessimistic-optimistic-related-to-database-transact</a><br />
+<a rel="external" href="https://www.postgresql.org/docs/current/explicit-locking.html">https://www.postgresql.org/docs/current/explicit-locking.html</a><br />
+<a rel="external" href="https://www.postgresql.org/docs/current/sql-lock.html">https://www.postgresql.org/docs/current/sql-lock.html</a><br />
+<a rel="external" href="https://brownbears.tistory.com/543">https://brownbears.tistory.com/543</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222913100848/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Elastic Loadbalancer에 도메인 연동 (Cloudflare)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222910103210/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Chatbot: codepipeline에 Slack 알림 연동하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

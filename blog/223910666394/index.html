@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Global Accelerator | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223910666394/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Global Accelerator">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223910666394/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-06-25T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223910666394/">[AWS] Global Accelerator</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-25T00:00:00+00:00"><time datetime="2025-06-25T00:00:00+00:00">2025.06.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="731 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223910666394" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_da318f8eac8dde5b.png" alt="" />
+Global Accelerator 빠르고 안정적인 글로벌 시스템 구축을 위한 네트워크 인프라 서비스다.</p>
+<p>리전간에 분포된 서버들을 빠르게 라우팅해주는 용도다.<br />
+예를 들어, 서울, 미국, 프랑스에 서버가 있다고 하면. 이 3가지 엣지를 묶어서 관리하고, 그때그때 빠른 엣지 서버로 연결되도록 해주는 역할이라 할 수 있겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="vs-route53">vs Route53</h2>
+<p>단순 글로벌 라우팅 자체는 Route53의 지리적 라우팅으로도 달성할 수 있다. 비용적으로도 저렴하고, 실제로 가장 단순한 구성 방법이다.</p>
+<p>하지만 Route53의 경우 DNS 기반이기 때문에 DNS 캐시 때문에 변경에 따른 빠른 대처가 어렵고, 장애 발생시에 빠르게 대응하기 어렵다는 단점이 있다.</p>
+<p>반면 Global Accelerator는 Route53보다는 장애대응, 가중치 설정을 통한 제어 등이 손쉬운 편이다.</p>
+<p>다만 Global Accelerator로 사용할 수 있는 서버에는 제약이 존재한다.<br />
+현재 시점에서는 ELB(Network, Application), EC2, Elastic IP 정도에만 적용이 가능하다.</p>
+<p>그리고 Route53과 Accelerator는 서버 선택 기준도 좀 다르다.<br />
+Route53은 실제로 가장 빠른, 낮은 지연시간이 걸리는 서버를 선택한다.<br />
+반면 Accelerator는 실제 속도보다는 물리적으로 가장 가까운, AWS 엣지를 선택한다. 그래서 Accelerator의 리전 선택은 최적의 속도를 보장하지 않을 수 있다.</p>
+<p>정리하자면, 비용효율성이 가장 중요하다면 Route53, 장애에 따른 빠른 회복이 가장 중요하다면 Global Accelerator가 적절한 선택일 수 있다.<br />
+내가 볼때 웬만하면 Route53으로 충분하긴 하다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>당연히 공짜가 아니다.<br />
+<a rel="external" href="https://aws.amazon.com/ko/global-accelerator/pricing/">https://aws.amazon.com/ko/global-accelerator/pricing/</a></p>
+<p>일단 Accelator 하나당 한달 고정비 18달러가 나간다. 사용량과 무관하다.</p>
+<p>그리고 트래픽 비용은 트래픽대로 또 받는다. 이건 엣지마다 다르다.</p>
+<p><img src="/images/img_05ac94ca88ac9ced.png" alt="" />
+소스가 우리 서버고. 대상이 서버에 찌르는 클라이언트다.</p>
+<p>정말 엣지 분산을 잘해서 같은 엣지끼리 이어진다고 하면 기가당 0.015달러 정도가 나간다.<br />
+그래도 1테라당 1-2달러 정도 나가는 것이다.</p>
+<p>그리고 이건 거의 아웃바운드 트래픽에 대한 요금이다. 사용자가 인입되는 인바운드 트래픽은 비용에서 제외된다고 봐도 된다.</p>
+<p>예를 들어, 아시아 태평양 클라이언트들이 미국+캐나다 리전 서버에 요청을 해서 5테라어치 인바운드(요청)을 던지고 10테라어치 아웃바운드(응답)을 받는다면, 10테라어치만 계산해서 10000 x 0.035 = 35달러 정도의 트래픽 요금이 부과되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayonghaebogi-aegselreoreiteo-mandeulgi">사용해보기: 액셀러레이터 만들기</h2>
+<p>직접 accelerator를 만들어서 사용 방법을 간단히 훑어보겠다.</p>
+<p><img src="/images/img_bba32c4f7f87f1d0.png" alt="" />
+일단 액셀러레이터를 만든다.</p>
+<p>특별한 이유가 없으면 타입은 스탠다드로 하면 된다.<br />
+실제 클라이언트의 지리적 위치, 가중치, 헬스체크 상태를 고려해서 어디에 라우팅할지를 알아서 정한다.</p>
+<p>그리고 이 액셀러레이터가 어떤 포트로 접속을 허용할지를 정의한다.</p>
+<p><img src="/images/img_2227f3a5ef2baab0.png" alt="" />
+이 경우에는 단순하게 80포트로만 받게 해뒀다.</p>
+<br>
+<p><img src="/images/img_d50eb2d7fc2d8040.png" alt="" />
+그리고 각 리전 단위를 관리할 수 있는 것이 "엔드포인트 그룹"이다.<br />
+여기서는 버지니아와 서울 리전에 엔드포인트 그룹을 하나씩 배치했다.</p>
+<p>각각의 엔드포인트 그룹은 특정 리전에 고정해둬야 한다.<br />
+그리고 트래픽 다이얼은 트래픽을 넘기는 비율을 조정한다. 이걸 기반으로 하나의 리전에서 블루-그린 교체를 수행해보고 싶다면, 100, 0 =&gt; 0, 100 같은 식으로 트래픽 다이얼을 단계적으로 조정할 수 있다.</p>
+<p>엔드포인트 그룹이 만들어졌다면, 각각의 엔드포인트 그룹에는 N개 이상의 엔드포인트 서버를 등록할 수 있다.</p>
+<p><img src="/images/img_44b61a6d35587134.png" alt="" />
+이건 일단 액셀러레이터를 만든 다음에 단계적으로 만들어보겠다.</p>
+<br>
+<p><img src="/images/img_7ec4a906f5e5d1bd.png" alt="" />
+자, 만들면 이런 식으로 리소스가 나타날 것이다.<br />
+프로비저닝에는 몇분 정도 걸릴 수 있다.</p>
+<p>로드밸런서처럼 "DNS 이름"으로 API를 찌를 수 있다. 저기에 찌르면 알아서 라우팅을 해주는 것이다.<br />
+현재 시점에서는 실제로 엔드포인트가 등록된게 없으니 찔러도 오류만 날 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayonghaebogi-endeupointeu-deungrog">사용해보기: 엔드포인트 등록</h2>
+<p>자, 그럼 엔드포인트를 등록해서 실제 서버에 대해 동작하게 해보자.<br />
+참고로 엔드포인트에 사용할 수 있는 시스템은 EC2, Application Loadbalancer, Network Loadbalancer로 한정된다.</p>
+<p>여기서는 버지니아와 서울에 EC2로 웹서버를 하나씩 띄우고, 각각에 라우팅되게끔 구성해보겠다.</p>
+<p><img src="/images/img_c8acd09cc4333192.png" alt="" /></p>
+<p><img src="/images/img_c19714a593a21bc3.png" alt="" />
+이렇게 하나씩 마련해두고</p>
+<br>
+<p><img src="/images/img_f7dadc40423fc21c.png" alt="" /></p>
+<p><img src="/images/img_3bb7c0a64163c3cf.png" alt="" />
+엔드포인트에 추가해주면 된다.<br />
+저 가중치는 라우팅 판단 근거 중 하나로 사용된다.</p>
+<br>
+<p><img src="/images/img_98d8a05beb2643a2.png" alt="" />
+참고로, EC2를 등록할 경우에는 상태 체크 정상화에 몇분 정도 걸릴 수 있다.</p>
+<br>
+<p><img src="/images/img_765705c1ee2d9cec.png" alt="" />
+등록이 잘 됐다면, 액셀러에이터 엔드포인트로 찔렀을 때 이런 식으로 잘 포워딩이 될 것이다.<br />
+이 경우에는 서울에서 찌른거라 당연히 서울로 라우팅됐다.</p>
+<p>하지만 클라이언트 위치를 실제 미국 서버로 조정해서 찔러보면</p>
+<p><img src="/images/img_f35476eb3b97e738.png" alt="" />
+그 때는 또 버지니아 서버로 잘 라우팅이 된다.</p>
+<br>
+<p><img src="/images/img_001a1523b6491e0d.png" alt="" />
+프랑스는 미국이고</p>
+<br>
+<p><img src="/images/img_1ea3b208ce1e0d1c.png" alt="" />
+인도 뭄바이는 또 서울이다.</p>
+<p>만약 이 상태에서 미국 서버에 장애가 발생해서 상태가 비정상이 된다면</p>
+<p><img src="/images/img_17e9753fa5c85b45.png" alt="" /></p>
+<p><img src="/images/img_ea020089fca01413.png" alt="" />
+미국 위치에서 접속하더라도 처음에는 잠깐 뻗다가, 나중에는 그 다음 후보인 서울로 라우팅될 것이다.<br />
+이게 global accelerator의 failover다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/global-accelerator/">https://aws.amazon.com/ko/global-accelerator/</a><br />
+<a rel="external" href="https://www.lgcns.com/blog/cns-tech/aws-ambassador/41203/">https://www.lgcns.com/blog/cns-tech/aws-ambassador/41203/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/global-accelerator/latest/dg/introduction-components.html">https://docs.aws.amazon.com/ko_kr/global-accelerator/latest/dg/introduction-components.html</a><br />
+<a rel="external" href="https://www.linkedin.com/pulse/route-53-global-accelerator-compared-aws-multi-region-pi%C3%B1ero-estrada-nsgrc">https://www.linkedin.com/pulse/route-53-global-accelerator-compared-aws-multi-region-pi%C3%B1ero-estrada-nsgrc</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/global-accelerator/latest/dg/about-endpoints-endpoint-weights.unhealthy-endpoints.html">https://docs.aws.amazon.com/global-accelerator/latest/dg/about-endpoints-endpoint-weights.unhealthy-endpoints.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223910650550/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] HTTP 테스트용 서버 대충 띄우기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223909358196/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] 디스크 파티션 크기 확장<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

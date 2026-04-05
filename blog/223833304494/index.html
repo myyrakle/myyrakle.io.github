@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>binary encoding 구현해보기 (with Rust) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223833304494/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="binary encoding 구현해보기 (with Rust)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223833304494/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-04-15T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223833304494/">binary encoding 구현해보기 (with Rust)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-15T00:00:00+00:00"><time datetime="2025-04-15T00:00:00+00:00">2025.04.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="571 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223833304494" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>자체 프로토콜이나 파일 저장 규격 같은 것을 구현한다면, 직접 바이너리 전송/저장 규격을 정의해야할 때가 종종 있다.<br />
+그냥 무지성으로 JSON 같은걸 쓰거나 flatbuffer 같은 타사 구현체를 쓸 수도 있지만, 때로는 직접 만들어서 쓰고 싶을 수도 있을 테다.</p>
+<p>여기서는 바이너리 인코딩 구현체를 적당히 간단하게 만들어보는 법을 다뤄본다.</p>
+<br>
+<br>
+<br>
+<h2 id="step-1-gico-seolgye">STEP 1: 기초 설계</h2>
+<p>바이너리 포맷은 보통 어떤 식으로 구현할까?</p>
+<p>이런 형태의 구조체가 있다고 가정해보겠다.<br />
+{ a: "foo", b: "bar", c: "asdf" }</p>
+<p>그럼 그냥 순서대로 적당히 구분자 두고 압축하면 어떨까?<br />
+"foo bar asdf"</p>
+<p>정말 간단한 사용사례에서는 이렇게 처리해도 충분할 수 있을 것이다.</p>
+<p>그런데 저 구분자와 동일한 값이 각 element에 들어가면 어떻게 해야할까?<br />
+결국 구분자를 위한 이스케이프 처리가 필요하게 될 것이다. 근데 이것도 이스케이스 예외처리를 하다보면 끝도 없고, 완전하게 구현하기도 매우 어려운 편이다.</p>
+<p>그래서 보편적으로 사용하는 방법은, 각 필드마다 값 앞에 Length 태그를 넣는 것이다.<br />
+Length 영역의 4바이트를 앞에 배치하고, 그 길이만큼의 값을 뒤에 배치하고의 반복으로 설계하는 것이다.<br />
+그러면 읽을 때도 먼저 4바이트를 읽은 다음에 그 길이만큼만 가져와서 처리를 한다거나 할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="step-2-inkoding-dikoding-guhyeonhaebogi">STEP 2: 인코딩/디코딩 구현해보기</h2>
+<p>자, 구조체를 하나 만들고, 방금 설계안에 따라서 패킷 인코딩/디코딩 로직을 구현해보겠다.</p>
+<p><img src="/images/img_4e656d76fbc58055.png" alt="" />
+단순성을 위해서 필드의 타입은 문자열만 고려하겠다.</p>
+<br>
+<p><img src="/images/img_4b2fec0c79c169e3.png" alt="" />
+직렬화 로직은 아까 이야기했던대로 데이터의 길이를 고정 4바이트로 집어넣고, 바로 이어서 값을 집어넣도록 했다.<br />
+저 길이 태그로 인해서 각 필드를 구분할 수 있기 때문에, 요소들을 다 딱 붙여서 최종 encode 값을 생성하도록 했다. 구현 자체는 매우 단순하다.</p>
+<p>이번에는 디코딩 로직이다.</p>
+<p><img src="/images/img_c914dbabc2ede1f3.png" alt="" />
+인코딩보다는 조금 복잡한데, 잘 보면 그 역순에 불과하다.<br />
+약간 재귀적으로 해체할 수 있게끔 만들어놔서 조금 비직관적으로 보일 수 있다.</p>
+<p>4바이트를 먼저 읽고, 그만큼만 데이터로서 슬라이싱한 다음에, 바로 획득한 데이터와 그 나머지를 반환하게 했다.</p>
+<br>
+<p><img src="/images/img_4b1431682ad0fd92.png" alt="" />
+구조체 전체 파싱에서는 그걸 연달아 호출하기만 하면 된다.</p>
+<br>
+<p><img src="/images/img_2813ea2c645b1127.png" alt="" />
+자, 의도한대로 잘 동작했다.</p>
+<p>다음은 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Debug</span><span style="color: #9399B2;">,</span><span> Clone</span><span style="color: #9399B2;">,</span><span> PartialEq)]</span></span>
+<span class="giallo-l"><span>pub struct TestPacketType</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub user_id</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub user_name</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub user_email</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> serialize_with_length</span><span>(bytes: </span><span style="color: #94E2D5;">&amp;</span><span>[u8])</span><span style="color: #94E2D5;"> -&gt;</span><span> Vec</span><span style="color: #94E2D5;">&lt;</span><span>u8</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut result</span><span style="color: #94E2D5;"> =</span><span> Vec::</span><span style="color: #89B4FA;font-style: italic;">with_capacity</span><span>(bytes</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>()</span><span style="color: #94E2D5;"> +</span><span style="color: #FAB387;"> 4</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let len</span><span style="color: #94E2D5;"> =</span><span> bytes</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> u32</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    result.extend_from_slice(&amp;len.to_be_bytes());</span></span>
+<span class="giallo-l"><span>    result.extend_from_slice(bytes);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    result</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> encode</span><span>(packet: </span><span style="color: #94E2D5;">&amp;</span><span>TestPacketType)</span><span style="color: #94E2D5;"> -&gt;</span><span> Vec</span><span style="color: #94E2D5;">&lt;</span><span>u8</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut buffer</span><span style="color: #94E2D5;"> =</span><span> Vec::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    buffer.extend(</span><span style="color: #89B4FA;font-style: italic;">serialize_with_length</span><span style="color: #9399B2;">(</span><span>packet.user_id.as_bytes(</span><span style="color: #9399B2;">)</span><span>));</span></span>
+<span class="giallo-l"><span>    buffer.extend(</span><span style="color: #89B4FA;font-style: italic;">serialize_with_length</span><span style="color: #9399B2;">(</span><span>packet.user_name.as_bytes(</span><span style="color: #9399B2;">)</span><span>));</span></span>
+<span class="giallo-l"><span>    buffer.extend(</span><span style="color: #89B4FA;font-style: italic;">serialize_with_length</span><span style="color: #9399B2;">(</span><span>packet.user_email.as_bytes(</span><span style="color: #9399B2;">)</span><span>));</span></span>
+<span class="giallo-l"><span>    buffer</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> deserialize</span><span>(bytes: </span><span style="color: #94E2D5;">&amp;</span><span>[u8])</span><span style="color: #94E2D5;"> -&gt;</span><span> Option</span><span style="color: #94E2D5;">&lt;</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>[u8]</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> &amp;</span><span>[u8])</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    if bytes.len() &lt; </span><span style="color: #FAB387;">4</span><span> {</span></span>
+<span class="giallo-l"><span>        return None;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> length</span><span style="color: #94E2D5;"> =</span><span> u32::</span><span style="color: #89B4FA;font-style: italic;">from_be_bytes</span><span>([bytes[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #9399B2;">,</span><span> bytes[</span><span style="color: #FAB387;">1</span><span>]</span><span style="color: #9399B2;">,</span><span> bytes[</span><span style="color: #FAB387;">2</span><span>]</span><span style="color: #9399B2;">,</span><span> bytes[</span><span style="color: #FAB387;">3</span><span>]])</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // cut length tag</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> bytes</span><span style="color: #94E2D5;"> = &amp;</span><span>bytes[</span><span style="color: #FAB387;">4.</span><span style="color: #94E2D5;">.</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> bytes</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>()</span><span style="color: #94E2D5;"> &lt;</span><span> length</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        return</span><span> None</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> current_bytes</span><span style="color: #94E2D5;"> = &amp;</span><span>bytes[</span><span style="color: #94E2D5;">..</span><span>length]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> rest_bytes</span><span style="color: #94E2D5;"> = &amp;</span><span>bytes[length</span><span style="color: #94E2D5;">..</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Some</span><span>((current_bytes</span><span style="color: #9399B2;">,</span><span> rest_bytes))</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> decode</span><span>(buffer: </span><span style="color: #94E2D5;">&amp;</span><span>[u8])</span><span style="color: #94E2D5;"> -&gt;</span><span> Option</span><span style="color: #94E2D5;">&lt;</span><span>TestPacketType</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    let</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">user_id_bytes</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> buffer</span><span style="color: #9399B2;">)</span><span> =</span><span style="color: #89B4FA;font-style: italic;"> deserialize</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">buffer</span><span style="color: #9399B2;">)</span><span>?;</span></span>
+<span class="giallo-l"><span>    let user_id</span><span style="color: #94E2D5;"> =</span><span> String::</span><span style="color: #89B4FA;font-style: italic;">from_utf8_lossy</span><span>(user_id_bytes)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    let</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">user_name_bytes</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> buffer</span><span style="color: #9399B2;">)</span><span> =</span><span style="color: #89B4FA;font-style: italic;"> deserialize</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">buffer</span><span style="color: #9399B2;">)</span><span>?;</span></span>
+<span class="giallo-l"><span>    let user_name</span><span style="color: #94E2D5;"> =</span><span> String::</span><span style="color: #89B4FA;font-style: italic;">from_utf8_lossy</span><span>(user_name_bytes)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    let</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">user_email_bytes</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> _</span><span style="color: #9399B2;">)</span><span> =</span><span style="color: #89B4FA;font-style: italic;"> deserialize</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">buffer</span><span style="color: #9399B2;">)</span><span>?;</span></span>
+<span class="giallo-l"><span>    let user_email</span><span style="color: #94E2D5;"> =</span><span> String::</span><span style="color: #89B4FA;font-style: italic;">from_utf8_lossy</span><span>(user_email_bytes)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let result</span><span style="color: #94E2D5;"> =</span><span> TestPacketType</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        user_id</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        user_name</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        user_email</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Some</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">result</span><span style="color: #9399B2;">)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">cfg</span><span>(test)]</span></span>
+<span class="giallo-l"><span>mod tests</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    use super</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    #[test]</span></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> test_encode_and_decode</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        struct TestCase</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            input</span><span style="color: #9399B2;">:</span><span> TestPacketType</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> test_cases</span><span style="color: #94E2D5;"> =</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[</span></span>
+<span class="giallo-l"><span>            TestCase</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                input</span><span style="color: #94E2D5;">:</span><span> TestPacketType</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                    user_id</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;4444&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    user_name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;John&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    user_email</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;myyrakle@naver.com&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            },</span></span>
+<span class="giallo-l"><span>            TestCase</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                input</span><span style="color: #94E2D5;">:</span><span> TestPacketType</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                    user_id</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;44443&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    user_name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Foo&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    user_email</span><span style="color: #94E2D5;">:</span><span> unsafe</span><span style="color: #9399B2;"> {</span><span> String</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_utf8_unchecked</span><span>(vec</span><span style="color: #94E2D5;">!</span><span>[</span><span style="color: #FAB387;">0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>])</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            },</span></span>
+<span class="giallo-l"><span>        ]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        for test_case</span><span style="color: #CBA6F7;"> in</span><span> test_cases</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> encoded</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> super</span><span>::</span><span style="color: #89B4FA;font-style: italic;">encode</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>test_case</span><span style="color: #94E2D5;">.</span><span>input)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            assert</span><span style="color: #94E2D5;">!</span><span>(encoded</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>()</span><span style="color: #94E2D5;"> &gt;</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> decoded</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> super</span><span>::</span><span style="color: #89B4FA;font-style: italic;">decode</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>encoded)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            assert_eq</span><span style="color: #94E2D5;">!</span><span>(</span></span>
+<span class="giallo-l"><span>                decoded</span><span style="color: #9399B2;">,</span><span> test_case</span><span style="color: #94E2D5;">.</span><span>input</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;Decoded packet does not match the original, input={decoded:?}, decoded={:?}&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                test_case</span><span style="color: #94E2D5;">.</span><span>input</span></span>
+<span class="giallo-l"><span>            )</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>문자열 외 다른 타입으로 확장하는 것도 어렵지 않다.<br />
+그냥 하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="step-3-traitgwa-maekeuro-hwalyonghagi">STEP 3: trait과 매크로 활용하기</h2>
+<p>근데 위처럼 그냥 무식하게 구현하는 것은 실제로 폭넓게 운영하기는 어렵다. 패킷 형식이 추가되고 변경될때마다 저 노가다를 반복할 수도 없는 일 아닌가?</p>
+<p>다행히 Rust는 매크로와 trait 기반의 확장을 이용해서 성능 손실 없이 이러한 반복적인 코드 생성을 자동화할 수가 있다. serde 기반의 라이브러리들이 그러한 존재들인데, 여기서는 서드파티 배제하고 직접 깎아보겠다.</p>
+<p>핵심 원리는 그렇게 어려울 것이 없다.</p>
+<p><img src="/images/img_ea149876a98e38af.png" alt="" /></p>
+<p><img src="/images/img_675f17201175e2ca.png" alt="" />
+일단 동작의 정의를 위해서 인코딩/디코딩에 대한 트레잇을 만든다.</p>
+<br>
+<p><img src="/images/img_70ac9dd1ba26d2a6.png" alt="" /></p>
+<p><img src="/images/img_00f4ea4a2c3eb5a9.png" alt="" />
+문자열에 대한 변환만 정의해두겠다.<br />
+정수나 boolean 같은걸 정의하는 것도 사실 쉽지만, 일단은 지나친다.</p>
+<p>그리고 이제 아까 했던 구조체 수준의 필드 값 조합을, 매크로를 통해 할 수 있도록 해보겠다.<br />
+Rust에서는 매크로 정의를 별도 crate으로 빼야하기 때문에, 불가피하게 구조를 좀 분리했다.</p>
+<p>디펜던시는 이 정도만 넣으면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[dependencies]</span></span>
+<span class="giallo-l"><span>syn</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;2&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;full&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;extra-traits&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>quote</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1.0&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[lib]</span></span>
+<span class="giallo-l"><span>proc</span><span style="color: #94E2D5;">-</span><span>macro</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[lints]</span></span>
+<span class="giallo-l"><span>workspace</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span></span></code></pre>
+<p>그리고... 코드 생성을 derive 매크로를 통해 할 수 있도록 적당히 노가다를 친다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:str</span><span style="color: #9399B2;">:</span><span>:FromStr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use proc_macro</span><span style="color: #9399B2;">:</span><span>:TokenStream</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use quote</span><span style="color: #9399B2;">:</span><span>:ToTokens</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">proc_macro_derive</span><span>(Encode)]</span></span>
+<span class="giallo-l"><span>pub fn</span><span style="color: #89B4FA;font-style: italic;"> derive_encode</span><span>(item: TokenStream)</span><span style="color: #94E2D5;"> -&gt;</span><span> TokenStream</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut new_code </span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> ast</span><span style="color: #94E2D5;"> =</span><span> syn::</span><span style="color: #89B4FA;font-style: italic;">parse_macro_input</span><span style="color: #94E2D5;">!</span><span>(item</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> syn</span><span>::ItemStruct)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> struct_name</span><span style="color: #94E2D5;"> =</span><span> ast</span><span style="color: #94E2D5;">.</span><span>ident</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #89B4FA;font-style: italic;"> format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;impl chorba::Encoder for {struct_name} {{&quot;</span><span>#)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        new_code</span><span style="color: #94E2D5;"> +=</span><span> r#</span><span style="color: #A6E3A1;">&quot;fn encode(&amp;self) -&gt; Vec&lt;u8&gt; {&quot;</span><span>#</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span>            new_code</span><span style="color: #94E2D5;"> +=</span><span> r#</span><span style="color: #A6E3A1;">&quot;let mut buffer = Vec::new();&quot;</span><span>#</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            for field</span><span style="color: #CBA6F7;"> in</span><span> ast</span><span style="color: #94E2D5;">.</span><span>fields</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">iter</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> field_name</span><span style="color: #94E2D5;"> =</span><span> field</span><span style="color: #94E2D5;">.</span><span>ident</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_ref</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                new_code</span><span style="color: #94E2D5;"> +=</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;let bytes = chorba::Encoder::encode(&amp;self.{field_name});&quot;</span><span>#)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #89B4FA;font-style: italic;"> format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;buffer.extend(bytes);&quot;</span><span>#)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            new_code</span><span style="color: #94E2D5;"> +=</span><span> r#</span><span style="color: #A6E3A1;">&quot;buffer&quot;</span><span>#</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        new_code</span><span style="color: #94E2D5;"> +=</span><span> r#</span><span style="color: #A6E3A1;">&quot;}&quot;</span><span>#</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #A6E3A1;"> &quot;}&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> TokenStream::</span><span style="color: #89B4FA;font-style: italic;">from_str</span><span>(new_code</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>())</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">proc_macro_derive</span><span>(Decode)]</span></span>
+<span class="giallo-l"><span>pub fn</span><span style="color: #89B4FA;font-style: italic;"> derive_decode</span><span>(item: TokenStream)</span><span style="color: #94E2D5;"> -&gt;</span><span> TokenStream</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut new_code </span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> ast</span><span style="color: #94E2D5;"> =</span><span> syn::</span><span style="color: #89B4FA;font-style: italic;">parse_macro_input</span><span style="color: #94E2D5;">!</span><span>(item</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> syn</span><span>::ItemStruct)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> struct_name</span><span style="color: #94E2D5;"> =</span><span> ast</span><span style="color: #94E2D5;">.</span><span>ident</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #89B4FA;font-style: italic;"> format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;impl chorba::Decoder&lt;{struct_name}&gt; for {struct_name} {{&quot;</span><span>#)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        new_code</span><span style="color: #94E2D5;"> +=</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;fn decode(buffer: &amp;[u8]) -&gt; Result&lt;{struct_name}, chorba::DecodeError&gt; {{&quot;</span><span>#)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                .</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> mut field_names </span><span style="color: #94E2D5;">=</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            for field</span><span style="color: #CBA6F7;"> in</span><span> ast</span><span style="color: #94E2D5;">.</span><span>fields</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">iter</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> field_name</span><span style="color: #94E2D5;"> =</span><span> field</span><span style="color: #94E2D5;">.</span><span>ident</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_ref</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> field_type</span><span style="color: #94E2D5;"> =</span><span> field</span><span style="color: #94E2D5;">.</span><span>ty</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_token_stream</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                field_names</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(field_name</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>())</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                new_code</span><span style="color: #94E2D5;"> +=</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;let ({field_name}_bytes, buffer) = chorba::deserialize(buffer).ok_or(chorba::DecodeError::InvalidLength)?;&quot;</span><span>#)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        .</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                new_code</span><span style="color: #94E2D5;"> +=</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;let {field_name} = &lt;{field_type} as chorba::Decoder::&lt;{field_type}&gt;&gt;::decode({field_name}_bytes)?;&quot;</span><span>#)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        .</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #89B4FA;font-style: italic;"> format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;Ok({struct_name} {{&quot;</span><span>#)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            for field_name</span><span style="color: #CBA6F7;"> in</span><span> field_names</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">iter</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #89B4FA;font-style: italic;"> format</span><span style="color: #94E2D5;">!</span><span>(r#</span><span style="color: #A6E3A1;">&quot;{field_name},&quot;</span><span>#)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #A6E3A1;"> &quot;})&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        new_code</span><span style="color: #94E2D5;"> +=</span><span> r#</span><span style="color: #A6E3A1;">&quot;}&quot;</span><span>#</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    new_code</span><span style="color: #94E2D5;"> +=</span><span style="color: #A6E3A1;"> &quot;}&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> TokenStream::</span><span style="color: #89B4FA;font-style: italic;">from_str</span><span>(new_code</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_str</span><span>())</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_826224cb8cf7ae1f.png" alt="" /></p>
+<p><img src="/images/img_c22b0d02361934c7.png" alt="" />
+좀 번잡해보이는데, 핵심은 단순하다.<br />
+구조체의 필드들을 정적으로 파싱해서 구조체 자체에 대한 Encoder와 Decoder를 구현하는 것이 다다.</p>
+<br>
+<p><img src="/images/img_0f801758ad142e37.png" alt="" />
+그러면 이렇게 derive를 통해서 trait 구현을 주입할 수 있고</p>
+<br>
+<p><img src="/images/img_4369cb6ce4e7548b.png" alt="" />
+매크로가 확장되면 이런 식으로 trait 구현이 주입된다.</p>
+<br>
+<p><img src="/images/img_48ea4d0b6d380f6e.png" alt="" />
+그럼 이제 적당히 가져다가 encode, decode 딸깍 눌러서 쓰면 되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="todo">TODO</h2>
+<p>조금 보면 알겠지만, 여기에는 단점들이 꽤 있다.<br />
+순서가 중요해서 실수로 순서가 섞이면 꼬일 수도 있고, 중간에 필드들이 추가될 경우의 하위호환을 보장할 수 없기도 하다.</p>
+<p>게다가 압축 같은 것을 고려하지 않아서 데이터 전송에는 유리하지 않을 수도 있다.</p>
+<p>직접 만들어서 실제 시스템에 사용할 생각이 있다면, 이런 부분들도 보완해보면 좋을 것이다.</p>
+<br>
+<br>
+<p>프로젝트 전체 구성과 코드는 깃헙에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/chorba/tree/v0.1.0">https://github.com/myyrakle/chorba/tree/v0.1.0</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223840039691/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>빠른 Rust 컴파일.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223833333280/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[MySQL] 초당 쓰기 처리량에 대한 글.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

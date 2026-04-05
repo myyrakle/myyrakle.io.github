@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] autopprof로 pprof 임계 알림 설정하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223177695996/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] autopprof로 pprof 임계 알림 설정하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223177695996/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-08-08T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223177695996/">[Go] autopprof로 pprof 임계 알림 설정하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-08T00:00:00+00:00"><time datetime="2023-08-08T00:00:00+00:00">2023.08.08</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="155 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223177695996" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>당근에서 만든건데, 유용해보여서 한번 달아보려 한다.</p>
+<p>도커 컨테이너 내에서 cpu나 메모리 수치 등을 모니터링해서 slack에 보고를 날려주는 것이다. 컨테이너 내에서만 동작하며, pprof를 기반으로 동작한다.</p>
+<br>
+<br>
+<br>
+<h2 id="seulraeg-bos-guseong">슬랙 봇 구성</h2>
+<p>우선 app 기반의 봇을 구성할 필요가 있다.<br />
+별도 포스트를 참고한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223176628812">https://blog.naver.com/sssang97/223176628812</a></p>
+<p>그리고 파일 쓰기 권한도 필요하다.<br />
+이정도 권한만 주면 될 것이다.</p>
+<p><img src="/images/img_658e6d3ea8579921.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="seuteureseu-kodeu">스트레스 코드</h2>
+<p>일단 테스트를 위해서는 스트레스 코드가 조금 필요했다.<br />
+메모리와 cpu를 괴롭히는 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> internal</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">type</span><span style="color: #F9E2AF;font-style: italic;"> mm struct {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">	m map[int64]string</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> EatMemory</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	m</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> make</span><span>(map[int64]string</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 20000000</span><span>)</span></span>
+<span class="giallo-l"><span>	for i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 20000000</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		m[</span><span style="color: #89B4FA;font-style: italic;">int64</span><span>(i)]</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;eating heap memory&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span>	_</span><span style="color: #94E2D5;"> =</span><span> mm</span><span style="color: #9399B2;">{</span><span>m</span><span style="color: #9399B2;">:</span><span> m</span><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// Iterative fibonacci func implementation.</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> Iterative</span><span>(n int) int64</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> a</span><span style="color: #9399B2;">,</span><span> b int64 </span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span> 1</span></span>
+<span class="giallo-l"><span>	for i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span> n</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		a</span><span style="color: #9399B2;">,</span><span> b</span><span style="color: #94E2D5;"> =</span><span> b</span><span style="color: #9399B2;">,</span><span> a</span><span style="color: #94E2D5;">+</span><span>b</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> a</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// Recursive fibonacci func implementation.</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> Recursive</span><span>(n int) int64</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> n</span><span style="color: #94E2D5;"> &lt;=</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> int64</span><span>(n)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span style="color: #89B4FA;font-style: italic;"> Recursive</span><span>(n</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> Recursive</span><span>(n</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="seobeo-kodeu">서버 코드</h2>
+<p>autopprof를 설정하고, 서버를 띄우면 된다.</p>
+<p>그리 복잡하지는 않다. 알림을 띄울 임계값을 지정하고, 슬랙에 알림을 날릴 정보를 입력해주면 끝이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;errors&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;just_test/internal&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span>	_</span><span style="color: #A6E3A1;"> &quot;net/http/pprof&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/daangn/autopprof&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/daangn/autopprof/report&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n int) int</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> n</span><span style="color: #94E2D5;"> &lt;=</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> n</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> setupReporters</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> autopprof</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Start</span><span>(autopprof</span><span style="color: #94E2D5;">.</span><span>Option</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>		CPUThreshold</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 0.3</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // Default: 0.75.</span></span>
+<span class="giallo-l"><span>		MemThreshold</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 0.3</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // Default: 0.75.</span></span>
+<span class="giallo-l"><span>		Reporter</span><span style="color: #94E2D5;">:</span><span> report</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewSlackReporter</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">			&amp;</span><span>report</span><span style="color: #94E2D5;">.</span><span>SlackReporterOption</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>				App</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;">     &quot;pprof&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // 앱이름</span></span>
+<span class="giallo-l"><span>				Token</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;">   &quot;x...b-138......aN2bTKh6&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // oauth 토큰</span></span>
+<span class="giallo-l"><span>				Channel</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;C5.....&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // 채널ID</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			},</span></span>
+<span class="giallo-l"><span>		)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> errors</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Is</span><span>(err</span><span style="color: #9399B2;">,</span><span> autopprof</span><span style="color: #94E2D5;">.</span><span>ErrUnsupportedPlatform)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span style="color: #CBA6F7;"> else if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatalln</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">	setupReporters</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 간단한 http 서버 예제</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(w http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> r</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		fmt.Fprintf(w</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Hello, World!&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	})</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	http.HandleFunc(</span><span style="color: #A6E3A1;">&quot;/stress/memory&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">w</span><span> http.ResponseWriter</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> r</span><span> *http.Request</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span>		go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			internal</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">EatMemory</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fprintf</span><span>(w</span><span style="color: #9399B2;">,</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span><span style="color: #A6E3A1;">&quot;stress test&quot;</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	http.HandleFunc(</span><span style="color: #A6E3A1;">&quot;/stress/cpu&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">w</span><span> http.ResponseWriter</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> r</span><span> *http.Request</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		internal</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Iterative</span><span>(</span><span style="color: #FAB387;">100000</span><span>)</span></span>
+<span class="giallo-l"><span>		internal</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Recursive</span><span>(</span><span style="color: #FAB387;">1500</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fprintf</span><span>(w</span><span style="color: #9399B2;">,</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span><span style="color: #A6E3A1;">&quot;stress test&quot;</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt.Println(</span><span style="color: #A6E3A1;">&quot;서버 시작 중...&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	err </span><span style="color: #94E2D5;">:=</span><span> http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ListenAndServe</span><span>(</span><span style="color: #A6E3A1;">&quot;:8080&quot;</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span>	if err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		fmt.Println(</span><span style="color: #A6E3A1;">&quot;서버 시작 실패: &quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>일부 api에서는 일부러 부하를 가하도록 했다.</p>
+<p>그리고 도커로 말아서 ECS Fargate로 띄웠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>FROM golang</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">1.20</span><span style="color: #94E2D5;">-</span><span>alpine3</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">16</span><span> AS builder</span></span>
+<span class="giallo-l"><span>COPY</span><span style="color: #94E2D5;"> . /</span><span>home</span><span style="color: #94E2D5;">/</span><span>app</span></span>
+<span class="giallo-l"><span>WORKDIR</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>app</span></span>
+<span class="giallo-l"><span>RUN go mod tidy</span></span>
+<span class="giallo-l"><span>RUN go build</span><span style="color: #94E2D5;"> -</span><span>o server</span><span style="color: #94E2D5;"> ./</span><span>cmd</span><span style="color: #94E2D5;">/</span><span>main</span><span style="color: #94E2D5;">.</span><span>go</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>FROM alpine</span></span>
+<span class="giallo-l"><span>RUN mkdir</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>app</span></span>
+<span class="giallo-l"><span>WORKDIR</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>app</span></span>
+<span class="giallo-l"><span>COPY</span><span style="color: #94E2D5;"> --</span><span>from</span><span style="color: #94E2D5;">=</span><span>builder</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>app</span><span style="color: #94E2D5;">/</span><span>server</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>app</span><span style="color: #94E2D5;">/</span><span>server</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>ENTRYPOINT [</span><span style="color: #A6E3A1;"> &quot;/home/app/server&quot;</span><span> ]</span></span></code></pre>
+<p>이게 WSL docker로도 안되고, 리눅스만 되는 것 같더라.<br />
+Mac은 테스트를 해보진 않았다.</p>
+<p>아무튼 서버를 띄우고 강제로 부하를 주면</p>
+<p><img src="/images/img_c6df8ec517d82dd6.png" alt="" /></p>
+<p><img src="/images/img_9251ec2094e6685e.png" alt="" />
+이런식으로 잘 날라올 것이다.<br />
+파일은 pprof profile 파일이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/daangn/autopprof">https://github.com/daangn/autopprof</a></p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223177676734/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Keyspaces<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223176685609/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] 고루틴과 채널, 동기화<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

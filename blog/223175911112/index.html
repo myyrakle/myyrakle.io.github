@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] circular import 문제 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223175911112/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] circular import 문제">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223175911112/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-08-06T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223175911112/">[Go] circular import 문제</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-06T00:00:00+00:00"><time datetime="2023-08-06T00:00:00+00:00">2023.08.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="197 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223175911112" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> cycle not allowed</span></span></code></pre>
+<p>Go 모듈시스템의 불편한 한계점 중 하나다.</p>
+<p>계층형으로 모듈을 쌓아올리는 Rust 같은 모듈시스템에서는 이런 문제가 별로 없고 회피하기도 쉬운데, Go의 모듈시스템은 각 패키지 경로가 다 독립적이고 수평적인 관계라서 이런 귀찮은 문제가 있다.</p>
+<p>예를 들어, A가 B 패키지를 import하고, B가 A 패키지를 import한다면 이런 문제가 발생하게 된다.</p>
+<p>코드로 한번 예시를 들어보겠다.<br />
+각 프로세서의 동작을 정의하는 인터페이스 하나와, 그 프로세서들의 매핑 목록이 있다.</p>
+<p><img src="/images/img_489c92e84e92c49d.png" alt="" />
+특정 문자열이 전달될때 해당 프로세서를 실행시키기 위한 구조 매핑이다.</p>
+<p>그리고 저 인터페이스에 대한 간단한 구현이 있다.</p>
+<p><img src="/images/img_556131829b6c548d.png" alt="" />
+여기까지는 괜찮다. 어차피 고랭의 다형성은 덕타이핑이라 인터페이스를 명시적으로 가져오지는 않으니까</p>
+<p>하지만 가져올 일이 생길 수도 있다.<br />
+내 경우에는 지금 Processor 객체를 하나 받아서 연달아 실행하는 기능을 추가하려 한다.</p>
+<p><img src="/images/img_0bd01b8b781a40ff.png" alt="" />
+그러면 이제</p>
+<p>에러가 터진다.</p>
+<p><img src="/images/img_10293dde41e5194c.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="ilbanjeogin-haegyeolbeob">일반적인 해결법</h2>
+<p>보통은 파일, 패키지단위를 잘 쪼개는 것만으로 해결을 볼 수 있다.<br />
+패키지-폴더 단위로 import를 하다보니 무조건 디렉터리 단위로 쪼개야 하는게 불편하긴 하지만..</p>
+<p>일단 이 경우에는 interface를 독립적으로 분리하는 것이 좋다. 여기저기 불려다니는 녀석이니까.</p>
+<p><img src="/images/img_09d33de49081506f.png" alt="" />
+경험상 인터페이스는 꼭 이런 경우가 아니라도 단독파일로 분리해두는걸 권장한다.<br />
+여기저기서 공통으로 불려다니기 쉬운 녀석이니, 당장은 괜찮더라도 쓰다보면 import가 꼬이기 딱 좋기 때문이다.</p>
+<p>그리고 전역변수 매핑 Processors는 main 패키지로 옮겼다.</p>
+<p><img src="/images/img_c97dd26805a3eae9.png" alt="" /></p>
+<p><img src="/images/img_05bc65490be4e9af.png" alt="" />
+그럼 이제 잘 실행이 될 것이다.</p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223176685609/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] 고루틴과 채널, 동기화<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223176043290/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] executable package<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

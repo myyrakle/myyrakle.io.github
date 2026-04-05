@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] lifetime: Higher Ranked trait bound (HRTB) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222263684734/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] lifetime: Higher Ranked trait bound (HRTB)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222263684734/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-03-04T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222263684734/">[Rust] lifetime: Higher Ranked trait bound (HRTB)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-03-04T00:00:00+00:00"><time datetime="2021-03-04T00:00:00+00:00">2021.03.04</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="193 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222263684734" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust에서는 클로저를 사용하다보면 라이프타임 때문에 이래저래 꼬일 일이 잦다.</p>
+<p>higher-ranked 트레잇 바운드는 이런 케이스 중 하나를 위한 편의기능이다.</p>
+<p>예시를 들어보겠다.<br />
+일단 이런 트레잇과 그 구현체가 있다.</p>
+<p><img src="/images/img_13ebc147b218edb6.jpg" alt="" />
+여기서 구현체는 &amp;i32 참조값을 받아 출력만 하는 간단한 형태로 구현되었다.</p>
+<p>그리고 지역변수의 참조값을 거기로 넘겨주는 단순한 함수 foo를 구현 후, 호출해봤다.</p>
+<p><img src="/images/img_211a507960a74434.jpg" alt="" /></p>
+<p>이러면 에러가 난다.</p>
+<p><img src="/images/img_e9f00a36b287a0be.jpg" alt="" />
+어차피 do_something이 참조를 받더라도 쓰고 바로 버리니 로직상으론 문제가 없지만, Rust가 그것까지는 완전히 캐치를 하지 못해 발생하는 문제다.</p>
+<p>아마 저때 Trait의 &amp;i32 라이프타임은 foo를 호출할 때의 바깥 라이프타임인데, 훨씬 좁은 지역변수 라이프타임을 구겨넣으려고 해서인 것 같다.</p>
+<p>이럴때 사용할만한게 higher-ranked 트레잇 바운드다.<br />
+다음과 같이 for&lt;&gt;로 라이프타임을 지정해주고, 그걸 넘겨주면 된다.</p>
+<p><img src="/images/img_0e883e4af1af57ef.jpg" alt="" />
+그럼 원래 바깥의 라이프타임에 고정되었던 Trait의 &amp;i32가 현재 안쪽 라이프타임에 맞춰질 것이다. (추정)</p>
+<br>
+<p><img src="/images/img_826283b82556f094.jpg" alt="" />
+이제는 잘 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/reference/trait-bounds.html#higher-ranked-trait-bounds">https://doc.rust-lang.org/reference/trait-bounds.html#higher-ranked-trait-bounds</a><br />
+<a rel="external" href="https://doc.rust-lang.org/nomicon/hrtb.html">https://doc.rust-lang.org/nomicon/hrtb.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/35592750/how-does-for-syntax-differ-from-a-regular-lifetime-bound">https://stackoverflow.com/questions/35592750/how-does-for-syntax-differ-from-a-regular-lifetime-bound</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222265662232/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Q: 자바스크립트는 모든 것이 객체인가요?<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222262411196/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Diesel] 데이터 수정하기 (update)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

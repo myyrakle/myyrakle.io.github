@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Batch | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222457425555/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Batch">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222457425555/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-08-05T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222457425555/">[AWS] Batch</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-08-05T00:00:00+00:00"><time datetime="2021-08-05T00:00:00+00:00">2021.08.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="470 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222457425555" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_7e4a6da3f2785d37.jpeg" alt="" />
+aws batch는 말 그대로 배치성 작업만을 위한 전용 서비스다.</p>
+<p>배치는 시간이나 주기를 정해놓고, 정해놓은 주기에 따라서 자동으로 돌리는 백그라운드 프로세스를 말한다.<br />
+batch는 이런걸 자동화해서 관리할 수 있게 도와주는 서비스다.</p>
+<p>사실, 배치성 작업이 그렇게 오래 걸리는 작업이 아니고 무조건 10분 이내에 완료될 수 있는 작은 작업이라면 람다로 로직을 구현하고 cloudwatch로 트리거만 걸어도 충분하다.</p>
+<p>그런 케이스라면 아래 포스트를 참조해서 쉽게 진행할 수 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222344061647">https://blog.naver.com/sssang97/222344061647</a><br />
+하지만 배치성작업이 항상 가볍다는 보장은 없다. 30분, 1시간이 걸릴 수도 있고, 하루가 걸릴 수도 있다.<br />
+이런 무거운 작업이나 주변 세팅이 복잡한 경우는 aws Batch로 작업을 하는 것이 적절하다.</p>
+<p>다만 이것도 단독으로 쓰진 못하고, cloud watch로 트리거를 걸어줘야 한다.</p>
+<p>비용은 작업에 사용되는 EC2나 Fatgate 요금 외에 추가비용은 없다고 한다.<br />
+잘 활용해보자.</p>
+<p>페이지를 들어가면 이렇게 있는데</p>
+<p><img src="/images/img_e9039c67080b42dd.png" alt="" />
+마법사를 쓰는게 한번에 만들기 편하긴 하지만, 일단은 하나하나 만들어보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="keompyuting-hwangyeong-saengseong">컴퓨팅 환경 생성</h2>
+<p>컴퓨팅 환경은 실제로 배치를 어디서 돌릴지를 정의하는 부분이다.</p>
+<p><img src="/images/img_1aa79a01a927abe7.png" alt="" />
+유형은 웬만하면 관리형으로 해두는게 편리하고</p>
+<br>
+<p><img src="/images/img_531327330767d591.png" alt="" />
+인스턴스 구성도 Fargate가 가장 괜찮은 편이다.<br />
+특별한 이유가 없다면 이걸로 하자.</p>
+<p>그렇게 만들면 끝이다.</p>
+<p><img src="/images/img_25280103edb7a8ad.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="jageob-daegiyeol-saengseong">작업 대기열 생성</h2>
+<p>작업 대기열은 말 그대로 대기열이다.<br />
+배치 작업 요청이 들어오는걸 핸들링해주는 녀석이다.</p>
+<p><img src="/images/img_d99bca0e4d9820a5.png" alt="" />
+그냥 방금 컴퓨팅환경 설정해서 적당히 만들어주면 듼다.</p>
+<br>
+<br>
+<br>
+<h2 id="jageob-jeongyi-saengseong">작업 정의 생성</h2>
+<p>작업 정의는 실제로 배치작업을 어떻게 수행할지를 전부 정의하는 부분이다.</p>
+<p><img src="/images/img_a227545091be7d65.png" alt="" />
+플랫폼은 Fargate.</p>
+<p>실행 제한시간은 저걸 지나면 강제로 배치를 죽여버리는 것이다.<br />
+최소 60초에서 14일 미만으로 설정할 수 있다. 지정하지 않으면 14일까지만 실행될 수 있는듯하다.</p>
+<br>
+<p><img src="/images/img_dc98353590e1b24d.png" alt="" />
+그리고 실행시킬 도커 컨테이너 이미지와 실행할때의 명령어를 각각 지정해준다.</p>
+<p>난 이미지는 ECR 프라이빗에 올렸고,<br />
+이미지 내부의 실행코드는 대충 이따위로 만들어뒀다.</p>
+<p><img src="/images/img_cb18b1180ac5a2e4.png" alt="" />
+그냥 디비 테이블에 데이터 하나 쌓는 것이다.<br />
+의미는 없다.</p>
+<p>그리고 퍼블릭IP 할당을 활성화한다.</p>
+<p><img src="/images/img_b36f810784fa49b4.png" alt="" />
+저거 안하면 ecr에서 못받아오더라.</p>
+<br>
+<br>
+<br>
+<h2 id="jageob-jecul">작업 제출</h2>
+<p>이제 진짜 실행이 되도록 해보자.</p>
+<p>이걸 날리면 작업정의에서 연결해둔된두 도커 이미지로 컨데이너를 올려 실행을 하게 된다.</p>
+<p><img src="/images/img_721c9b46b0cc6747.png" alt="" />
+사용할 작업정의, 대기열을 지정해주고.<br />
+필요한 경우 작업정의의 일부 설정을 덮어씌울 수 있다.</p>
+<p>저렇게 해서 제출하면</p>
+<p><img src="/images/img_a941c8d568df6029.png" alt="" />
+대시보드에서 그 현황을 확인할 수 있다.</p>
+<p>작업 페이지에서 모니터링도 되고.</p>
+<p><img src="/images/img_1f9f2b6e92be24a8.png" alt="" /></p>
+<p>기다리면 이렇게 로그도 잘 찍히고</p>
+<p><img src="/images/img_a52bb5bb9ffb8df0.png" alt="" /></p>
+<p>데이터도 잘 들어온다.</p>
+<p><img src="/images/img_1af014498809bc4a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="cloudwatchro-deungrog">cloudwatch로 등록</h2>
+<p>저렇게 손으로만 돌리는 것도 가능은 하지만, 그래서야 무슨 의미가 있겠는가.<br />
+저걸 자동으로 돌게 하려면 cloudwatch로 트리거를 걸어줘야 한다.</p>
+<p>가서, 규칙을 생성한다.</p>
+<p><img src="/images/img_1d03eaadfb364c26.png" alt="" /></p>
+<p><img src="/images/img_076ee14f23b9099a.png" alt="" />
+저 크론식은 매 2분마다 돌릴거라는 뜻이다.<br />
+자세한 표현법은 찾아보길 바란다.</p>
+<p>그리고 아까 손으로 작업 제출했던걸 여기 대상에 넣어준다.</p>
+<p><img src="/images/img_d1580746c4e4fe41.png" alt="" />
+작업대기열과 작업정의의 리소스식별자를 넣어준다.</p>
+<br>
+<p><img src="/images/img_a6b864ccf63231c9.png" alt="" />
+이름짓고 활성화시키면 이제 자동으로 2분마다 돌면서 배치에 작업을 밀어넣을 것이다.</p>
+<br>
+<p><img src="/images/img_c3e08957de2ae8ca.png" alt="" />
+그리고 기다리면 이렇게 데이터가 쌓인다.<br />
+거의 2분간격으로 들어왔음을 알 수 있다.</p>
+<p>그렇다.</p>
+<p>이런식으로 쓰면 된다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/batch/latest/userguide/job_timeouts.html">https://docs.aws.amazon.com/batch/latest/userguide/job_timeouts.html</a><br />
+<a rel="external" href="https://blog.leedoing.com/191">https://blog.leedoing.com/191</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222459232906/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] ECR<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222456216151/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Kubernetes] 시작 및 설치<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

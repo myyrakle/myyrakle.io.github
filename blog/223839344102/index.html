@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Elasticsearch] 벡터 검색 (kNN, Vector Search) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223839344102/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Elasticsearch] 벡터 검색 (kNN, Vector Search)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223839344102/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-04-19T00:00:00+00:00">
+    <meta property="article:tag" content="Elasticsearch">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223839344102/">[Elasticsearch] 벡터 검색 (kNN, Vector Search)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-19T00:00:00+00:00"><time datetime="2025-04-19T00:00:00+00:00">2025.04.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="855 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/elasticsearch/">Elasticsearch</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223839344102" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223790220320">https://blog.naver.com/sssang97/223790220320</a><br />
+Elasticsearch는 벡터 검색을 지원하는 대표적인 데이터베이스 중 하나다.<br />
+사실 원래 주 목적은 텍스트 검색이긴 한데, 어쩌다보니 Vector search 데이터베이스로도 이름을 꽤 날리게 되었다.</p>
+<p>벡터검색은 Elasticsearch 8.0부터 지원된다.</p>
+<p>벤치마크 기준으로 보면 전문 Vector Database들에 비해서는 처리량이나 기본 성능이 부족한 부분이 있긴 하지만, 비전문 Vector Database 중에서는 가장 뛰어나다는게 일반적인 인식인 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="knn-k-nearest-neighor-wa-hnsw">kNN (k-nearest neighor)와 HNSW</h2>
+<p>Elasticsearch는 k-nearest neighor이라는 알고리즘에 기반해서 벡터 검색을 지원한다.<br />
+알고리즘 자체는 굉장히 오래된 녀석이다. 1951년에 처음 고안되었다.</p>
+<p><img src="/images/img_33cc6438b46af40f.png" alt="" />
+<a rel="external" href="https://www.ibm.com/kr-ko/think/topics/knn">https://www.ibm.com/kr-ko/think/topics/knn</a><br />
+기본적인 개념 자체는 단순하다.<br />
+특정 위치에서 가장 가까운 이웃 3개가 필요하다고 하면, 유클리드 거리 기반으로 조회를 하는 것이다.</p>
+<p>물론 elasticsearch의 knn은 유클리드 거리 외에도 코사인과 dot product를 지원하기 때문에, 순수한 kNN이라고 하기는 어려울 수도 있을 것 같다.</p>
+<p>아무튼 이건 개념적인 용어일 뿐이고, 실제 인덱스 구현은 HNSW 방법론을 통해 만들어져있다.</p>
+<p>그럼 대강 사용해보면서 그 구조를 짚어보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="indegseu-saengseong">인덱스 생성</h2>
+<p>벡터 검색용 인덱스를 만드는 것은 그리 어렵지 않다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>### </span></span>
+<span class="giallo-l"><span>PUT http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//{{HOST}}:{{PORT}}/vector_index</span></span>
+<span class="giallo-l"><span>Content</span><span style="color: #94E2D5;">-</span><span>Type</span><span style="color: #9399B2;">:</span><span> application</span><span style="color: #94E2D5;">/</span><span>json</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;settings&quot;</span><span>:</span><span style="color: #9399B2;"> {},</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;mappings&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;properties&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;vector&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;dense_vector&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;dims&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 256</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;index&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;similarity&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;dot_product&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"><span>###</span></span></code></pre>
+<p><img src="/images/img_67392c145efd432a.png" alt="" />
+타입을 "dense_vector"로 두고, 벡터의 길이("dims"), 유사도 방법을 정해주면 되는 것이다.<br />
+저러면 256 벡터에 대해서 dot product 유사도 처리를 해주는 벡터가 완성된다.</p>
+<br>
+<br>
+<h4 id="yusado-algorijeum">유사도 알고리즘</h4>
+<p>방금 저기서는 dot product를 사용했는데, 3가지의 기본적인 유사도 알고리즘을 지원한다.</p>
+<ol>
+<li>l2_norm - 유클리드 거리</li>
+<li>cosine - 코사인 유사도</li>
+<li>dot_product - dot product</li>
+</ol>
+<p>잘 모른다면, 각각에 대해서는 별도 문서를 참조하는 것을 권한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223790220320">https://blog.naver.com/sssang97/223790220320</a></p>
+<br>
+<br>
+<h4 id="hnsw-indegseu-obsyeon">HNSW 인덱스 옵션</h4>
+<p>Elasticsearch의 벡터 구현 방법론은 HNSW 뿐이지만, 성능 요구사항이나 사용사례에 따라서 추가 조정을 할 부분은 있다.</p>
+<p><img src="/images/img_4fe7529396d4ad35.png" alt="" />
+이런 식으로 타입이나 노드의 개수 등을 미세조정할 수 있다.</p>
+<p>"type"은 이런 것들이 있다.</p>
+<ol>
+<li>hnsw</li>
+<li>int8_hnsw - 기본값. 정확도를 희생해서 메모리 사용량을 4배까지 줄임</li>
+<li>int4_hnsw - 정확도를 희생해서 메모리 사용량을 8배까지 줄임</li>
+<li>bbq_hnsw - 정확도를 희생해서 메모리 사용량을 32배까지 줄임</li>
+<li>flat</li>
+<li>int8_flat</li>
+<li>int4_flat</li>
+<li>bbq_flat</li>
+</ol>
+<p>flat이 붙는 녀석은 단순무식하게 정확한 kNN 검색을 수행하는 거라서, 오차가 없는 대신 매우 느리거나 리소스를 과다하게 소모할 수 있다.<br />
+hnsw이 오차가 있는 대신 성능을 보장할 수 있는 ANN 인덱스 설정이라서, 대개는 이것들을 기본으로 고려하는 것이 맞다.</p>
+<p>"m"은 HNSW 그래프 구조에서 노드가 몇개의 이웃과 연결되는지를 정의한다.<br />
+이걸 늘리면 메모리 사용량이 늘어나는 대신 정확도가 향상된다. 기본값은 16이다.</p>
+<p>"ef_construction"은 노드를 구성할때 탐지하는 후보의 개수다. 이게 커지면 인덱스 구성 시간이 느는 대신에 정확도가 향상된다. 기본값은 100이다.</p>
+<p>보통 최적화를 할때는 type이나 "ef_construction"는 잘 건드리지 않고, 옵션 "m"을 적절히 조정하고 쿼리할때 후보 수를 적절히 주는 것에 주안점을 주게 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteo-neohgo-geomsaeghaebogi">데이터 넣고 검색해보기</h2>
+<p>데이터를 삽입하는 것은 기존 인덱스와 별로 다르지 않다.<br />
+dot product이니 일반화된 벡터 배열로 넣어주기만 하면 된다.</p>
+<p><img src="/images/img_5bfcf33518d4a64c.png" alt="" /></p>
+<p><img src="/images/img_811f85d128989e28.png" alt="" /></p>
+<p>검색을 할때는 기존 인덱스와 좀 다르다.<br />
+knn 옵션을 통해 검색 요청을 정의하는데</p>
+<p><img src="/images/img_8f8aa898916a35f5.png" alt="" /></p>
+<p><img src="/images/img_25f373d5f2034adc.png" alt="" />
+이런 식으로 가져올 개수(k)과, 고려할 후보군(num_candicaties)를 지정해줘야 한다.<br />
+여기서는 사실 num_candidates가 좀 핵심이었다.</p>
+<p>Elasticsearch는 알다시피 멀티 샤드로 구성될 수 있는 분산 데이터베이스다.<br />
+샤드가 2개 있고, 샤드당 각각 약 1000개의 데이터가 분산되어있다고 가정해보자.</p>
+<p>그러면 이 경우에 어떤 식으로 가장 유사도가 높은 2개만 가져올 수 있을까?</p>
+<p>러프하게 생각한다면, 샤드마다 유사도가 높은 2개를 가져온 다음에, 그걸 모아서 4개 중에서 다시 2개를 선별하는 식으로 처리할 수 있을 것이다.<br />
+근데 샤드마다 2개를 선택하기 전에, 후보군을 대략적으로 추리는 작업이 전처리로 들어간다. 여기에 관여하는 것이 num_candidates다.</p>
+<p><img src="/images/img_633d75bd14a2e379.jpg" alt="" />
+<a rel="external" href="https://www.elastic.co/search-labs/blog/vector-search-set-up-elasticsearch">https://www.elastic.co/search-labs/blog/vector-search-set-up-elasticsearch</a><br />
+num_candicaties이 100이라고 하면, 각 샤드마다 근사한 랭킹 기반으로 100개를 후보군으로 추린 다음에, 거기서 샤드별로 유사도가 높은 2개를 조회한다. 그리고 코디네이터가 최종적인 2개를 뽑아서 반환하는 것이다.</p>
+<p>num_candicaties 값이 높을수록 후보군의 범위가 넓어지기 때문에 오차 발생 확률이 떨어진다는 장점이 있다. 당연히 대신 메모리 사용량이나 리소스 소모가 늘어난다.<br />
+하지만 일반적인 벤치마크에 의하면 num_candicaties 증가로 인한 리소스 소모량 대비 정확도 증가는 딱히.. 눈에 띄는 정도는 아니라고 한다. 통상적으로 k와 같거나 2배 정도로 잡는게 상식적인 것 같다.</p>
+<p>그리고 k와 num_candicaties 옵션은 비교적 최근 버전인 Elasticsearch 8.12부터는 optional 값으로 바뀌었다.<br />
+문서에는 대충 써놨는데, num_candicaties를 미설정할 경우에는 k*1.5 값으로 처리된다.</p>
+<p><img src="/images/img_37cebb90f157f45e.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html">https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html</a><br />
+<a rel="external" href="https://www.elastic.co/search-labs/blog/vector-similarity-techniques-and-scoring">https://www.elastic.co/search-labs/blog/vector-similarity-techniques-and-scoring</a><br />
+<a rel="external" href="https://danawalab.github.io/elastic/2022/07/08/ES-Similarity-Search.html">https://danawalab.github.io/elastic/2022/07/08/ES-Similarity-Search.html</a><br />
+<a rel="external" href="https://www.elastic.co/docs/solutions/search/vector/knn">https://www.elastic.co/docs/solutions/search/vector/knn</a><br />
+<a rel="external" href="https://www.ibm.com/think/topics/knn">https://www.ibm.com/think/topics/knn</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm">https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm</a><br />
+<a rel="external" href="https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector">https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector</a><br />
+<a rel="external" href="https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector">https://www.elastic.co/docs/reference/elasticsearch/mapping-reference/dense-vector</a><br />
+<a rel="external" href="https://www.elastic.co/search-labs/blog/elasticsearch-knn-and-num-candidates-strategies">https://www.elastic.co/search-labs/blog/elasticsearch-knn-and-num-candidates-strategies</a></p>
+<p><a rel="external" href="https://www.elastic.co/search-labs/blog/vector-search-set-up-elasticsearch">https://www.elastic.co/search-labs/blog/vector-search-set-up-elasticsearch</a><br />
+<a rel="external" href="https://www.elastic.co/search-labs/blog/simplifying-knn-search">https://www.elastic.co/search-labs/blog/simplifying-knn-search</a><br />
+<a rel="external" href="https://github.com/elastic/elasticsearch/pull/101209/files">https://github.com/elastic/elasticsearch/pull/101209/files</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223840829756/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Rust의 enum 크기 최적화.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223840039691/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>빠른 Rust 컴파일.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

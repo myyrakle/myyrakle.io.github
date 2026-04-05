@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>마이그레이션 노트: Atlas MongoDB =&gt; AWS DocumentDB | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224223425673/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="마이그레이션 노트: Atlas MongoDB => AWS DocumentDB">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224223425673/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-03-20T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224223425673/">마이그레이션 노트: Atlas MongoDB =&gt; AWS DocumentDB</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-20T00:00:00+00:00"><time datetime="2026-03-20T00:00:00+00:00">2026.03.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="989 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224223425673" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>비용/트래픽 최적화, 비용 관리의 용이성을 위해 기존에 Atlas Cloud의 MongoDB를 쓰던 것을 AWS DocumentDB로 옮기게 됐다.</p>
+<p>그 히스토리를 대강 정리한 글이다.</p>
+<br>
+<br>
+<br>
+<h2 id="beojeon-hohwanseong-cekeu">버전 호환성 체크</h2>
+<p>DocumentDB는 MongoDB와의 버전 호환성을 제공한다.<br />
+그러니까 DocumentDB 8.0은 MongoDB 8.0과 거의 호환된다는 것이다.<br />
+내 경우에는 MongoDB 7.0을 쓰고 있었기 때문에 DocumentDB 8.0으로 옮겼다. DocumentDB에는 7.0이 아예 없기 때문이기도 했다.</p>
+<p>상세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/documentdb/latest/developerguide/compatibility.html#mongodb-80">https://docs.aws.amazon.com/ko_kr/documentdb/latest/developerguide/compatibility.html#mongodb-80</a></p>
+<br>
+<br>
+<br>
+<h2 id="documentdb-seupeg-mic-biyong">DocumentDB 스펙 및 비용</h2>
+<p>DocumentDB는 비용 책정 기준이 꽤 독특하다.<br />
+I/O 비용을 별도로 받는 타입이 있고, I/O 비용이 포함된 완전 프로비저닝 버전이 있다.</p>
+<p>t4g.medium를 예로 들면, EC2는 시간당 비용이 $0.122인데, DocumentDB로는 I/O 별도 DB가 $0.317, I/O 포함 DB가 $0.349다. 둘 다 거의 2.5배에 가까운 금액이다.</p>
+<br>
+<p><img src="/images/img_686a8a02db603623.png" alt="" />
+그리고 I/O 포함은 디스크 비용도 3배나 비싸다.<br />
+그럼에도 불구하고, 내 경우에는 I/O가 매우 빈번하고 방대하기 때문에 I/O 포함 버전으로 선택했다. I/O 때문에 비용이 무한대로 확장되는 것은 리스크가 너무 컸다.</p>
+<br>
+<p><img src="/images/img_c195e3f80dcfa839.png" alt="" /></p>
+<p>그리고 기존에는 2 cpu/8GB가 3개짜리인 클러스터를 썼는데, 마스터가 쓰기를 적당히 버티긴 했지만 읽기가 몰리면 특정 노드에서 peak가 종종 치곤 했다. 그래서 단일노드로 구성하되, 단일노드의 스펙은 더 크게 선택했다.<br />
+결국 선택한 타입은 db.r8g.xlarge(4 cpu, 32GB)이었다. 이건 특히 RI도 가능했다.</p>
+<br>
+<br>
+<br>
+<h2 id="maigeureisyeon-gyehoeg">마이그레이션 계획</h2>
+<p>다운타임을 최소화한 채로 중단 없이 옮기기를 원했다.<br />
+그래서 기본 논리에 따라서 점진적 교체 방법을 사용했다.</p>
+<p><img src="/images/img_2e41e9dd65b4642e.png" alt="" />
+새로운 DB를 먼저 띄우고</p>
+<br>
+<p><img src="/images/img_3b0b207bba081f15.png" alt="" />
+서버가 write를 할 때 양쪽에 다 동일한 값으로 쓰도록 배포한다.<br />
+2가지에 다 쓰기에 성공했을 때만 성공으로 처리하게 하는 이른바 dual write 방식이다. 물리적 복제나 논리적 복제보다 이게 더 확실하다.</p>
+<br>
+<p><img src="/images/img_5b65eee06da93b7d.png" alt="" />
+이미 양쪽에 다 쓰고 있다면, 부족한 것은 dual write를 배포하기 전에 있던 old data들이다.<br />
+이건 수동으로 마이그레이션을 해줘야 한다.</p>
+<p>이를 위해서 별도의 마이그레이션 도구를 구현해서 돌렸다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224211981013">https://blog.naver.com/sssang97/224211981013</a><br />
+전체 테이블 데이터들을 전부 읽어서 새 DB에 insert해주는 것이었다. 만약 id 충돌이 난다면 이미 dual write를 통해서 잘 동기화된 것이라는 뜻이니, skip하고 없는 것만 옮기도록 했다.</p>
+<p><img src="/images/img_ad3027e0cc8fe321.png" alt="" />
+마이그레이션이 다 돌었다면 그때부터는 read까지 전면적인 교체가 가능해야 한다.</p>
+<p>그렇게 해서 최종 교체까지 완료했다.</p>
+<p><img src="/images/img_ab27f938c97e532f.png" alt="" />
+전반적으로 잘 동작하고, 큰 문제까지는 없었다.</p>
+<br>
+<br>
+<br>
+<h2 id="isyu-1-indegseu-keugi-munje">이슈 1: 인덱스 크기 문제</h2>
+<p>AWS DocumentDB는 인덱싱 기능을 더욱 정교하게 지원한다.<br />
+예를 들어, Object 타입 컬럼에 대해서 인덱스를 걸면 그 내부 필드들에 대해서도 영리하게 인덱스를 걸어주는데, 그 때문에 인덱스 크기가 MongoDB보다 훨씬 커질 수 있다.</p>
+<p>그래서 동일한 인덱스 구성에 동일한 데이터를 넣어도 인덱스 크기가 지나치게 커져서 성능 문제가 생기거나 그냥 INSERT가 실패할 수 있는 것이다. 인덱스로 들어가는 값에는 상식적인 크기 제한이 존재한다.</p>
+<p>내 경우에는 일부가 사용 빈도가 낮은 인덱스라서 제거했고, 나머지 인덱스는 다른 형태로 치환해서 해결했다.</p>
+<br>
+<br>
+<br>
+<h2 id="isyu-2-collation-hohwanseong">이슈 2: Collation 호환성</h2>
+<p>DocumentDB는 Collation에 기반한 인덱싱을 지원하긴 하는데, 미묘하게 다른게 있고 안맞는 것도 좀 있다.<br />
+(단, DocumentDB 8.0에서만 지원)</p>
+<br>
+<p><img src="/images/img_dab0fa5c90a2ca7d.png" alt="" />
+기존에 있던 이런 인덱스를 옮기려고 했는데,</p>
+<br>
+<p><img src="/images/img_c00895c43bbbf8b8.png" alt="" />
+이미 인덱스가 있다고 오류가 난 것이다.<br />
+그러니까, target에서 저 컬럼들이 조합된 인덱스가 있다고 튕기는건데, MongoDB의 경우에는 컬럼 조합이 같아서 collation이 다르면 다른 조합으로 인정해줬다.</p>
+<p>AWS 얘들이 좀 이상하게 만들어놔서 다른 옵션이 달라도 컬럼이 같으면 같다고 치기도 한다.</p>
+<p><img src="/images/img_833375659d942c02.png" alt="" />
+유일한 해결법은, 그냥 컬럼 순서를 바꾸든 후행 컬럼을 추가하든 해서 유일성 조건을 회피하는 것이었다.<br />
+이거 개선하긴 하려나?</p>
+<br>
+<br>
+<br>
+<h2 id="isyu-3-elemmatch-dongjag-mihohwan-munje">이슈 3: $elemMatch 동작 미호환 문제</h2>
+<p>내 경우에는 필터링 조건을 복잡하게 주는 경우가 많았는데, 세부적인 부분에서 동작이 다른 부분이 있었다.<br />
+대표적인 것이 elemMatch다.</p>
+<p>이건 배열에 대해서 배열 안에 들어있는 필드를 조건으로 거는건데, 원래 MongoDB 7에서는 빈 객체를 넣어도, 관용적으로 처리했다.</p>
+<p><img src="/images/img_7d9d39b2f4737ef6.png" alt="" />
+조건이 없으므로 사실상 프리패스인 조건절처럼 동작한 것이다.</p>
+<br>
+<p><img src="/images/img_7971272925e6c368.png" alt="" />
+하지만 DocumentDB는 보다 엄격하게 처리한다. 진짜로 빈 객체가 들어있는 것만 통과시켜버리는 것이다.</p>
+<p>이건 코드를 더 명확한 방향으로 수정했다. 조건이 없으면 그냥 안 넣는 것으로</p>
+<br>
+<br>
+<br>
+<h2 id="hwagsilhi-gaeseondoen-jeom">확실히 개선된 점</h2>
+<p>**IOPS 제한이 없다. **<br />
+옵션에 따른 것이긴 한데, 내 경우에는 I/O 포함 디스크 옵션으로 넣어서 I/O 많이 쓴다고 스로틀링이 걸릴 일은 없게 됐다. 이전에는 굉장히 치명적인 장애 지점이었다.</p>
+<p>**클러스터 관리를 AWS에서 책임진다. **<br />
+Atlas MongoDB는 자기들 말로는 고가용성 클러스터라고 하는데, 실제로는 가용성 수준이 낮다. 그에 비하면 신뢰성 수준이 더 낫다.</p>
+<p>**디스크 확장이 매우 자유롭다. **<br />
+DocumentDB는 AWS AuroraDB나 HBase처럼 디스크 계층이 인스턴스와 별도로 관리되는 시스템이다.<br />
+그래서 디스크 크기를 지정하지 않아도 S3처럼 무한히 자동으로 확장되는 특성을 가진다.</p>
+<p>**인덱스 성능 **<br />
+이건 일장일단이 있긴 한데, DocumentDB가 더 복잡하고 세부적인 인덱스 튜닝이 가능하다. 특히 Object가 들어가는 경우에 자동으로 그 필드들에 대해서 재귀적 인덱싱을 해준다.</p>
+<p><strong>스펙 결정의 용이함</strong><br />
+MongoDB에서는 M10, M20, M30 같은 식으로 깜깜이식 스펙 결정만이 가능했다. 다음과 같은 식으로 조합을 한정적으로 정해놓은 것이다.</p>
+<p><img src="/images/img_7942651fe803692c.png" alt="" />
+그래서 가성비 좋은 arm CPU를 쓰지도 못하고, 16GB를 쓰려면 무조건 vcpu 4개 짜리로 강매당한다.</p>
+<p>DocumentDB에서는 좀 더 유연한 성능 선택이 가능하다. 특히 graviton 4 arm 인스턴스를 쓸 수도 있고, cpu 개수 대비 메모리가 더 큰 편이다.</p>
+<p><img src="/images/img_fae5dbc4eb8cdc56.png" alt="" /></p>
+<p>**RI를 통한 비용 절감 **<br />
+DocumentDB는 RI로 할인을 받는 것이 가능하다. 타입도 제한적이고, 할인률도 20% 정도지만, 그래도 없는 것보단 낫다.</p>
+<p><img src="/images/img_15946e8a816d6374.png" alt="" />
+<a rel="external" href="https://aws.amazon.com/ko/savingsplans/database-pricing/">https://aws.amazon.com/ko/savingsplans/database-pricing/</a></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="byeolroin-jeom">별로인 점</h2>
+<p>전반적으로는 많이 나아졌지만, 좋은 점만 있는 것은 아니었다.</p>
+<p>**악화된 쓰기 처리량 **<br />
+MongoDB를 비롯한 LSM Tree DB들의 장점은 write 처리량이 매우 뛰어나다는 것이다. 근데 DocumentDB는 그만큼 쓰기 최적화를 잘 하진 못한 것 같다.<br />
+기존의 MongoDB은 쓰기량이 많은 시스템인데도 2 cpu짜리 master node로 잘 버텼었는데, DocumentDB는 2 cpu로 버티질 못했다.</p>
+<p><img src="/images/img_28fa844cabb5a29a.png" alt="" /></p>
+<p><img src="/images/img_a4a972e5ac00850d.png" alt="" />
+Update Query에서 CPU가 엄청 튀고 I/O를 과다하게 소모했다.<br />
+arm/graviton4이라 실제 물리 코어량이 많고 메모리도 더 큰데도 버티질 못한 것이다. 그래서 결국 4 cpu로 늘리니까 감당이 됐다.<br />
+일설에는 MySQL을 내부 엔진으로 쓴다는 썰을 봤었는데, 정확하게는 알지 못해도 엔진 성능이 WiredTiger보다 확연하게 좋은건 아닌거같다.</p>
+<p>이런 이유에서 비용을 생각만큼은 줄이지 못했다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/dms/latest/sbs/chap-mongodb2documentdb.html">https://docs.aws.amazon.com/dms/latest/sbs/chap-mongodb2documentdb.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/documentdb/latest/developerguide/docdb-mvu.html">https://docs.aws.amazon.com/ko_kr/documentdb/latest/developerguide/docdb-mvu.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/63310526/how-can-i-have-a-case-insensitive-unique-index-in-aws-documentdb">https://stackoverflow.com/questions/63310526/how-can-i-have-a-case-insensitive-unique-index-in-aws-documentdb</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224226895844/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] Logical Replication에서 큰 텍스트 컬럼이 누락되는 문제<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224221878895/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Github Page로 블로그 만들기 (with zola)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

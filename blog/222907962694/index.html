@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Nginx] 로드밸런싱 직접 구성해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222907962694/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Nginx] 로드밸런싱 직접 구성해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222907962694/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-10-23T00:00:00+00:00">
+    <meta property="article:tag" content="Proxy">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222907962694/">[Nginx] 로드밸런싱 직접 구성해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-10-23T00:00:00+00:00"><time datetime="2022-10-23T00:00:00+00:00">2022.10.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="423 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/proxy/">Proxy</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222907962694" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>nginx는 '리버스 프록시'라고 부르는 중개 시스템 중 하나다.<br />
+가장 대표적인 사용처 중 하나는, 서버 앞단에 달아서 유저단의 진입점으로 삼고, 로드밸런싱 등을 수행하는 것이다.</p>
+<p>구조도다.</p>
+<p><img src="/images/img_26d06b786eec16f6.png" alt="" /></p>
+<p>본 포스트에서는 AWS EC2 서비스를 이용해 로드밸런서 서버와 앱서버 2개를 띄워 실습을 해보도록 하겠다.</p>
+<p>보통 AWS 등의 클라우드 서비스를 이용하면 더 편리하고 뛰어난 자체 로드밸런서를 제공해주기 때문에, 실제로 이렇게 사용할 일은 별로 없다.</p>
+<p>그래도 직접 세팅해보며 그 개략적인 구조를 이해해보는 것도 의미가 있을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="hwangyeong-gucug-ec2-inseuteonseu-mandeulgi">환경 구축: EC2 인스턴스 만들기</h2>
+<p>꼭 aws ec2일 필요는 없다.<br />
+모든 클라우드 서비스에 이런 가상머신 서비스는 다 있기 때문에, 다른걸 쓰고싶다면 다른걸 써도 무방하다.</p>
+<p>nginx용 하나랑</p>
+<p><img src="/images/img_261747b04eeb764b.png" alt="" /></p>
+<p>서버용 2개를 만든다.</p>
+<p><img src="/images/img_86be769db3075d64.png" alt="" />
+난 그냥 기본옵션으로 줬는데, 돈이 아깝다면 더 줄여도 된다.<br />
+어차피 테스트만 하는거라 대단한 스펙이 필요치도 않다.</p>
+<p>이렇게 3개를 띄웠다.</p>
+<p><img src="/images/img_994034436fc107c9.png" alt="" /></p>
+<p>보안그룹 인바운드에 80 포트를 추가하는 것도 잊지 말자</p>
+<p><img src="/images/img_bb22bbd32b982a30.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="seobeo-gucughagi">서버 구축하기</h2>
+<p>서버 먼저 구축하도록 하겠다.<br />
+여기서는 비교적 세팅이 간편하고 쉬운 Nodejs express를 사용하겠다.<br />
+취향과 필요에 따라 다른걸 사용해도 무방하다.</p>
+<p>패키지 업데이트 한번 해주고</p>
+<p><img src="/images/img_a8ae10ab15194a93.png" alt="" /></p>
+<p>nodejs를 설치한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>o</span><span style="color: #94E2D5;">-</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">. ~/.</span><span>nvm</span><span style="color: #94E2D5;">/</span><span>nvm</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>nvm install</span><span style="color: #94E2D5;"> --</span><span>lts</span></span></code></pre>
+<p><img src="/images/img_4133899678fe8b31.png" alt="" /></p>
+<p>잘 됐으면</p>
+<p><img src="/images/img_90b32d8c75283f85.png" alt="" /></p>
+<p>제너레이터로 서버 템플릿을 생성해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>npx express</span><span style="color: #94E2D5;">-</span><span>generator server</span></span></code></pre>
+<p><img src="/images/img_4c5d8e09ad6e9c9c.png" alt="" /></p>
+<p>그리고 80 포트 열고, 실행해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cd server</span></span>
+<span class="giallo-l"><span>npm i </span></span>
+<span class="giallo-l"><span>sudo iptables</span><span style="color: #94E2D5;"> -</span><span>t nat</span><span style="color: #94E2D5;"> -</span><span>A PREROUTING</span><span style="color: #94E2D5;"> -</span><span>p tcp</span><span style="color: #94E2D5;"> --</span><span>dport</span><span style="color: #FAB387;"> 80</span><span style="color: #94E2D5;"> -</span><span>j REDIRECT</span><span style="color: #94E2D5;"> --</span><span>to</span><span style="color: #94E2D5;">-</span><span>ports</span><span style="color: #FAB387;"> 3000</span></span>
+<span class="giallo-l"><span>npm start</span></span></code></pre>
+<p><img src="/images/img_83e4ac0e3b964c6a.png" alt="" /></p>
+<p>이렇게</p>
+<p><img src="/images/img_55ed27d6a7cd66d7.png" alt="" />
+근데 이렇게 둘다 똑같이 나오면 구분이 잘 안되니까, 메세지만 살짝 바꿔주도록 하겠다.</p>
+<br>
+<p><img src="/images/img_dc65ac825b3c4420.png" alt="" /></p>
+<p><img src="/images/img_37b18a840a871b0f.png" alt="" /></p>
+<p><img src="/images/img_492802561bdf2238.png" alt="" /></p>
+<p><img src="/images/img_125331561fc9c90e.png" alt="" />
+이렇게</p>
+<br>
+<br>
+<br>
+<h2 id="nginx-seolci">nginx 설치</h2>
+<p>아마존 리눅스에는 yum에 nginx가 빠져있어서 이렇게 설치해야 한다.<br />
+왜 없지..?</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo amazon</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>extras install</span><span style="color: #94E2D5;"> -</span><span>y nginx1</span></span></code></pre>
+<p><img src="/images/img_ca2c7de22142ffbd.png" alt="" /></p>
+<p><img src="/images/img_52ad5008453de551.png" alt="" /></p>
+<p>그리고 service에 nginx를 등록해서 계속해서 실행되도록 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo service nginx start</span></span></code></pre>
+<p><img src="/images/img_0dbd61edd050c5ca.png" alt="" /></p>
+<p>그럼 이렇게 접속이 될 것이다.</p>
+<p><img src="/images/img_528b78e199765e38.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="rodeubaelreonsing-guseonghagi">로드밸런싱 구성하기</h2>
+<p>먼저 설정파일을 하나 추가하겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>nginx</span><span style="color: #94E2D5;">/</span><span>test</span></span>
+<span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>nginx</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #94E2D5;">/</span><span>config</span></span></code></pre>
+<p>디렉터리명은 적절히 잘 써주고, 텍스트파일을 하나 만들어서 아래와 같이 작성한다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>upstream backend</span><span style="color: #9399B2;"> {</span><span>  </span></span>
+<span class="giallo-l"><span>    least_conn</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;">     // 서버에 할당된 가중치를 고려해 연결 수가 가장 적은 서버로 전송</span></span>
+<span class="giallo-l"><span>    server</span><span style="color: #FAB387;"> 172.31</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">10.219</span><span>:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;">;</span><span> </span></span>
+<span class="giallo-l"><span>    server</span><span style="color: #FAB387;"> 172.31</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">15.163</span><span>:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;">;</span><span> </span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>server</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  listen</span><span style="color: #FAB387;"> 80</span><span style="color: #9399B2;">;</span><span> </span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  location</span><span style="color: #94E2D5;"> /</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    proxy_pass http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//backend; //설정한 이름으로 요청 보내기</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_55ef1349174c6cdc.png" alt="" />
+//로 쓴 주석은 지운채로 옮겨적어야 한다. 저런 신택스는 nginx가 모른다.<br />
+위와 같이 server들을 IP로 적으면 되는데, 보통 private IP만을 넣고 서버들의 퍼블릭 IP는 막아놓는다.</p>
+<p>그리고 least_conn는 연결 수가 적은 서버로 요청을 넘기겠다는 의미다.<br />
+저것 말고도 라운드로빈, least_time 등의 기법들도 사용할 수  있다.</p>
+<p>그리고 저 설정을 메인 설정파일에서 포함시켜주기만 하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>nginx</span><span style="color: #94E2D5;">/</span><span>nginx</span><span style="color: #94E2D5;">.</span><span>conf</span></span></code></pre>
+<p>기존의 http 기본설정을 지우고, 아래의 구문으로 대체한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>http</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	include</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>nginx</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #9399B2;font-style: italic;">/*;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">}</span></span></code></pre>
+<p><img src="/images/img_8cc8238da38e529d.png" alt="" /></p>
+<p>그리고 리로드하면 된다.</p>
+<p><img src="/images/img_49cad43cab039a74.png" alt="" />
+이 작업은 오류만 없다면 무중단으로 이루어진다.</p>
+<p>그럼 이렇게 잘 조절해서 연결해줄 것이다.</p>
+<p><img src="/images/img_13e586114d3644d8.png" alt="" /></p>
+<p>기본원리는 이게 다다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@jeff0720/2018-11-18-2111-%EC%9E%91%EC%84%B1%EB%90%A8-iojomvsf0n">https://velog.io/@jeff0720/2018-11-18-2111-%EC%9E%91%EC%84%B1%EB%90%A8-iojomvsf0n</a><br />
+<a rel="external" href="https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/">https://docs.nginx.com/nginx/admin-guide/load-balancer/http-load-balancer/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222907889425/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] iptables: 포트 매핑하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222907998036/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Nginx] 도메인 붙이기 (with CloudFlare)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

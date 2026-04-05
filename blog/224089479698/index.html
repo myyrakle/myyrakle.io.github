@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C#] Native AOT 컴파일 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224089479698/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C#] Native AOT 컴파일">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224089479698/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-11-27T00:00:00+00:00">
+    <meta property="article:tag" content="C＃">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224089479698/">[C#] Native AOT 컴파일</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-11-27T00:00:00+00:00"><time datetime="2025-11-27T00:00:00+00:00">2025.11.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="405 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C＃</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224089479698" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Java의 카피캣 취급을 받는 C#지만, 자바보다 훨씬 뛰어난 부분들도 여럿 존재한다.<br />
+그 중 하나가 바로 Native AOT 컴파일의 지원 수준이다.</p>
+<p>Java도 GraalVM을 통해서 Native AOT 컴파일을 지원하긴 하는데, 아직 완성된 느낌도 아니고 내가 볼때 최적화 수준도 저열한 편이다. C#이 훨씬 낫다.</p>
+<p>내가 벤치마크를 이래저래 돌려보니까, Java =&gt; GraalVM 컴파일은 확실하게 무조건 느려지는데, C# AOT 컴파일은 2-3배 이상 빨라졌고 어지간한 컴파일 언어들보다도 빠른 성능을 보여줬다.<br />
+확실히 매력적인 선택지 중 하나인 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="gijon-gujoyi-jangdanjeom-jit">기존 구조의 장단점: JIT</h2>
+<p>C#은 컴파일이니 뭐니 하지만 결국 인터프리터 언어다.<br />
+닷넷 런타임이라는 인터프리터에 닷넷 전용 어셈블리를 올려서 대신 실행하는 것이기 때문이다.<br />
+그리고 이런 방식은 당연히 직접 어셈블리를 실행하는 것에 비해서는 실행성능이 현저하게 느리다.</p>
+<p>그래서 닷넷 런타임은 JIT 컴파일 구조를 통해서 성능과 사용성의 균형을 잡으려고 노력한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223948313129">https://blog.naver.com/sssang97/223948313129</a><br />
+이 방식의 장점은, 최초 컴파일이 빠르고, 장기실행으로 갈수록 성능 고점이 높아진다는 것이다.<br />
+실행 중에도 프로파일 데이터 기반의 지속적인 최적화가 가능하기 때문에 성능이 컴파일 언어보다 빠르게 나올 때도 있다.</p>
+<p>이 방식에는 고질적인 단점도 몇개 있다.</p>
+<ol>
+<li>
+<p>사용 패턴에 따라서 JIT 최적화보다 정적인 최적화가 효율적일 수도 있다.</p>
+</li>
+<li>
+<p>런타임이 매번 붙어서 돌아다니니 전체 앱의 디스크 크기, 메모리 사용량이 커진다.</p>
+</li>
+<li>
+<p>처음 시작할때는 느리다가 나중에 빨라지는 문제가 있다. 배포시에 균일한 성능 보장이 필요하다면 데워주는 작업을 해줘야 한다.</p>
+</li>
+<li>
+<p>실시간 컴파일 결과물을 계속해서 관리하고 메모리에도 올려야 한다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>그래서 뭔가 서버 등을 빠르게 빠르게 올려야 하거나,</p>
+<p>이런 단점들이 치명적이라면 AOT 컴파일을 고려해보는 것도 시도해봄직한 방법이다.</p>
+<br>
+<br>
+<br>
+<h2 id="aot-ahead-of-time">AOT (Ahead Of Time)</h2>
+<p>AOT는 C# 코드를 인터프리터에 올리지 않고, 그냥 진짜 플랫폼 실행파일로 컴파일하는 것을 말한다.<br />
+C/C++로 컴파일한 결과물과 동등하게 특정 플랫폼에서만 실행할 수 있는 것이다.</p>
+<p>앱 크기가 작아지고, 메모리를 더 적게 먹고, CPU 사용량이 줄어들고, 시작 속도가 매우 빠르다는 장점들이 있다.<br />
+이렇게 말면 닷넷 런타임을 배포 파일에 포함할 필요도 없다.</p>
+<p>물론 단점들도 있다.<br />
+실행시 런타임의 부재로, 누려왔던 이점들을 상당수 잃는다.<br />
+JIT 최적화가 더 이상 적용되지 않고, 리플렉션을 비롯한 런타임 의존 기능들을 사용하지 못한다.</p>
+<p>그 외에도 호환성이 완전하게 보장되지는 않는다. AOT 컴파일이 가능한 라이브러리가 있고 아닌 것들이 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="aotro-keompailhaebogi">AOT로 컴파일해보기</h2>
+<p>컴파일 자체는 간단한 편이다.<br />
+graalVM처럼 추가 종속성 같은게 필요하진 않다. 닷넷 툴체인만 있으면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #F5C2E7;">PublishAot</span><span style="color: #94E2D5;">&gt;</span><span>true</span><span style="color: #94E2D5;">&lt;/</span><span style="color: #F5C2E7;">PublishAot</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p><img src="/images/img_5d14a5182e56ac1b.png" alt="" />
+프로젝트 파일에서 활성화하거나</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>dotnet publish</span><span style="color: #94E2D5;"> -</span><span>c Release</span><span style="color: #94E2D5;"> -</span><span>r linux</span><span style="color: #94E2D5;">-</span><span>x64</span><span style="color: #94E2D5;"> /</span><span>p</span><span style="color: #9399B2;">:</span><span>PublishAot</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span></span></code></pre>
+<p>publish command를 통해서 컴파일을 할 수 있다.</p>
+<br>
+<p><img src="/images/img_8322a058f83fd41f.png" alt="" />
+그러면 이런 식으로 실행파일이 떨어질 것이다.<br />
+이 자체로 완성된 실행파일이니, 그대로 실행하면 된다.</p>
+<br>
+<br>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://learn.microsoft.com/ko-kr/dotnet/core/deploying/native-aot/?tabs=windows%2Cnet8">https://learn.microsoft.com/ko-kr/dotnet/core/deploying/native-aot/?tabs=windows%2Cnet8</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224093654995/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 분산 우선순위 락 구현해보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224085592781/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] GC: green tea<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

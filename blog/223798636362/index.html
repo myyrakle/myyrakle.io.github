@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Chunked Array (Deque) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223798636362/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Chunked Array (Deque)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223798636362/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-03-17T00:00:00+00:00">
+    <meta property="article:tag" content="자료구조&#x2F;알고리즘">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223798636362/">Chunked Array (Deque)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-03-17T00:00:00+00:00"><time datetime="2025-03-17T00:00:00+00:00">2025.03.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="571 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/jaryogujo-algorijeum/">자료구조&#x2F;알고리즘</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223798636362" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Deque의 일부 구현에서 사용되는 구현 방식인데, 이상하리만치 자료가 많지 않더라.</p>
+<p>Chunked Array의 대표적인 구현체는 C++의 std::deque이다.<br />
+그 외에는 사용사례를 많이 보진 못한 것 같다.</p>
+<p>대표적인 경쟁자로는 ring buffer가 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223797898434">https://blog.naver.com/sssang97/223797898434</a></p>
+<p>여기서는 C++의 구현을 중점으로 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-weonri">기본 원리</h2>
+<p>이건 FIFO queue 처리를 위해 만들어진 자료구조다.<br />
+linked list의 유연성과 배열의 성능 효율성을 적절히 섞은 구조라고 할 수 있다.</p>
+<p>각각의 고정 길이 배열(chunk)를 만들고, chunk들을 엮어서 하나의 리스트로 만드는 것이다.<br />
+실제 요소들은 각각의 chunk에 앞뒤로 적재된다. 그러다가 chunk가 꽉차면 chunk를 새로 할당해서 또 연결하는 것이다.</p>
+<p>그림으로 표현하면 대강 이렇다.</p>
+<p><img src="/images/img_9677b6f868826e2d.png" alt="" />
+사실 쉽게 말해서 그냥 2차원 배열이다.<br />
+최상위 root 배열은 각 청크들의 포인터를 들고 있고, 각각의 청크가 실제 요소들을 들고 있다.</p>
+<p>뒤에 값을 넣거나 뺄 때는 청크가 가득찰 경우 그냥 청크를 추가해서 넣거나 뺀다.<br />
+근데 앞에 값을 추가할 때는 0번째에 청크를 추가하면서 오른쪽으로 shift를 때려서 메모리 대이동을 할 수도 있다.<br />
+그래서 통상적으로 앞보다는 뒤에 넣는게 더 빠르긴 한데, 요소의 수에 비례하면 작은 단위라서 push_front도 amortize O(1)으로 취급한다.</p>
+<p>(C++ deque의 경우). chunk의 크기는 표준에서 명시한 바가 없으며, 불투명하다. chunk의 크기를 통제하는 수단도 없다.</p>
+<p>그리고 이건 고정 길이 배열의 리스트이기 때문에, 리스트 구조임에도 특이하게 거의 상수시간에 인덱싱을 할 수 있다는 특징이 있다. 물론 진짜 배열보단 비효율적이다.<br />
+예를 들어, 청크 크기가 5고, [9] 인덱스 접근을 한다면, 두번째 청크에 들어가서 마지막 요소를 찌른다거나 하면 되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jangdanjeom">장단점</h2>
+<p>기괴하긴 해도 배열 기반 구조라서 linked list 같은 non-배열 구조에 비해서 메모리 접근이 효율적이고 빠르다는게 가장 큰 장점이다.<br />
+그리고 할당을 청크 단위로 몰아서 하기 때문에 할당 효율성도 뛰어나다.<br />
+게다가 배열처럼 인덱싱이 된다는 것도 유연한 사용성을 제공하는 부분이다.</p>
+<p>하지만, 배열에 근사하는거지 진짜 배열처럼 빠르지는 않다.<br />
+단점도 꽤 많다.</p>
+<ol>
+<li>청크 내의 요소들은 잘 배열되어있지만 청크들끼리는 메모리에 분산되어있기 때문에 캐시를 항상 잘 탄다고 할 수가 없다. linked list보다는 낫지만 flat한 배열보다는 못하다.</li>
+<li>인덱싱도 아주 빠르다고는 할 수 없다. 참조를 최소 두번 타는거라서 일반 배열에 비해서 대충 30% 정도는 느리다.</li>
+<li>청크 내부에서는 불필요한 복사나 이동이 발생하지 않지만, 최상위 map이 배열이라서 청크에 대한 포인터들은 재배치를 해야할 때가 있다. 거의 상수 시간에 근사하기 때문에 상수 시간이라고 표현하긴 하지만, 재배치 비용은 분명히 존재한다. 삽입 비용은 linked list만큼 안정적이지 않다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="vs-ring-buffer">vs Ring Buffer</h2>
+<p>굳이 비교한다면 Ring Buffer가 가장 일반적인 상대가 될 것이다.</p>
+<p>끝단 조회, 삽입, 삭제 성능에 있어서는 flat한 배열 구조인 Ring buffer가 훨씬 강력한 성능을 보장할 수 있다.</p>
+<p>하지만 Ring Buffer는 compact한 메모리 사용이 어려운 지점이 있고, (dynamic ring buffer일 경우) 확장 시에 요소들을 옮겨야 하기 때문에 기존 포인터를 무효화할 수 있다는 단점이 있다.<br />
+C++의 iterator 패턴에서는 이게 꽤 치명적인 결함이 된다. 확장이 일어나면 기존 iterator가 무효화될 수 있다는 것이기 때문이다.</p>
+<p>근데 내가 보기엔 대체로는 ring buffer가 뛰어난 지점이 많은 것 같다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://en.cppreference.com/w/cpp/container/deque">https://en.cppreference.com/w/cpp/container/deque</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/6292332/what-really-is-a-deque-in-stl">https://stackoverflow.com/questions/6292332/what-really-is-a-deque-in-stl</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/5728359/stl-internals-deque-implementation">https://stackoverflow.com/questions/5728359/stl-internals-deque-implementation</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/8627373/what-data-structure-exactly-are-deques-in-c">https://stackoverflow.com/questions/8627373/what-data-structure-exactly-are-deques-in-c</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/40275112/c-stddeque-implementation-why-not-use-circular-buffer">https://stackoverflow.com/questions/40275112/c-stddeque-implementation-why-not-use-circular-buffer</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/76856176/why-is-the-circular-buffer-not-standardized-in-c">https://stackoverflow.com/questions/76856176/why-is-the-circular-buffer-not-standardized-in-c</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223802845438/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] DynamoDB 최적화 여정.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223798975317/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Database] 스토리지 엔진<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

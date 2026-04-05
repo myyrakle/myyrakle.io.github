@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Prometheus] 시작 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223112560400/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Prometheus] 시작">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223112560400/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-26T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223112560400/">[Prometheus] 시작</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-26T00:00:00+00:00"><time datetime="2023-05-26T00:00:00+00:00">2023.05.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="348 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223112560400" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_92d83f2e177a3977.png" alt="" />
+Prometheus는 쿠버네티스 환경에서 주로 사용하는 모니터링 도구다.<br />
+쿠버네티스 전용은 아니고, 범용이다.</p>
+<p>2012년에 처음 나왔고, Go로 만들어졌다.</p>
+<p>단독으로 사용하지는 않고, 시각화를 위해서 grafana 등과 함께 사용하곤 한다.</p>
+<p>이벤트 중심의 로그를 관리하는데 특화되어있으며, 그래서 내부적으로 시계열 DB를 써서 로그를 저장한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gujo">구조</h2>
+<p>일반적인 프로메테우스 시스템은 이런 구조를 가진다.</p>
+<p><img src="/images/img_aa16a4ed7412746c.png" alt="" />
+조금 특이한 부분은, 여타 모니터링 도구들은 에이전트-&gt;모니터링서버 방향의 데이터 전달을 통해 데이터를 수집하는데 반해, 프로메테우스는 모니터링서버-&gt;에이전트의 역순으로 직접 접속해서 데이터를 긁어가는 형태라는 것이다.<br />
+그래서 각 머신에 깔린 에이전트를 Exporter라고 부르고, 메트릭을 땡겨온다(pull)고 표현한다.</p>
+<p>이번 포스트에서는 쿠버네티스 없이 Docker conteiner를 기반으로 가볍게 써보면서 그 사용구조를 익혀보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="prometheus-ddyiugi">Prometheus 띄우기</h2>
+<p>우선 프로메테우스의 설정 정보를 prometheus.yml로 작성해줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 전역 설정</span></span>
+<span class="giallo-l"><span>global</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  scrape_interval</span><span style="color: #9399B2;">:</span><span>     15s # 15초마다 매트릭을 수집한다</span><span style="color: #94E2D5;">.</span><span> 기본은 1분</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>  evaluation_interval</span><span style="color: #9399B2;">:</span><span> 15s # 15초마다 규칙을 평가한다</span><span style="color: #94E2D5;">.</span><span> 기본은 1분</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  # 외부 시스템에 표시할 이 서버의 레이블</span></span>
+<span class="giallo-l"><span>  external_labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      monitor</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;codelab-monitor&#39;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>rule_files</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  # </span><span style="color: #94E2D5;">-</span><span style="color: #A6E3A1;"> &quot;first.rules&quot;</span></span>
+<span class="giallo-l"><span>  # </span><span style="color: #94E2D5;">-</span><span style="color: #A6E3A1;"> &quot;second.rules&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>scrape_configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> job_name</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;prometheus&#39;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    static_configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> targets</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #A6E3A1;">&#39;localhost:9090&#39;</span><span>]</span></span></code></pre>
+<p><img src="/images/img_c7e1e761aea0327c.png" alt="" />
+딱 기본설정만 있는 구성이다.</p>
+<p>저대로 Dockerfile을 써서 말아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>FROM prom</span><span style="color: #94E2D5;">/</span><span>prometheus</span></span>
+<span class="giallo-l"><span>ADD prometheus</span><span style="color: #94E2D5;">.</span><span>yml</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>prometheus</span><span style="color: #94E2D5;">/</span></span></code></pre>
+<p><img src="/images/img_856a8e6939e23ec2.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker build</span><span style="color: #94E2D5;"> -</span><span>t prom</span><span style="color: #94E2D5;"> .</span></span></code></pre>
+<p><img src="/images/img_31625e3b91c510ef.png" alt="" /></p>
+<p>그리고 9090포트로 실행해주면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker run</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #FAB387;"> 9090</span><span>:</span><span style="color: #FAB387;">9090</span><span> prom</span></span></code></pre>
+<p><img src="/images/img_d0e5311ed8f6d433.png" alt="" /></p>
+<p><img src="/images/img_35f735c90a8086ed.png" alt="" /></p>
+<p>접속이 될 것이다.</p>
+<p><img src="/images/img_98355f0ec74ea8c1.png" alt="" />
+근데 이것만으로는 아무것도 할 수가 없다.<br />
+수집할 에이전트, exporter를 추가해줘야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="exporter-cugahagi">exporter 추가하기</h2>
+<p>exporter에는 여러가지가 있다. MySQL server exporter, RabbitMQ exporter, HAProxy exporter, Docker Hub exporter, AWS CloudWatch exporter 등등...</p>
+<p>하지만 여기서는 가장 범용적이고 기본에 충실한 Node Exporter를 써보겠다.<br />
+Node Exporter는 CPU와 메모리, 디스크 수치 정도만 수집한다.</p>
+<p>아래 이미지를 사용하면 바로 띄울 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker run</span><span style="color: #94E2D5;"> -</span><span>d</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #FAB387;"> 9100</span><span>:</span><span style="color: #FAB387;">9100</span><span> prom</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>exporter</span></span></code></pre>
+<p><img src="/images/img_e34ac45b46596918.png" alt="" /></p>
+<p>그리고 프로메테우스에도 저 exporter 정보를 추가한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> job_name</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;test-server&#39;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    scrape_interval</span><span style="color: #9399B2;">:</span><span> 10s</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    static_configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> targets</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #A6E3A1;">&#39;host.docker.internal:9100&#39;</span><span>]</span></span></code></pre>
+<p><img src="/images/img_48fc6a8de6d51390.png" alt="" />
+지금 내 경우에는 같은 host를 공유하고 있어서 host.docker.internal를 통해 localhost로 꽂아놨는데, 쿠버네티스 환경에서 실제로 쓸 때는 내부 IP를 박게 될 것이다.</p>
+<p>그리고 프로메테우스를 재부팅해서</p>
+<p><img src="/images/img_6525ed05c083d642.png" alt="" />
+이렇게 서비스 디스커버리에 추가되면 잘 추가된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="meteurig-johoehagi">메트릭 조회하기</h2>
+<p>그래프 페이지에서 저 검색창을 사용하면 query로 지표를 확인해볼 수 있다.</p>
+<p>아래는 active 상태인 메모리 사이즈를 바이트로 보여준다.</p>
+<p><img src="/images/img_a38799d95c3e9a8a.png" alt="" />
+근데 이게 기본 제공 지표는 아무래도.. 인간이 보기에는 좀 힘들다.</p>
+<p>그래서 좀더 가공해서 보는게 좋은데, 약간 functional한 표현식으로 연산을 더할 수 있다.</p>
+<p>아래는 CPU 사용량을 백분율로 띄우고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>(</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> -</span><span style="color: #89B4FA;font-style: italic;"> avg</span><span>(</span><span style="color: #89B4FA;font-style: italic;">irate</span><span>(node_cpu_seconds_total</span><span style="color: #9399B2;">{</span><span>mode</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;idle&quot;</span><span style="color: #9399B2;">}</span><span>[10m]))</span><span style="color: #89B4FA;font-style: italic;"> by</span><span> (instance))</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 100</span></span></code></pre>
+<p><img src="/images/img_c47b99f79e78cf9c.png" alt="" /></p>
+<p>이건 메모리 사용량을 백분율로 띄운다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #FAB387;">100</span><span style="color: #94E2D5;"> *</span><span> (</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> -</span><span> ((</span><span style="color: #89B4FA;font-style: italic;">avg_over_time</span><span>(node_memory_MemFree_bytes[10m])</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> avg_over_time</span><span>(node_memory_Cached_bytes[10m])</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> avg_over_time</span><span>(node_memory_Buffers_bytes[10m]))</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> avg_over_time</span><span>(node_memory_MemTotal_bytes[10m])))</span></span></code></pre>
+<p><img src="/images/img_20ccfbaf2a88e749.png" alt="" /></p>
+<p>query 문법에 대한건 전용 문서를 참고하면 되겠다.<br />
+<a rel="external" href="https://prometheus.io/docs/prometheus/latest/querying/basics/">https://prometheus.io/docs/prometheus/latest/querying/basics/</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://hub.docker.com/r/prom/prometheus">https://hub.docker.com/r/prom/prometheus</a><br />
+<a rel="external" href="https://blog.outsider.ne.kr/1254">https://blog.outsider.ne.kr/1254</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223112355237/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] ArgoCD: helm과 통합하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223112752812/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Grafana] prometheus와 통합하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

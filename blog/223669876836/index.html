@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] 트래픽 과금 구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223669876836/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] 트래픽 과금 구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223669876836/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-11-22T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223669876836/">[AWS] 트래픽 과금 구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-22T00:00:00+00:00"><time datetime="2024-11-22T00:00:00+00:00">2024.11.22</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1224 words"><time datetime="PT7M">7 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223669876836" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>시스템 규모가 작다면 트래픽 비용에 대해서 과소평가할 수 있지만, 사용량이 많거나 시스템 복잡도, 데이터 규모로 인해서 데이터 송수신 양이 크다면 트래픽도 비용에서 꽤 큰 부분을 차지하게 된다.</p>
+<p>AWS에서 트래픽이 발생하는 구조, 경로, 그리고 트래픽 관련 비용을 최적화하는 방법을 간단히 다뤄본다.</p>
+<p>트래픽 비용의 기준점은 거의 항상 EC2다. EC2 이외의 시스템들도 특별한 언급이 없다면 EC2의 트래픽 과금 기준을 따른다.</p>
+<br>
+<br>
+<br>
+<h2 id="ec2-inteones">EC2 &lt;&gt; 인터넷</h2>
+<p>외부 인터넷에서 EC2에 데이터 전송을 하거나, EC2에서 외부 인터넷에 데이터 전송을 하는 경우다.</p>
+<p>이 경우에는 인터넷-&gt;EC2는 공짜지만, EC2-&gt;인터넷이 유료다.</p>
+<p><img src="/images/img_582fe0f60d58941a.png" alt="" />
+서울의 경우, 1테라어치를 인터넷으로 송신했다면 - 가령 HTTP Response로 1테라어치를 내보냈다면 126달러=176806원이 발생하는 것이다. 매우 비싼 편이다.</p>
+<p>예를 들어, HTTP 통신으로 EC2를 사용한다고 가정하면</p>
+<p><img src="/images/img_c90ea9610540f74d.png" alt="" />
+EC2가 서버 역할일 때는 응답 데이터 크기에 대해서 과금이 부과되고</p>
+<br>
+<p><img src="/images/img_30ba5ffcf50644e7.png" alt="" />
+EC2가 클라이언트 역할일 때는 요청 크기에 대해서 과금이 부과되는 것이다.</p>
+<p>"EC2 =&gt; 인터넷"의 비용 표현은 {Region}-DataTransfer-Out-Bytes로 표현된다.</p>
+<p><img src="/images/img_56db465ee34680ef.png" alt="" />
+이렇게 나오면 "APN2(서울)"=&gt;인터넷으로 9.92달러가 청구되었다는 것이고</p>
+<p>사실 까보면 EC2 뿐만 아니라 대부분의 리소스가 저걸로 잡힌다.</p>
+<p><img src="/images/img_cf855766f9f25c25.png" alt="" />
+LoadBalancer, ECR, RDS, SNS, Lambda, EC2, S3 등 대부분의 리소스가 EC2와 동일한 트래픽 비용 계산을 따르기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ec2-ec2-dongil-rijeon-dongil-az">EC2 &lt;&gt; EC2 - 동일 리전 &amp; 동일 AZ</h2>
+<p>그러면 같은 AWS 내 리소스 간 데이터 전송은 비용이 어떻게 과금될까?<br />
+이것도 AZ, 리전, 추가 네트워크 구성에 따라 다르다.</p>
+<p>일단 동일한 리전 동일한 AZ(가용 영역)에서 트래픽이 오가는 것은 기본적으로 "무료"다.</p>
+<p><img src="/images/img_7c1cd61cadd4f777.png" alt="" /></p>
+<p>Amazon EC2, Amazon RDS, Amazon Redshift, Amazon ElastiCache, Elastic Network Interface 같은 리소스들은 일반적으로 이 규칙을 따른다.</p>
+<p>근데 사실 이렇게만 타면 비용 안나오고 좋긴 한데, 보통은 고가용성을 위해 multi AZ로 구성하다보니 이렇게 이상적으로 통신할 일이 아주 많지는 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="ec2-ec2-dongil-rijeon-dareun-az">EC2 &lt;&gt; EC2 - 동일 리전 &amp; 다른 AZ</h2>
+<p><img src="/images/img_a493f60c32c8fdc6.png" alt="" />
+여기서부터는 양쪽 방향에 요금이 발생한다.</p>
+<p><img src="/images/img_6514bec9cec9a8e8.png" alt="" />
+거의 모든 리전이 비용이 같고, 1GB당 0.01달러가 부과된다. AWS &lt;&gt; 공용 인터넷보다는 싸다.<br />
+만약 송신에 1테라 썼고, 수신에도 1테라 썼다면, 20달러 정도가 나오는 것이다.</p>
+<p>비용 표현은 {Region}-DataTransfer-Regional-Bytes의 형태로 표시된다.</p>
+<p><img src="/images/img_3da80826a836c452.png" alt="" />
+이러면 서울 내에서, 다른 AZ끼리 통신했다는 말이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ec2-ec2-dareun-rijeon">EC2 &lt;&gt; EC2 - 다른 리전</h2>
+<p>여기부터 조금 급격하게 비싸지기 시작한다.</p>
+<p><img src="/images/img_ad4b16fce2a06ace.png" alt="" /></p>
+<p>서울 리전의 경우에는 망사용료 때문인지 다른 리전보다 리전간 비용이 비싸다.</p>
+<p><img src="/images/img_616884a0ece1f4b3.png" alt="" />
+예를 들어, 홍콩&lt;&gt;서울 간 통신으로 1테라어치 트래픽이 발생한다면 80달러가 발생하는 것이다.</p>
+<p>비용 표현은 이런 식으로 되는데<br />
+{Source Region}-{Destination Region}-AWS-In-Bytes<br />
+{Source Region}-{Destination Region}-AWS-Out-Bytes</p>
+<p><img src="/images/img_81f9863c4503158c.png" alt="" /></p>
+<p>{Source Region}-{Destination Region}-AWS-In-Bytes는 Source&lt;=Destination로 갔다는 뜻이고,<br />
+{Source Region}-{Destination Region}-AWS-Out-Bytes는  Source=&gt;Destination로 갔다는 뜻이다.</p>
+<p>근데 좀 특이하게, 이건 항상 한 쌍으로 비용 데이터가 누적된다.<br />
+그러니까, USW1=&gt;APN2로 데이터 전송이 발생했다면, 동일한USW1-APN2-AWS-Out-Bytes, SW1--SW1--AWS-In-Bytes가 동시에 invoce에 쌓이는 것이다.<br />
+물론 비용이 실제로 2배로 쌓이는건 아니고, 그냥 계산서에만 일관성을 위해? 쌓는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="nat-gatewayreul-tonghan-tongsin">NAT Gateway를 통한 통신</h2>
+<p>NAT Gateway는 private subnet에 위치한 private resource가 외부 인터넷과 통신할 때 사용되는 특수한 네트워크 리소스다.<br />
+예를 들어 private 서브넷에 프로비저닝된 EC2가 있고, 그게 외부 인터넷과 통신할 일이 있다면 항상 NAT을 거쳐서 통신이 되고, 비용도 NAT을 기준으로 쌓이게 된다.</p>
+<p><img src="/images/img_a372c0fa76109e71.png" alt="" />
+근데 이건 조금 비싼 편이다.</p>
+<p><img src="/images/img_e73680054f0edddb.png" alt="" />
+서울만 해도 1GB당 0.059인데, 일반적인 리전 내부 통신에 비하면 6배 정도는 비싼 것이다.<br />
+그리고 송신과 수신에 공통적으로 적용된다.</p>
+<p>그래서 NAT으로 지나치게 많이 발생하는 거라면 비용적으로 별로 좋은 네트워크 구조라고 보기는 어렵다.<br />
+private 서버 리소스라면, 가급적 VPC 리전 내부 통신을 위주로 타게 하는 편이 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="dongil-rijeon-vpc-peeringeul-tonghan-teuraepig-coejeoghwa">동일 리전 - VPC Peering을 통한 트래픽 최적화</h2>
+<p>여러개의 VPC끼리 통신을 해야할 경우, 혹은 다른 AWS 계정끼리 통신을 해야할 경우에는 VPC Peering을 통한 트래픽 비용 최적화가 굉장히 효과적일 수 있다.</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223095893226">https://blog.naver.com/sssang97/223095893226</a></p>
+<p>이건 특히 Altas MongoDB, Elasticsearch Cloud 같은 클라우드 리셀러를 사용할 때 유효하다.<br />
+이런건 리소스를 AWS에 프로비저닝하더라도 사실 서로 다른 AWS 계정이기 때문에 공용 인터넷 기준으로 비용이 크게 부과된다.</p>
+<p>하지만 피어링을 구성하면 일반적인 리전 내부 통신과 동일한 비용으로 트래픽 비용이 크게 절감된다.</p>
+<ul>
+<li>일반적인 VPC 내부 통신처럼 동일 AZ는 무료, Cross-AZ는 GB당 0.01달러</li>
+</ul>
+<p>Atlas MongoDB (AWS)의 예시<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223291033247">https://blog.naver.com/sssang97/223291033247</a></p>
+<br>
+<br>
+<br>
+<h2 id="cloudfrontwa-deiteo-jeonsong">Cloudfront와 데이터 전송</h2>
+<p>Cloudfront는 빠른 성능과 저렴한 비용이 특징인 캐싱 레이어 전용 리소스다.</p>
+<p><img src="/images/img_6f81e565cbf344b8.png" alt="" />
+테라바이트 단위로 요금을 계산하기 때문에 다른 트래픽 단위에 비해서 굉장히 저렴하다.<br />
+서울에서 1테라를 써도 0.120달러 정도가 나오는 것이다.</p>
+<p>그래서 접근이 반복적이고 변경 폭이 잦지 않은 데이터라면 반드시 Cloudfront를 기반으로 캐싱해서 조회하는 것을 권장한다.</p>
+<p>청구서에서 비용은 아래와 같은 형태로 표현되는데<br />
+{region}-DataTransfer-Out-Bytes</p>
+<p><img src="/images/img_0795f95577905f19.png" alt="" /></p>
+<p>여기서 리전은 일반적인 리소스 리전이 아니라, Cloudfront만의 고유한 리전 단위다.</p>
+<p><img src="/images/img_636224f2e71c06f8.png" alt="" />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonCloudFront/latest/DeveloperGuide/billing-and-usage-interpreting.html">https://docs.aws.amazon.com/ko_kr/AmazonCloudFront/latest/DeveloperGuide/billing-and-usage-interpreting.html</a><br />
+이렇게만 있다.</p>
+<p>실제로 엣지 서버가 저렇게 10개만 있는건 아니고, 엣지 서버는 많은데 그걸 지역별로 그룹화해서 관리하는 것이다.</p>
+<p><img src="/images/img_f4b9987b24e9df5e.png" alt="" />
+<a rel="external" href="https://aws.amazon.com/ko/cloudfront/features/?whats-new-cloudfront.sort-by=item.additionalFields.postDateTime&amp;whats-new-cloudfront.sort-order=desc#Global_Edge_Network">https://aws.amazon.com/ko/cloudfront/features/?whats-new-cloudfront.sort-by=item.additionalFields.postDateTime&amp;whats-new-cloudfront.sort-order=desc#Global_Edge_Network</a></p>
+<br>
+<br>
+<br>
+<h2 id="s3wa-deiteo-jeonsong-bandeusi-cloudfrontwa-hamgge">S3와 데이터 전송 - 반드시 Cloudfront와 함께!</h2>
+<p>S3의 데이터를 바로 접근하는 것은 일반적으로 권장되지 않는다.</p>
+<p><img src="/images/img_e9f2a25f4827c2ed.png" alt="" />
+업로드는 비용이 없어서 괜찮지만, 데이터 다운로드가 꽤 비싼 편이기 때문이다.<br />
+저기에는 S3 API 요청 요금까지 포함된다.</p>
+<br>
+<p><img src="/images/img_94893acc325dcf4a.png" alt="" />
+근데 AWS=&gt;Cloudfront가 무료고 Cloudfront 자체의 접근 비용이 대단히 저렴하기 때문에, 2가지 서비스는 항상 함께 사용하는 것이 일반적이다.</p>
+<br>
+<br>
+<br>
+<h2 id="privatelinkreul-tonghan-biyong-coejeoghwa">PrivateLink를 통한 비용 최적화</h2>
+<p>PrivateLink는 보안 수칙을 준수하면서도 비용 최적화를 할 수 있는 여지를 주는 보조시스템이다.</p>
+<hr />
+<p>PrivateLink - Gateway Interface 같은 경우에는 NAT Gateway의 저렴한 대안이라고 할 수 있다.<br />
+예를 들어, DynamoDB나 S3 같은 몇몇 서비스들은 동작 방식 자체가 API를 통해 통신을 하는 것이란게 문제가 된다. 이게 공용 인터넷에서 접근하는 거면 괜찮은데, Private Resource에서는 접근이 되지 않을 수도 있다.<br />
+NAT Gateway 같은걸로 구멍을 뚫어도, 아까 위에서 언급했듯이 트래픽당 비용이 꽤 비싼 편이다.</p>
+<p>가령 DynamoDB를 쓰는 경우에는 PrivateLink-Gateway Interface를 뚫으면 그걸 기반으로 안전하고 저렴한 통신이 가능해진다. PrivateLink는 NAT Gateway보다 우선순위가 높아서 NAT을 무시하고 PrivateLink를 통한 전송이 먼저 이루어진다.</p>
+<br>
+<p><img src="/images/img_78e7452fef3da522.png" alt="" />
+시간당 프로비저닝 고정 비용이 있다는게 단점이지만, 데이터 전송량에 따른 요금이 매우 저렴한게 장점이다.</p>
+<p>요금 참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/privatelink/pricing/">https://aws.amazon.com/ko/privatelink/pricing/</a></p>
+<p>상세한 사용 방법은 별도 포스트 참조<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223095960963">https://blog.naver.com/sssang97/223095960963</a></p>
+<br>
+<br>
+<br>
+<h2 id="meoltikeulraudeuneun-coesohwa">멀티클라우드는 최소화</h2>
+<p>멀티클라우드가 대세니 뭐니 그런말도 있지만, 비용적인 부분에서는 좋지 않은 선택일 수도 있다.</p>
+<p>만약 AWS와 GCP를 동시에 사용한다면, 이 둘 간에 발생하는 데이터 전송은 비싼 편에 속하는 "공용 인터넷" 기준으로 부과될 것이다.</p>
+<p>AWS나 다른 AWS 리셀러라면 피어링 같은걸로 최적화 가능한 부분이라도 있지, 아예 다른 클라우드면 최적화할 껀덕지도 없다.</p>
+<p>그래서 뭐 다른 클라우드에 싸고 매력적인 서비스가 있거나, 크레딧이 있더라도, 상호간에 데이터 전송이 크게 발생할 여지가 있다면 도입을 신중하게 고민할 필요가 있다.</p>
+<p>예를 들어 AWS에 서버를 두고 GCP에 DB를 두는건 못할짓이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/ec2/pricing/on-demand/">https://aws.amazon.com/ko/ec2/pricing/on-demand/</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/architecture/overview-of-data-transfer-costs-for-common-architectures/">https://aws.amazon.com/ko/blogs/architecture/overview-of-data-transfer-costs-for-common-architectures/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/whitepapers/latest/how-aws-pricing-works/cloudfront.html">https://docs.aws.amazon.com/whitepapers/latest/how-aws-pricing-works/cloudfront.html</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/architecture/reduce-cost-and-increase-security-with-amazon-vpc-endpoints/">https://aws.amazon.com/ko/blogs/architecture/reduce-cost-and-increase-security-with-amazon-vpc-endpoints/</a><br />
+<a rel="external" href="https://repost.aws/ko/knowledge-center/vpc-reduce-nat-gateway-transfer-costs">https://repost.aws/ko/knowledge-center/vpc-reduce-nat-gateway-transfer-costs</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/architecture/exploring-data-transfer-costs-for-aws-managed-databases/">https://aws.amazon.com/ko/blogs/architecture/exploring-data-transfer-costs-for-aws-managed-databases/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223669498992/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] gvm으로 컴파일러 버전관리하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223664314971/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>검색 최적화 지표: MRR, mAP<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

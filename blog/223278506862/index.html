@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Rust가 동시성 버그를 방지하는 방법 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223278506862/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Rust가 동시성 버그를 방지하는 방법">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223278506862/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-11-29T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223278506862/">Rust가 동시성 버그를 방지하는 방법</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-11-29T00:00:00+00:00"><time datetime="2023-11-29T00:00:00+00:00">2023.11.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="454 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223278506862" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>동시성 프로그램은 현재 21세기 개발에서 가장 큰 화두 중 하나다.<br />
+시스템의 규모가 커질수록 동시성을 활용하는 부분이 기하급수적으로 커지는데, 그에 따른 버그의 추적이나 최적화가 굉장히 어렵기 때문이다.</p>
+<p>C/C++, Go, Java, C# 등의 native thread를 지원하는 대부분의 언어들은 이러한 고질병을 늘 안고 있고, Python, Node.js 등의 싱글스레드 only 런타임들도 로직에 의한 동시성 버그는 늘 발생할 수 있다.</p>
+<p>Rust는 매우 강력한 타입시스템을 기반으로 이러한 문제를 사전에 방지할 수 있는 구조를 갖추고 있다.<br />
+unsafe 도배하는 이상한 짓만 안하면 컴파일타임에 상당수의 동시성 버그를 감지할 수 있다.<br />
+물론 이것이 완벽하다는 말은 아니다. 데드락 같은 논리적인 버그들은 직접 신경을 쓰긴 해야 한다. 하지만 자주 발생하는 일반적인 함정들에 대해서는 보장을 해준다.</p>
+<p>그렇기 때문에 꽤나 높은 난이도에도 불구하고 각광을 받고 있는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="seuredeue-gabs-jeondalhagi">스레드에 값 전달하기</h2>
+<p>대부분의 언어들은 스레드 루틴에 변수를 전달하는 것에 별다른 제약을 두지 않는다.</p>
+<p>하지만 Rust는 변수를 넘기는 것부터 빡세게 제약을 건다.<br />
+만약 아래와 같이 그냥 변수 n을 스레드에서 사용하려 시도하면</p>
+<p><img src="/images/img_f33ad83ffce8d32a.jpg" alt="" /></p>
+<p><img src="/images/img_d8b570020e7b0e78.jpg" alt="" />
+에러가 발생한다.<br />
+move 클로저를 사용해서 move 시맨틱을 통해 값을 이동시켜 사용하라는 것이다.</p>
+<p>새로 만든 스레드는 스레드를 생성한 호출자보다 오래 생존할 수 있기 때문에, 스레드의 캡쳐는 단순히 복사하는 형태로는 이루어질 수 없다.<br />
+그냥 문제를 원천차단하는 것이다.</p>
+<p>근데 Rust는 포인터를 제공하는 low-level 언어다.<br />
+그럼 포인터를 넘기는건 안되는걸까?</p>
+<p><img src="/images/img_8ba5ac9511ac0497.jpg" alt="" /></p>
+<p><img src="/images/img_098011396c1af0b3.jpg" alt="" />
+일반적으로는 안된다.<br />
+"lifetime" 시스템을 통해서, 참조하는 대상이 포인터 변수보다 일찍 죽을 수 있음을 감지해서 에러를 던진 것이다.</p>
+<p>Rust의 타입 시스템에는 단순 타입 정보만 있는게 아니라, 이런 추적을 위한 lifetime 정보도 항상 붙어있다.</p>
+<p>다시 돌아가서, 스레드에 일회성 값을 전달하려면 move 클로저를 사용해서 값을 이동시키면 된다.</p>
+<p><img src="/images/img_04c02cb8048eb6f1.jpg" alt="" /></p>
+<p><img src="/images/img_cf670da930924a5a.jpg" alt="" />
+그럼 잘 동작할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="seuredeu-gongyu-byeonsu-sayonghagi">스레드 공유 변수 사용하기</h2>
+<p>문제가 되는건 보통 여기부터다.</p>
+<p>대부분의 언어에서는 스레드 루틴에 참조변수를 막 넣어서 공유하는 것이 허용되고, 개발자가 직접 동기화를 신경을 써줘야한다. 작은 실수라도 중대한 버그가 될 수 있다.</p>
+<p>앞서 설명했듯 Rust에서 스레드에는 포인터를 그대로 넘기는게 불가능하고, 이동시키기만 할 수 있다.<br />
+그럼 여러 스레드에 걸쳐 공유되는 변수를 어떻게 만들어야 할까?</p>
+<p>해결법은 간단하다.<br />
+하나의 값을 공유하는 형태이면서도 옅은 복사가 가능한 형태의 타입을 사용하면 되는 것이다. 복사시켜서 이동시키면 되니까!</p>
+<p>Rust에서는 이를 내부 가변성 패턴이라고 부르는데, 이에 대한 대표적인 표준 구현체는 Mutex, Channel, Atomic 타입 등이 있다.</p>
+<p>아래는 Arc와 Mutex를 통해 공유 변수를 정의하고 사용하는 간단한 예제다.<br />
+Arc는 atomic reference count 스마트 포인터로, 그냥 복사를 하기 위한 용도로 감싼 것이다.</p>
+<p><img src="/images/img_d2c064c8e76feaae.jpg" alt="" />
+각각의 스레드는 Mutex의 복제된 버전을 전달받고, 그걸 통해 공유 변수를 읽거나 쓸 수 있다.</p>
+<p>근데 Mutex는 또 lock을 걸어야만 내부에 있는 값을 가져올 수 있기 때문에, 결국 스레드 safety가 신택스 수준에서 보장된다고 할 수 있다.</p>
+<p>실행해보면</p>
+<p><img src="/images/img_c2150683f7fdba7a.jpg" alt="" />
+기대한대로 동작할 것이다.</p>
+<p>atomic과 channel 같은 방법도 사용법이 조금 다를 뿐이지, 원리 자체는 거의 비슷하다.<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/223131767231">https://m.blog.naver.com/sssang97/223131767231</a><br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/222272690659">https://m.blog.naver.com/sssang97/222272690659</a></p>
+<p>unsafe를 사용하면 대충 포인터를 넘기는 식으로 해서 제약을 무시할 수도 있지만, 권장되는 방법은 아니다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223277629843/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Rust용 AWS SDK 정식 릴리즈<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223276519147/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Hack] 소개<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

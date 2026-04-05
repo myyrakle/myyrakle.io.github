@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>캐시라인 최적화와 배열 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223422783855/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="캐시라인 최적화와 배열">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223422783855/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-04-21T00:00:00+00:00">
+    <meta property="article:tag" content="최적화">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223422783855/">캐시라인 최적화와 배열</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-04-21T00:00:00+00:00"><time datetime="2024-04-21T00:00:00+00:00">2024.04.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="370 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/coejeoghwa/">최적화</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223422783855" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>캐시라인 최적화는 CPU 캐시가 캐싱을 잘 하도록 유도하는 최적화 유도 기법이다.<br />
+캐시는 생각보다 성능에 지대한 영향을 주는 변인 중 하나다.</p>
+<p>최적화를 논할때 수학적 알고리즘을 이야기하곤 하지만, 결국 모든 코드는 하드웨어에서 돌아간다.<br />
+시간복잡도니 뭐니 하는 것도 실제 하드웨어에 올라가면 맞지 않을 때가 많다.</p>
+<p>이를테면 정렬 알고리즘 중 quick sort가 알고리즘적으로는 N log N ~ N^2 정도의 성능을 보여야 하지만, 다른 대부분의 정렬 알고리즘을 압도하는 실성능을 보이는 것도 캐시 최적화를 굉장히 잘 타기 때문이다.</p>
+<p>캐시 참조는 대략 1-10ns 정도의 시간이 소모되는 반면 메인메모리 참조는 100ns 정도가 소요된다. 최소 10배 정도는 차이가 나는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="kaesiwa-kaesirain">캐시와 캐시라인</h2>
+<p>캐시는 약간 변칙적인 방법에 의거해서 데이터를 가져온다.</p>
+<ol>
+<li>자주 사용되는 값은 당연히 1순위로 캐시에 로드한다.</li>
+<li>가져온 데이터에 주변에 있는 값도 캐시에 로드한다. 이를 지역성(locality)라고 한다.</li>
+</ol>
+<p>그리고 캐시 메모리에서 각각의 캐시 묶음이 저장되는 영역을 캐시라인이라고 부른다.</p>
+<p><img src="/images/img_b1014277f525a015.png" alt="" />
+<a rel="external" href="https://en.algorithmica.org/hpc/cpu-cache/associativity/">https://en.algorithmica.org/hpc/cpu-cache/associativity/</a><br />
+캐시 매커니즘은 현대에 와서는 굉장히 복잡해졌기 때문에, 간단히만 다루고 넘어간다.<br />
+여기서 이야기하고 싶은건 지역성이다.</p>
+<p>예를 들어 CPU는 1004번 주소의 메모리 값을 사용했다면, 근처에 있는 1005, 1006, 1007번에 있는 메모리 값도 곧 사용할 것이라고 추측하고 한번에 캐시에 로드할 수 있다.<br />
+그렇기 때문에 메모리에 가까이 위치한 변수에 접근하는 것은 캐시를 잘 탄다.</p>
+<br>
+<br>
+<br>
+<h2 id="baeyeolgwa-kaesi">배열과 캐시</h2>
+<p>배열은 항상 메모리 연속적으로 데이터가 저장된다.<br />
+그렇기 때문에 locality에 의한 캐시 최적화가 굉장히 잘 되는데, 리스트니 해시테이블이니 뭐니 해도 대부분의 경우 배열이 가장 가볍고 빠른 이유가 이것이다.</p>
+<p>그래서 극적인 수준의 최적화가 필요하다면 배열을 사용하는 것이 최우선순위가 되어야 한다. 정적으로 스택에 할당된 배열인지, 동적으로 힙에 할당된 배열인지는 상관이 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="baeyeolyi-yeonsogjeog-jeobgeun">배열의 연속적 접근</h2>
+<p>배열만 쓴다고 해서 무조건 캐시 최적화가 잘 되는건 아니다.<br />
+결국에는 locality가 중요한 것이기 때문에, 순서대로 접근하거나 계속 근처 가까운 곳에 접근을 해야 한다.<br />
+7 인덱스에 액세스했다가, 544에 액세스했다가 하는 널뛰기식 접근으로는 캐시 최적화가 제대로 이루어지지 않는다.</p>
+<p>아래는 그런 캐시 효율성의 차이를 극적으로 보여줄 수 있는 예시 코드다. 언어는 Rust다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pub struct Timer</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    start</span><span style="color: #9399B2;">:</span><span> std</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:Instant</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl Timer</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub fn</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Timer</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        Timer</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            start</span><span style="color: #9399B2;">:</span><span> std</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:Instant</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">now</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    pub fn</span><span style="color: #89B4FA;font-style: italic;"> elapsed</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self)</span><span style="color: #94E2D5;"> -&gt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:Duration</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        self</span><span style="color: #94E2D5;">.</span><span>start</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">elapsed</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    pub fn</span><span style="color: #89B4FA;font-style: italic;"> elapsed_as_millis</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self)</span><span style="color: #94E2D5;"> -&gt;</span><span> u128</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        self</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">elapsed</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_millis</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    pub fn</span><span style="color: #89B4FA;font-style: italic;"> elapsed_as_secs</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self)</span><span style="color: #94E2D5;"> -&gt;</span><span> u64</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        self</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">elapsed</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_secs</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> ARRAY_SIZE</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10_000_000</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> do_something_with_indices</span><span>(array: </span><span style="color: #94E2D5;">&amp;</span><span>Vec</span><span style="color: #94E2D5;">&lt;</span><span>i32</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span><span> indices: </span><span style="color: #94E2D5;">&amp;</span><span>Vec</span><span style="color: #94E2D5;">&lt;</span><span>usize</span><span style="color: #94E2D5;">&gt;</span><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> i64</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut sum </span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span> indices</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> value</span><span style="color: #94E2D5;"> =</span><span> array[</span><span style="color: #94E2D5;">*</span><span>i]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        sum</span><span style="color: #94E2D5;"> +=</span><span> value</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> i64</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    sum</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> get_randome_indices</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Vec</span><span style="color: #94E2D5;">&lt;</span><span>usize</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    use rand</span><span style="color: #94E2D5;">:</span><span>:seq::SliceRandom;</span></span>
+<span class="giallo-l"><span>    let mut indices</span><span style="color: #94E2D5;"> =</span><span> (</span><span style="color: #FAB387;">0.</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">ARRAY_SIZE</span><span>)</span><span style="color: #94E2D5;">.</span><span>collect::</span><span style="color: #94E2D5;">&lt;</span><span style="color: #F5C2E7;">Vec</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">usize</span><span style="color: #89DCEB;">&gt;</span><span style="color: #94E2D5;">&gt;</span><span>();</span></span>
+<span class="giallo-l"><span>    let mut rng = rand::thread_rng();</span></span>
+<span class="giallo-l"><span>    indices.shuffle(&amp;mut rng);</span></span>
+<span class="giallo-l"><span>    indices</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn get_sequencial_indices() -&gt; Vec</span><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">usize</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    (</span><span style="color: #FAB387;">0.</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">ARRAY_SIZE</span><span>)</span><span style="color: #94E2D5;">.</span><span>collect::</span><span style="color: #94E2D5;">&lt;</span><span style="color: #F5C2E7;">Vec</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">usize</span><span style="color: #89DCEB;">&gt;</span><span style="color: #94E2D5;">&gt;</span><span>()</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn main() </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    let mut array</span><span style="color: #94E2D5;"> =</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[</span><span style="color: #FAB387;">0</span><span>; ARRAY_SIZE];</span></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0.</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">ARRAY_SIZE</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        array[i] = i as i32;</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    println!(&quot;Array Size</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {}</span><span style="color: #A6E3A1;">&quot;, ARRAY_SIZE);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let indices</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> get_sequencial_indices</span><span>();</span></span>
+<span class="giallo-l"><span>    let timer</span><span style="color: #94E2D5;"> =</span><span> Timer::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    do_something_with_indices</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>array</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> &amp;</span><span>indices);</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Seq Access =&gt; Elapsed: {}ms&quot;</span><span style="color: #9399B2;">,</span><span> timer</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">elapsed_as_millis</span><span>());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let indices</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> get_randome_indices</span><span>();</span></span>
+<span class="giallo-l"><span>    let timer</span><span style="color: #94E2D5;"> =</span><span> Timer::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    do_something_with_indices</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>array</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> &amp;</span><span>indices);</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Randome Access =&gt; Elapsed: {}ms&quot;</span><span style="color: #9399B2;">,</span><span> timer</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">elapsed_as_millis</span><span>());</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_d21633a242c7441e.png" alt="" />
+인덱스 배열을 받아서 하나의 함수는 배열을 순서대로 조회해서 합산하고, 하나의 함수는 배열을 랜덤으로 조회해서 합산한다. 차이는 그것 뿐이다.<br />
+후자의 경우는 변화무쌍하게 메모리 접근을 시도하니 당연히 메모리 액세스에 캐시 미스만 주구장창 뜰 것이다.</p>
+<p>하지만 그것만 해도 꽤 큰 성능 차이가 발생한다.</p>
+<p><img src="/images/img_0ec7d8bbf30e01e5.png" alt="" />
+1000만번을 반복했을 경우 8배 정도의 성능차이를 보였고</p>
+<br>
+<p><img src="/images/img_28d8adef584b555f.png" alt="" />
+1억번을 반복했을 경우 9-10배의 성능차이를 보였다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223422020984/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Fortran] 암시적 변수 선언<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223421129609/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Haskell] 변경 가능한 변수 (mutable variable)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>이슈노트 #2: DB 커넥션 과부하 문제 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222395720185/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="이슈노트 #2: DB 커넥션 과부하 문제">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222395720185/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-06-12T00:00:00+00:00">
+    <meta property="article:tag" content="이슈노트">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222395720185/">이슈노트 #2: DB 커넥션 과부하 문제</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-06-12T00:00:00+00:00"><time datetime="2021-06-12T00:00:00+00:00">2021.06.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="306 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/isyunoteu/">이슈노트</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222395720185" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>현재 서비스하는 시스템에 아주 크리티컬한 문제가 있어서 그걸 좀 해결하게 됐다.</p>
+<br>
+<h2 id="munje">문제</h2>
+<p>해당 서비스에서 가장 핵심이라 할 수 있는건 크롤링이었다.<br />
+크롤링을 통해 데이터를 실시간으로 수집하고, 그걸로 데이터를 가공해 비즈니스적으로 사용하는 것이다.</p>
+<p>데이터베이스 사용 구조는 대충 이랬다.</p>
+<p><img src="/images/img_8488deed8d2bb7b4.png" alt="" />
+웹서버는 당연히 데이터베이스에 직통으로 접속하는데,<br />
+크롤러마저도 데이터베이스에 직통으로 꼽고 있어서 문제가 발생한 것이다.<br />
+심지어 크롤러의 인스턴스는 엄청나게 많고, 계속 늘어나는 중이었다.</p>
+<p>보통 크롤러를 사용할 때는 카프카 같은 고성능 큐를 중간에 넣어서 데이터베이스에 간접적으로 접근하는 방식을 사용하지만, 기존 구조를 건드리기는 여러모로 껄끄러운 상황이었다.</p>
+<p>아무튼 그러한 상황에서...<br />
+크롤러들 때문에 데이터베이스의 커넥션 최대 제한을 넘어서는 일이 비일비재했다.</p>
+<p><img src="/images/img_907581d95a3844b8.png" alt="" />
+커넥션 최대 제한수를 넘으면 어떻게 될까?<br />
+데이터베이스 접속이 막힌다.<br />
+기존에 접속중인 개체들은 괜찮지만 신규접속은 불가능하다.</p>
+<p>이 말은, 추가적인 크롤러의 가동도 불가능하고, 서버의 재배포도 불가능해진다는 것이다.</p>
+<p>서버도 서버지만 크롤러가 핵심인데 자꾸 크롤러가 터지니, 결국 문제해결에 적극적으로 나서게 됐다.</p>
+<p>데이터베이스 스펙을 올리면 커넥션 제한도 늘릴 수 있긴 한데, 스펙 자체는 지금도 좀 과해서 비용이 과도하게 부과되는 상태였다. 게다가 커넥션 수 자체도 비정상이긴 했고.</p>
+<br>
+<br>
+<br>
+<h2 id="bunseog">분석</h2>
+<p>그런데 사실 크롤러 인스턴스가 아무리 많다 해도 당시 커넥션 한계치였던 1700개를 넘어서진 않는다.<br />
+아마 아무리 많아도 500개는 안됐을 것이다.</p>
+<p>그래서 커넥션 관련해 크롤러가 제대로 종료를 하지 않아서 커넥션 누수가 발생하는 것 같다고 계속 생각은 하고 있었다.</p>
+<p>그런데 코드를 또 보면 finally 절로 커넥션을 반드시 해제해주고 있었다는 것이 희대의 미스테리였다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span><span> createPool</span><span style="color: #9399B2;">,</span><span> format</span><span style="color: #9399B2;"> }</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &quot;mysql2/promise&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">let</span><span> connectionPool</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> createPool</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    host</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;...&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    port</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;...&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    password</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;...&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async</span><span style="color: #89B4FA;font-style: italic;"> run</span><span>(query: string)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> connection</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        connection</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span> connectionPool</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">getConnection</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        await</span><span> connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">query</span><span>(query)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> catch</span><span> (e)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // ...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> finally</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        connection</span><span style="color: #94E2D5;">?.</span><span style="color: #89B4FA;font-style: italic;">release</span><span>()</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> //무조건 해제</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>우리는 난관에 봉착했다...</p>
+<br>
+<br>
+<br>
+<h2 id="haegyeol">해결</h2>
+<p>코드를 좀 보다보니, 결국엔 커넥션 해제 코드를 의심하게 됐다.<br />
+이놈이 해제를 해주는게 맞긴 한가?</p>
+<p>근데 코드를 다시 유심히 보니, 커넥션을 바로 쓰는 게 아니라 createPool로 커넥션 풀을 만들어 쓰고 있었다.<br />
+그래서 결국 풀을 원인으로 보고, 공식문서를 참조해봤는데...</p>
+<p><img src="/images/img_05f5d2a9d7fc9179.png" alt="" />
+세상에. 지정하지 않았던 옵션값인 connectionLimit가, 기본값이 10이라고 한다.</p>
+<p>그러니까, 아무리 풀에 커넥션을 반환해줘도 커넥션 풀은 최대 10개까지 잡고 있을 수가 있다는 것이다.<br />
+인스턴스가 500개면 커넥션을 최대 5000개까지 물고 있을 수 있는 것이고...</p>
+<p>아무튼 그래서 저 값을 2로 고정해주는 것으로 해결을 보았다.</p>
+<p>이렇듯 해결책은 의외로 간단한 곳에서 나오기도 한다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222395985480/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] S3 (Simple Storage Service)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222393388838/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] Nightly: 제너레이터<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

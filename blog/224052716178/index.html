@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 표준 Mutex와 tokio Mutex | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224052716178/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 표준 Mutex와 tokio Mutex">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224052716178/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-10-24T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224052716178/">[Rust] 표준 Mutex와 tokio Mutex</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-10-24T00:00:00+00:00"><time datetime="2025-10-24T00:00:00+00:00">2025.10.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="649 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224052716178" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>비동기 Rust를 접한 사람들이 혼란을 겪을 만한 부분 중 하나가 바로 Mutex다.</p>
+<p>표준 라이브러리에도 Mutex가 있는데, 비동기 런타임인 tokio에도 자체 구현 Mutex가 있기 때문이다.</p>
+<p><img src="/images/img_581a9ea90f2225c6.png" alt="" />
+뭐가 다르고, 뭘 써야하는걸까?</p>
+<p>tokio에서 제공하니까 tokio를 쓰는 상황에서는 항상 적합하다고 생각하기 쉽지만, 꼭 그렇지는 않다.<br />
+tokio에서도 기본적으로는 표준 뮤텍스를 쓰는 것을 권장하기 때문에, 내부 동작 방식과 tradeoff를 이해하고서 선택해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="api-bigyo">API 비교</h2>
+<p>대략적인 사용 방법은 비슷하나, 세세한 부분에서 다르다.</p>
+<p><img src="/images/img_8b9ee560cd72fd20.png" alt="" />
+표준 뮤텍스는 현재의 OS 스레드를 블락할 수 있는 형태로 동작하며, Result를 반환한다.<br />
+Result를 반환하는 이유는, 뮤텍스틀 잡은 채로 스레드가 패닉으로 죽으면 "poison" 상태가 되어 뮤텍스 사용을 잠가버리는 동작을 가지기 때문이다.</p>
+<br>
+<p><img src="/images/img_2cae03ce21fd68ea.png" alt="" />
+tokio 뮤텍스는 현재의 tokio Task를 블락하는 형태로 동작하며, 락을 잡는 행위 자체가 Future 기반으로 동작한다. 그리고 이건 poison 상태가 없어서 실패여부 체크가 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="tokio-mutex-internal">tokio Mutex Internal</h2>
+<p>그럼 tokio의 Mutex는 어떻게 만들어진 녀석일까?<br />
+사실 이건 Mutex를 완전하게 만들어낸건 아니고, 표준 Mutex를 복잡하게 래핑해둔 래퍼에 가깝다.</p>
+<p><img src="/images/img_738a42a69e2f75a3.png" alt="" />
+들어가보면 자체 구현 세마포어를 내장하고</p>
+<br>
+<p><img src="/images/img_7415ec6f0f70dafa.png" alt="" />
+그 세마포어는 또 내부 표현용 뮤텍스를 갖고 있는데</p>
+<br>
+<p><img src="/images/img_40ae80a032d65fc3.png" alt="" />
+그 세마포어는 표준 뮤텍스의 래퍼다.</p>
+<br>
+<p><img src="/images/img_b4d038bca9a5dfd6.png" alt="" />
+그리고 자체적인 대기열을 내장하고 있다.<br />
+그래서 tokio의 Mutex lock은 FIFO 기반으로 동작하며, 최소한의 공정성을 보장한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gongjeongseong-fairness">공정성 (Fairness)</h2>
+<p>표준 뮤텍스의 경우에는 공정성이 존재하지 않는다.<br />
+먼저 기다렸다고 해서 먼저 lock을 점유하는건 아니라는 것이다.<br />
+그래서 스레드 처리의 공정성이 많이 떨어질 수 있다.</p>
+<p>반면 tokio의 뮤텍스는 FIFO 기반의 큐를 사용해서 최소한의 공정성이 보장된다.<br />
+먼저 기다렸다면, 먼저 lock을 획득할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="seuredeu-cadan-munje">스레드 차단 문제</h2>
+<p>표준 뮤텍스는 lock을 실행할때 대기가 발생할 경우, 현재 함수를 스레드에서 차단할 수 있다.<br />
+이 말인즉슨 현재 함수를 OS의 스케줄러에 집어넣고 진짜 실행을 멈춘다는 것이다.</p>
+<p>이 방식은 std::thread를 쓰는 방식에서는 완전히 의도된 동작이고 효율적이지만, tokio를 쓰는 상황에서는 의도와 다르게 동작할 수 있다.<br />
+tokio의 Task는 여러개의 Task가 하나의 OS 스레드 위에서 나뉘어 실행될 수 있고, OS 스레드를 블락하면 그 OS 스레드에 소속된 Task들이 전부 차단되는 부작용을 야기할 수 있기 때문이다. 그래서 의도치 않은 데드락을 유발할 수 있다.</p>
+<p>반면 tokio Mutex는 lock().await을 실행할때 대기가 발생한다면, 멈추되 다른 Task에게 자연스럽게 스레드 사용을 양보할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="mutex-jeomyu-sangtaeeseoyi-await">Mutex 점유 상태에서의 await</h2>
+<p>표준 뮤텍스는 근본적인 한계를 가지고 있다.<br />
+lock을 점유한 상태에서 await을 사용하는 것이 불가능하다는 것이다.</p>
+<p><img src="/images/img_8067c0f00108e9c2.png" alt="" /></p>
+<p><img src="/images/img_e74352cbbd62213a.png" alt="" />
+표준 뮤텍스는 Send를 구현하나, 표준 뮤텍스의 Guard가 Send를 구현하지 않고, await 호출은 반드시 Send를 요구하기 때문이다. 기본적으로 MutexGuard는 다른 스레드에 전송되는 것을 고려하지 않은 타입이다.</p>
+<p>근데 await을 호출하게 되면 해당 함수는 tokio runtime에 제어권을 넘기게 되고, 해당 함수가 다른 스레드에서 재실행될 수도 있음을 뜻하게 된다.<br />
+표준 뮤텍스는 이런 것을 상정한 기능이 아니기 때문에, 만약 허용이 되었다고 해도 오동작을 했을 것이다.</p>
+<p>이런 상황에서는 반드시 tokio Mutex를 써야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="risoseu-hyoyulseong">리소스 효율성</h2>
+<p>그럼에도 불구하고 tokio의 Mutex는 기본적으로 표준 Mutex보다는 비용이 많이 든다.</p>
+<p>그래서 CPU 집약적인 워크로드라면, 그리고 lock 점유 시간이 짧은 경우라면 표준 뮤텍스를 쓰는 것이 강력하게 권장된다. 예를 들어 코어 스레드 20개에 빅데이터를 올리고 분할해서 연산하는 경우라든지...</p>
+<p>반면 I/O 집약적인 워크로드라면, tokio Mutex를 쓰는 것이 보다 효율적이다. 그리고 lock 점유 시간이 길다면 더욱 그렇다. 그래서 사실 일반적인 경우에는 tokio Mutex를 쓰는 편이 더 자연스럽긴 하다.<br />
+애초에 async 런타임 자체가 I/O 집약적인 경우를 위해 설계된 것이기도 하고.</p>
+<br>
+<br>
+<br>
+<h2 id="geuraeseo">그래서</h2>
+<p>일반적인 경우에는, tokio Mutex를 쓰는 것이 대체로 더 나을 수 있다.</p>
+<p>tokio 뮤텍스가 적절한 곳에 표준 뮤텍스를 쓰면 컴파일조차 안되거나 예상치 못한 문제를 일으킬 수 있는 반면에,<br />
+표준 뮤텍스가 적절한 곳에 tokio 뮤텍스를 쓰는건 미미한 성능 저하(CPU 바운드) 정도가 전부이기 때문이다.</p>
+<p>내가 볼 때는 tokio 뮤텍스를 먼저 써보고 성능에 문제가 있다면 표준 뮤텍스를 써도 충분하다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/73840520/what-is-the-difference-between-stdsyncmutex-vs-tokiosyncmutex">https://stackoverflow.com/questions/73840520/what-is-the-difference-between-stdsyncmutex-vs-tokiosyncmutex</a><br />
+<a rel="external" href="https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html">https://docs.rs/tokio/latest/tokio/sync/struct.Mutex.html</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/224019441610">https://blog.naver.com/sssang97/224019441610</a><br />
+<a rel="external" href="https://www.linkedin.com/pulse/comparison-between-stdsyncmutex-tokiosyncmutex-async-rust-nadiger-3tnlc/">https://www.linkedin.com/pulse/comparison-between-stdsyncmutex-tokiosyncmutex-async-rust-nadiger-3tnlc/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224054332672/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] CLI: xxd<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224051484482/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[MongoDB] 인덱스 힌트<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ECS - Container Insights with Enhanced Observability | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223694641638/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ECS - Container Insights with Enhanced Observability">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223694641638/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-12-16T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223694641638/">[AWS] ECS - Container Insights with Enhanced Observability</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-12-16T00:00:00+00:00"><time datetime="2024-12-16T00:00:00+00:00">2024.12.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="259 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223694641638" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://aws.amazon.com/ko/blogs/korea/container-insights-with-enhanced-observability-now-available-in-amazon-ecs/">https://aws.amazon.com/ko/blogs/korea/container-insights-with-enhanced-observability-now-available-in-amazon-ecs/</a><br />
+ECS에 "향상된 Container Insight"라고 하는 강화된 메트릭 시스템이 추가되었다.</p>
+<p>기존에 기본 제공되던 ECS 메트릭 시스템은 사실 그렇게 좋다고 하기는 어려웠다.</p>
+<p><img src="/images/img_4d6b29e16358c6bd.png" alt="" />
+CPU나 메모리 사용량 같은 기본적인 지표는 볼 수 있었지만, 태스크별로 세분화해서 본다거나 하는 것도 없고, 실질적으로 추적에 도움이 되는 지표도 거의 없었기 때문이다.</p>
+<p>그래서 이래저래 강화해서 추가한게 이번의 "Container Insights with Enhanced Observability"다.<br />
+이름을 뭐이리 개떡같이 지었는지...</p>
+<br>
+<br>
+<br>
+<h2 id="hwalseonghwahagi">활성화하기</h2>
+<p>이 옵션은 구 Container Insight와 동일하게 클러스터 수준으로 적용되는 옵션이다.<br />
+그래서 클러스터를 만들때 켜거나, 클러스터 수정에서 바로 수정을 할 수도 있다.</p>
+<p><img src="/images/img_e2f9fea285c632c7.png" alt="" />
+이 수정은 다운타임이나 교체 없이 바로 이루어진다.</p>
+<p>켜놓고 조금 기다리면 쌓이기 시작할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="meteurigeuro-idonghagi">메트릭으로 이동하기</h2>
+<p>"Container Insights with Enhanced Observability"... 이제부터는 그냥 Container Insights라고 부르겠다.<br />
+새로 생긴 Container Insights는 기존 메트릭 뷰에 뜨는게 아니라, 별도 페이지로 이동해서 보는 형식이다.</p>
+<p><img src="/images/img_58e68ff2a78f9b23.png" alt="" />
+클러스터의 지표 탭 - [컨테이너 인사이트 보기]로 이동하거나</p>
+<br>
+<p><img src="/images/img_94c567cc3d668a45.png" alt="" />
+각 서비스의 [컨테이너 인사이트 보기]로도 이동할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="meteurig-gaeyo">메트릭 개요</h2>
+<p>들어가면, 이런식으로 요란한 페이지가 뜬다.</p>
+<p><img src="/images/img_8af861de36396b2d.png" alt="" />
+총 태스크들의 전체 사용률을 바로 볼 수도 있고</p>
+<br>
+<p><img src="/images/img_da3be8b06972031a.png" alt="" />
+들어있는 서비스들의 각 사용량도 바로 볼 수 있다.</p>
+<br>
+<p><img src="/images/img_f2d12f8c38da393f.png" alt="" />
+그리고 내 기준에 가장 눈에 띄는 개선점은, Task-단일 작업별로도 메트릭을 확인할 수 있다는 것이다.<br />
+아직 필터에 자동완성 기능이 좀 딸리던데, 이건 향후 개선되리라 본다.</p>
+<p>각 컨테이너별로 보는 것도 있다.</p>
+<p><img src="/images/img_be1c170a2a3895df.png" alt="" />
+서비스에 멀티컨테이너를 말아서 쓴다면 유용하게 사용할 수 있겠다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223695895330/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] timestream - LiveAnalytics<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223693145148/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>쿠버 스펙 정리 문서.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

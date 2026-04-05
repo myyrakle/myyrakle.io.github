@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[ARM] 메모리 태그 확장(Memory Tag Extension) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223429382716/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[ARM] 메모리 태그 확장(Memory Tag Extension)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223429382716/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-04-28T00:00:00+00:00">
+    <meta property="article:tag" content="하드웨어">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223429382716/">[ARM] 메모리 태그 확장(Memory Tag Extension)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-04-28T00:00:00+00:00"><time datetime="2024-04-28T00:00:00+00:00">2024.04.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="668 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/hadeuweeo/">하드웨어</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223429382716" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Memory Tag Extension. 이하 MTE는 Arm v9에서 새로이 도입된 보안 관련 하드웨어 수준 기능이다.<br />
+안드로이드 환경과 연관이 매우 깊다.</p>
+<p>사실 안드로이드 환경에서만 진지하게 접근하는 것 같다. 아마 일반적인 임베디드 환경들은 저런것도 낭비라고 생각할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="andeuroideuwa-boan-munje">안드로이드와 보안 문제</h2>
+<p>알 사람은 알겠지만, 모바일 기기에서는 전력 같은 문제 때문에 대부분 ARM 계열 프로세서를 사용한다. 대부분의 안드로이드 기기들도 퀄컴 같은 ARM 프로세서를 적용한다.</p>
+<p>또 알 사람은 알겠지만, 안드로이드는 보안 문제가 굉장히 많은 편이 속한다.<br />
+게다가 그 문제의 상당수는 취약한 메모리 관리에 기인한다.<br />
+메모리 관련 주요 취약점의 원인은 아래 2가지가 많았다.</p>
+<ol>
+<li>
+<p>Use After Free - 해제된 메모리를 재사용</p>
+</li>
+<li>
+<p>Buffer Overflow - 버퍼 오버플로를 통한 경계 침범</p>
+</li>
+</ol>
+<br>
+<br>
+<p>1번은 해제된 메모리를 들고 있다가, 나중에 그 메모리 위치에 다른 데이터가 들어왔을 때 조작이 가능하다는 취약점을 유도한다. 이를 시간적 안전성(Temporal safety)이 파괴된다고 말한다.<br />
+2번은 현재 점유하고 있는 메모리 위치를 넘어서서 다른 데이터를 마음대로 조작할 수 있다는 취약점을 유도한다. 이를 공간적 안전성(Spatial safety)이 파괴된다고 말한다.</p>
+<p>이런 취약점이 사방에서 돌출된 이유는 C/C++을 그냥 그대로 사용해서 Android를 작성했기 때문도 있었다.</p>
+<p>그래서 구글에서는 Android 자체를 Rust로 재작성하려는 시도를 계속 하고 있다. 하지만 MTE를 사용하면 하드웨어 수준 지원으로 간결하게 해결할 수 있기 때문에 눈여겨보고 있는 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="memory-tag-extension">Memory Tag Extension</h2>
+<p>ARM은 이를 Tag라는 추가 데이터를 삽입해서 보안 문제를 최소화하고자 했다.</p>
+<p><img src="/images/img_2ec0ac1bed906763.png" alt="" />
+첫째로, 메모리를 할당하면 해당 메모리의 최상위 4바이트에 태그 정보를 저장한다.<br />
+태그 정보에는 해당 메모리 시퀀스의 크기가 얼마인지 정도가 들어간다. 그리고 그걸 통해서 태그 정보에 기입된 크기 이상으로 메모리 참조를 시도하면 오류를 발생시키는 것이다.<br />
+이 기법은 버퍼 오버플로를 방지한다.</p>
+<br>
+<p><img src="/images/img_0ff898d449a54fd5.png" alt="" />
+둘째로, free를 통해 메모리를 해제하면 태그 정보를 초기화한다.<br />
+메모리 해제 이후에 다시 기존 포인터로 접근을 시도하면 포인터의 태그 정보와 메모리 위치의 태그 정보가 일치하지 않기 때문에 오류를 발생시킨다.<br />
+이 기법은 Use After Free 문제를 방지한다.</p>
+<br>
+<br>
+<br>
+<h2 id="inseuteureogsyeon-sujun-jiweon">인스트럭션 수준 지원</h2>
+<p>MTE를 달성하기 위해 추가된 ARM 인스트럭션은 다음과 같다.<br />
+어차피 우리가 직접 어셈블리를 작성하는건 아니니까, 잘 몰라도 되긴 한다.</p>
+<ol>
+<li>IRG: 태그값을 랜덤으로 할당한다.<br />
+<a rel="external" href="https://developer.arm.com/documentation/ddi0602/2024-03/Base-Instructions/IRG--Insert-Random-Tag-">https://developer.arm.com/documentation/ddi0602/2024-03/Base-Instructions/IRG--Insert-Random-Tag-</a></li>
+<li>STG: 할당한 태그값을 메모리로 가져온다. (store)<br />
+<a rel="external" href="https://developer.arm.com/documentation/ddi0602/2024-03/Base-Instructions/STG--Store-Allocation-Tag-">https://developer.arm.com/documentation/ddi0602/2024-03/Base-Instructions/STG--Store-Allocation-Tag-</a></li>
+<li>LDG: 메모리에서 할당된 태그값을 가져온다. (load)<br />
+<a rel="external" href="https://developer.arm.com/documentation/ddi0602/2024-03/Base-Instructions/LDG--Load-Allocation-Tag-">https://developer.arm.com/documentation/ddi0602/2024-03/Base-Instructions/LDG--Load-Allocation-Tag-</a></li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="andeuroideu-aepeulrikeisyeone-jeogyonghagi">안드로이드 애플리케이션에 적용하기</h2>
+<p>Android 12부터 지원된다.<br />
+이건 OS 수준의 문제이긴 하지만, 각각의 앱 수준에서도 수동으로 on/off할 수 있는 기능을 제공한다.</p>
+<p>매니페스트 파일인 AndroidManifest.xml을 수정해서 android:memtagMode라는 필드를 조정하면 명시적으로 활성화할 수 있다.</p>
+<p><img src="/images/img_aa14b19c00f17463.png" alt="" />
+android에서 mte 모드는 크게 sync 모드와 async 모드로 제공된다. 둘다 메모리 침범이 발생하면 프로세스가 중단되는건 동일하다.</p>
+<p>sync는 성능보다는 정확한 오류 보고에 주안점을 둔다. 디버깅이나 테스트를 할때 좋은 선택이다.<br />
+async는 오류 보고보다는 성능에 초점을 둔 모드다. 오류 보고는 잘 되지 않지만 빠르게 최적화된다. 프로덕션 빌드에는 이 옵션이 좋다.</p>
+<p>참조<br />
+<a rel="external" href="https://developer.android.com/reference/android/R.attr#memtagMode">https://developer.android.com/reference/android/R.attr#memtagMode</a></p>
+<br>
+<br>
+<br>
+<h2 id="danjeom">단점</h2>
+<p>하드웨어 수준 지원이 필요하다. 그래서 하드웨어에서 MTE를 지원하지 않으면 말짱 도루묵이다.<br />
+아마 최근에 나온 퀄컴 같은 곳의 칩셋들은 지원을 할 것이다.</p>
+<p>랜덤성이 부족할 수 있다. 무작위의 태그 정보를 넣어서 일치하지 않으면 튕겨버리는 수법인데, 태그 사이즈가 4바이트 정도밖에 되지 않는다. 제대로 노리고 조진다면 어떻게 걸릴 수도 있다.</p>
+<p>추가 메모리와 연산이 들어가는 것이다보니, 하지 않을때보다는 미세한 성능 낭비가 존재할 수 있다. 물론 이게 크리티컬한 수준이 되기는 쉽지 않을 것이라고 본다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@pensieveview/MTE-Memory-Tagging-Extension-%EB%A9%94%EB%AA%A8%EB%A6%AC%ED%83%9C%EA%B9%85">https://velog.io/@pensieveview/MTE-Memory-Tagging-Extension-%EB%A9%94%EB%AA%A8%EB%A6%AC%ED%83%9C%EA%B9%85</a><br />
+<a rel="external" href="https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/enhancing-memory-safety">https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/enhancing-memory-safety</a><br />
+<a rel="external" href="https://source.android.com/docs/security/test/memory-safety/arm-mte">https://source.android.com/docs/security/test/memory-safety/arm-mte</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223431386470/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>액세스 제어 패턴: RBAC, ABAC<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223429629849/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>캐시 교체 알고리즘<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

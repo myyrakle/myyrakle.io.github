@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Join | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222066563015/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Join">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222066563015/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2020-08-21T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222066563015/">[PostgreSQL] Join</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-08-21T00:00:00+00:00"><time datetime="2020-08-21T00:00:00+00:00">2020.08.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="465 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222066563015" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>본 포스트에서는, 문법이 아니라 내부동작의 종류에 대해서 다룬다.</p>
+<p>postgresql은 크게 중첩 루프 조인, 해시 조인, 병합 조인을 지원한다.</p>
+<br>
+<br>
+<h2 id="jungceob-rupeu-nested-loop-nl-join">중첩 루프(Nested Loop:NL) 조인</h2>
+<p>중첩 루프 조인은 가장 간단하며, 기본적인 형태의 조인이다.<br />
+A와 B 테이블을 조인한다면, A로 반복 루프를 돌리고, 그 안에 B 중첩루프를 돌려서 일치하는걸 뱉어내는 것이다.</p>
+<p>일반적으로 join 조건으로 비교연산 등을 행할 때 중첩루프 조인이 발생하는 듯 하다.<br />
+=로 동등 비교를 할 때는 중첩루프 조인이 잘 뜨지 않는다. 해시조인 쓰라고.</p>
+<p><img src="/images/img_51d576915f446d37.png" alt="" /></p>
+<p>필터링 없이 무작정 다 긁어올 때도 중첩루프 조인이 뜬다.</p>
+<p><img src="/images/img_2e7da56f5a801fe0.png" alt="" /></p>
+<p>일반적으로 중첩루프조인은 모든 각 데이터를 순회하면서 인덱스 스캔을 쏘는 방식을 가지기 때문에, 조인 중에서도 가장 시간적 비용이 많이 든다고 한다.<br />
+하지만 단순한 구조 덕에 데이터가 적을 때는 가장 효율적이다.<br />
+별도로 메모리를 먹는게 거의 없기 때문이다!</p>
+<p>밑에 나오는 해시조인이나 병합조인이 속도면에서는 더 빠른 편이긴 하지만, CPU와 메모리를 좀 과도하게 사용하는 편이다.<br />
+그래서 NL조인이 아주 비효율적인 상황이 아니라면, NL 조인을 쓰는 것이 바람직하다.<br />
+NL 조인으로도 약 0.1초 걸리는 적당한 쿼리를 굳이 0.01 걸리는 해시조인으로 바꾸지는 말라는 말이다.</p>
+<br>
+<br>
+<br>
+<h2 id="haesi-hash-join">해시(Hash) 조인</h2>
+<p>해시조인은 내부적으로 한 테이블에 대한 해시테이블을 생성하고, 그걸 통해서 빠른 랜덤 매칭을 노리는 조인 방법이다. 조인 조건에 동등 비교를 걸 때 주로 발생한다.</p>
+<p><img src="/images/img_21afa86200449575.png" alt="" />
+위 쿼리플랜을 해석해보면,<br />
+Person 테이블로 해시테이블을 만들고, Person 해시테이블과 Text 테이블을 비교(Hash Cond)해 조인을 수행한다는 뜻이다.</p>
+<p>그리고 해시테이블은 일반적으로 더 작은 테이블에 생성한다. 가급적 메모리에 올려서 처리하려고 하기 때문이다.<br />
+위의 경우에도 texts 테이블은 데이터가 수만개, persons 테이블은 열개밖에 되지 않았다.</p>
+<p>해시조인은 병합조인의 조금 더 발전된 형태라 봐도 무방하다.<br />
+웬만해서는 hash join이 더 적용하기도 쉽고, 빠르기 때문이다.</p>
+<p>게다가 집합 중 하나가 오버사이즈라도 다른 하나가 충분히 작다면 in-memory 조인이 가능하다.<br />
+둘다 오버사이즈라서 다 디스크에 쓰더라도 웬만큼은 빠르고.</p>
+<br>
+<br>
+<br>
+<h2 id="byeonghab-merge-join">병합(Merge) 조인</h2>
+<p>병합조인은 예전에는 해시조인의 위치를 차지하고 있던 조인 기법이지만, 해시조인이 등장하고 나서는 해시조인의 빈자리를 메꾸기만 하는 느낌이다. 병합조인도 마찬가지로 대량 처리에 효율적인 조인이다.</p>
+<p>병합조인을 사용하기 위해서는 각 테이블에 대해서 인덱스 스캔이 떠야 한다.<br />
+때문에 text_id에 인덱스를 추가하겠다.</p>
+<p><img src="/images/img_8bd289f76ee6d5f2.png" alt="" /></p>
+<p>그리고 다시 조인을 시도해봤다.</p>
+<p><img src="/images/img_ee6ec85125691836.png" alt="" />
+음?<br />
+text_id과 t.id 둘다 인덱스가 걸렸음에도 순차스캔만으로 해시조인을 해버렸다.</p>
+<p>사실 추가적인 조건이 또 있다.<br />
+양쪽 테이블이 인덱스 기준으로 정렬이 되어있어야 한다.</p>
+<p><img src="/images/img_47eb2e642150e511.png" alt="" /></p>
+<p>해시조인이 등장하고 나서는 쓰일 곳이 많이 줄어든 편이다.<br />
+추가로 정렬 처리도 해줘야 하고, 인메모리 연산도 해시조인보다 어렵기 때문이다.<br />
+해시조인은 하나만 메모리에 올라갈 크기면 되지만, 병합조인은 둘다 메모리에 올라가야 인메모리 연산이 가능하다.</p>
+<p>그래도 병합조인이 빛을 발하는 한가지 장점이 있으니, 조인 조건이 동등 조건(=)이 아닌 경우에는 해시조인보다 유리하다는 것이다.<br />
+그럴 때는 병합조인이 최적이다.</p>
+<br>
+<p>그래서 조인 선택은</p>
+<ol>
+<li>작은 데이터 조인 -&gt; NL조인</li>
+<li>큰 데이터 조인 -&gt; 해시조인</li>
+<li>큰 데이터면서 조인 조건식이 =이 아닐때 -&gt; 병합조인</li>
+</ol>
+<p>정도로 정리하면 될 것이다.</p>
+<br>
+<p>참조<br />
+"『친절한 SQL 튜닝』, 조시형, 디비안(2018)"<br />
+<a rel="external" href="https://severalnines.com/database-blog/overview-join-methods-postgresql">https://severalnines.com/database-blog/overview-join-methods-postgresql</a><br />
+<a rel="external" href="https://gs.saro.me/dev?page=20&amp;tn=453">https://gs.saro.me/dev?page=20&amp;tn=453</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222071209017/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Java] Gradle로 java 시작하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222066682848/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[SQL] 기본 연산자<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

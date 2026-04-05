@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] FFI: pyo3 - Python에 Rust 코드 연동하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223072977222/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] FFI: pyo3 - Python에 Rust 코드 연동하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223072977222/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-04-13T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223072977222/">[Rust] FFI: pyo3 - Python에 Rust 코드 연동하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-04-13T00:00:00+00:00"><time datetime="2023-04-13T00:00:00+00:00">2023.04.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="293 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223072977222" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>파이썬은 여러모로 타 언어들에 종속적인 언어라 할수있다.<br />
+태생적인 성능문제 때문에 어느정도 성능이 요구되는 모듈은 태반이 C/C++로 작성되기 때문이다.</p>
+<p>근데 아무래도 C/C++는 여러모로 불편한 점이 많다보니... 대안으로 Rust도 사용해볼만하다고 본다.<br />
+한번 rust로 모듈을 짜서 python에서 사용하는 방법을 다뤄보도록 하겠다.</p>
+<p>가장 정통적인 방법을 추구한다면 그냥 rust에서 C FFI로 동적 라이브러리를 뽑아서 파이썬에서 사용하는 것이겠지만, 여기서는 좀더 편리한 방법을 사용해보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="junbimul">준비물</h2>
+<p>Rust와 Python이 당연히 깔려있어야 한다.<br />
+버전 최소 요구사항은 CPython 3.7, Rust 1.48다.</p>
+<p>OS는 Linux나 Mac인 편이 좋다. windows는 좀 많이 불편하거나 잘 안될 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="rust-kodeu-jagseong">Rust 코드 작성</h2>
+<p>먼저 Cargo.toml은 다음과 같이 해둔다.<br />
+종속성은 pyo3 뿐이면 된다. 그리고 동적 라이브러리로 빌드할 수 있도록 lib 구성을 적절해 해둔다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[package]</span></span>
+<span class="giallo-l"><span>name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;pyrust&quot;</span></span>
+<span class="giallo-l"><span>version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.1.0&quot;</span></span>
+<span class="giallo-l"><span>authors</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;sssan&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>edition</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;2021&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[lib]</span></span>
+<span class="giallo-l"><span>name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;pyrust&quot;</span></span>
+<span class="giallo-l"><span>crate</span><span style="color: #94E2D5;">-</span><span>type</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;cdylib&quot;</span><span>]</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[dependencies]</span></span>
+<span class="giallo-l"><span>pyo3</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.18.2&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;extension-module&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span></code></pre>
+<p><img src="/images/img_3626a2fd60c4c1dc.png" alt="" />
+여기서 [lib].name이 파이썬 모듈명이 된다.</p>
+<p>코드는 다음과 같이 작성하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use pyo3</span><span style="color: #9399B2;">:</span><span>:prelude</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[pyfunction]</span></span>
+<span class="giallo-l"><span>pub fn</span><span style="color: #89B4FA;font-style: italic;"> sum</span><span>(nums: Vec</span><span style="color: #94E2D5;">&lt;</span><span>i64</span><span style="color: #94E2D5;">&gt;</span><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> PyResult</span><span style="color: #94E2D5;">&lt;</span><span>i64</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let sum</span><span style="color: #94E2D5;"> =</span><span> nums</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">iter</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">sum</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">sum</span><span style="color: #9399B2;">)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[pymodule]</span></span>
+<span class="giallo-l"><span>pub fn</span><span style="color: #89B4FA;font-style: italic;"> pyrust</span><span>(_python: Python</span><span style="color: #9399B2;">,</span><span style="color: #CBA6F7;font-style: italic;"> module</span><span>: </span><span style="color: #94E2D5;">&amp;</span><span>PyModule)</span><span style="color: #94E2D5;"> -&gt;</span><span> PyResult</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    module.add_function(wrap_pyfunction!(sum</span><span style="color: #9399B2;">,</span><span> module)?)?;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span style="color: #9399B2;">(</span><span>(</span><span style="color: #9399B2;">)</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_0cb9892aab266270.png" alt="" />
+pyfunction 매크로를 통해 함수를 정의하고, 그걸 pymodule 매크로가 달린 함수로 추가해준다.<br />
+pymodule가 붙은 함수는 이 파이썬 모듈 자체를 나타내는 함수가 되고, 함수명은 모듈명과 완전히 일치해야 한다. 다르면 모듈이 제대로 뽑히질 않는다.</p>
+<p>아무튼 그래서 배열을 받아서 합산해주는 함수를 만들어봤다.</p>
+<br>
+<br>
+<br>
+<h2 id="pythoneseo-sayonghagi">Python에서 사용하기</h2>
+<p>먼저 maturin라는 전용 도구를 설치해야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pip install maturin</span></span></code></pre>
+<p><img src="/images/img_ff329a318f74b9a9.png" alt="" /></p>
+<p><img src="/images/img_282e7d13d129fa54.png" alt="" /></p>
+<p>그리고 가상 환경(virtual environment)를 설정한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>python</span><span style="color: #94E2D5;"> -</span><span>m venv</span><span style="color: #94E2D5;"> .</span><span>env</span></span>
+<span class="giallo-l"><span>source</span><span style="color: #94E2D5;"> .</span><span>env</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>activate</span></span></code></pre>
+<p><img src="/images/img_2bf9f25759eae2c7.png" alt="" /></p>
+<p>그럼 이런 디렉터리가 생길텐데,</p>
+<p><img src="/images/img_e09bf1b9a6d079a8.png" alt="" />
+여기다가 직접 말아놓은 파이썬 모듈을 넣어놓고 import할 수 있게 하는 식으로 사용하는 것이다.</p>
+<p>그리고 develop 명령을 사용하면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>maturin develop</span></span></code></pre>
+<p><img src="/images/img_92aa09d2f95c8842.png" alt="" /></p>
+<p><img src="/images/img_e8b42cff8ae25719.png" alt="" />
+모듈을 말아서 저기다가 넣어준다.</p>
+<p>그럼 파이썬에서 바로 import로 꺼내쓸 수 있게 되는 것이다.</p>
+<p><img src="/images/img_69fd94248c84558d.png" alt="" /></p>
+<p><img src="/images/img_9ab49a18e8a74080.png" alt="" />
+잘 된다.</p>
+<p>crate를 릴리즈 모드로 빌드하려면 -r 옵션을 사용한다.</p>
+<p><img src="/images/img_0bbcfbf0eeb4b8a4.png" alt="" /></p>
+<p>이외에도 그냥 빌드만 해서 사용하려면 build 명령만 사용하면 되고, 저걸 pypi에 올려서 쓴다거나 하려면 publish 명령을 사용하면 된다.</p>
+<p>그렇다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://ohadravid.github.io/posts/2023-03-rusty-python/">https://ohadravid.github.io/posts/2023-03-rusty-python/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223074049219/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[CockroachDB] 소개<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223073004327/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[CassandraDB] 소개<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

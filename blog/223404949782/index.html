@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[HTTP] Content-Encoding을 활용한 압축 전송 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223404949782/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[HTTP] Content-Encoding을 활용한 압축 전송">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223404949782/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-04-03T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223404949782/">[HTTP] Content-Encoding을 활용한 압축 전송</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-04-03T00:00:00+00:00"><time datetime="2024-04-03T00:00:00+00:00">2024.04.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="386 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223404949782" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_8a1160f027ea6f0c.png" alt="" />
+대부분의 사이트를 돌아보면 Content-Encoding이라는 응답 헤더를 설정해서 사용하는 것을 볼 수 있다.</p>
+<p>이 응답 헤더는 브라우저에게 Response Body를 어떻게 인코딩할지를 알려주는 역할을 한다.<br />
+여기에는 단순한 문자열 인코딩 정보가 들어가는게 아니라, 압축 정보가 들어간다.</p>
+<p>gzip 같은 대중적인 몇가지 압축 포맷은 브라우저가 직접 지원을 하기 때문에 직접 압축해제를 하게끔 할 수 있다.<br />
+서버 입장에서는 매우 큰 데이터가 보내야 할때 압축해서 보내는 것으로 응답 시간과 네트워크 트래픽을 줄일 수 있는 것이다.</p>
+<p>low level 제어가 가능한 Rust hyper 환경을 사용해서 간단한 예제를 보여보겠다.</p>
+<p>일단 먼저 gzip으로 response body를 압축해서 보내보자. 아직 헤더를 설정하지는 않았다.</p>
+<p><img src="/images/img_f4e350db74285842.png" alt="" /></p>
+<p><img src="/images/img_5aa5824f5bfe1796.png" alt="" />
+그러면, 브라우저는 알 수 없는 압축된 바이너리를 받았으니, 그냥 다운로드를 시켜버린다. 당연한 동작이다.</p>
+<p>이제 Content-Encoding 헤더 값을 gzip으로 설정해주면,</p>
+<p><img src="/images/img_b12204d6bd32fbf9.png" alt="" /></p>
+<p>브라우저는 해당 바이트열이 gzip으로 압축된 것임을 알기 때문에 압축을 해제해서 표현해주게 된다.</p>
+<p><img src="/images/img_21f01f7dabc63d43.png" alt="" />
+대부분 Front side에서 처리를 해줘야할 부분은 딱히 없다. 브라우저에서 지원하는 기능이기 때문이다.</p>
+<p>사이즈와 성능도 한번 비교해볼까?<br />
+실제 네트워크 트래픽을 타야지 공정한 비교가 되는지라, 로컬호스트로는 객관적인 테스트가 불가능하다.<br />
+AWS EC2 서울 리전에 인스턴스 하나 띄워서 데이터 와리가리를 해봤다.</p>
+<p><img src="/images/img_52d130989bb0a6e8.png" alt="" />
+50메가짜리 무식한 텍스트를 생성해서 전송했는데</p>
+<p>gzip 압축을 적용하지 않았을 때는</p>
+<p><img src="/images/img_49daf574887968d4.png" alt="" />
+50메가바이트어치가 그대로 날라왔고</p>
+<br>
+<p><img src="/images/img_0ae2acf843acbddd.png" alt="" />
+서버 응답에 1초, 실제 다운받는데는 23초가 걸렸다.</p>
+<p>하지만 gzip을 적용하고 나서는</p>
+<p><img src="/images/img_1665d4ad0d7034c0.png" alt="" />
+50킬로바이트를 전송받았고</p>
+<br>
+<p><img src="/images/img_ddd6ae53e2ce4a75.png" alt="" />
+서버 실행시간은 3초로 길어진 대신, 다운로드 시간이 2초 미만으로 급격하게 줄어들었다.<br />
+서버가 압축 로직을 돌려야 하기 때문에 서버 실행시간이 약간 늘긴 했지만, 결과적으로 전송 시간이 줄어들었기 때문에 7-8배의 속도 최적화 결과를 봤다.</p>
+<p>물론 지금 내 경우에는 응답 텍스트를 대충 만들어서 압축이 굉장히 잘 되는 형태이긴 하다.<br />
+실제 usecase에서는 이보다는 좀 압축률이 떨어지겠지만, 최소한 몇배 정도는 최적화 효과가 나올 것이다.</p>
+<p>response body가 꽤 커질 수 있다면 웬만해서는 적용하지 않을 이유가 딱히 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="jiweondoeneun-pomaes">지원되는 포맷</h2>
+<p>가장 대중적으로 사용되는 압축 포맷은 gzip이다.<br />
+브라우저 지원 수준도 최상이고, 압축률도 좋고, 성능도 무난한 편이기 때문이다.<br />
+그래서 다른 서비스들 둘러보면 대부분 gzip만을 쓸 것이다.</p>
+<p>하지만 gzip으로 부족하다면 다른 포맷들을 사용해도 된다.<br />
+기타 포맷에는 deflate, br, zstd, compress, brotli 등이 있다.</p>
+<p>gzip와 deflate를 제외하면 브라우저 지원 수준이 애매하기 때문에, 잘 확인하고 쓰는게 좋다.<br />
+저 중에서도 compress는 사실상 사양된 알고리즘이다.</p>
+<br>
+<br>
+<p>테스트에 사용한 코드</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[package]</span></span>
+<span class="giallo-l"><span>name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;just_test&quot;</span></span>
+<span class="giallo-l"><span>version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.1.0&quot;</span></span>
+<span class="giallo-l"><span>edition</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;2021&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[dependencies]</span></span>
+<span class="giallo-l"><span>hyper</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;full&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>tokio</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;full&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>http</span><span style="color: #94E2D5;">-</span><span>body</span><span style="color: #94E2D5;">-</span><span>util</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.1&quot;</span></span>
+<span class="giallo-l"><span>hyper</span><span style="color: #94E2D5;">-</span><span>util</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;full&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>flate2</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1.0&quot;</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:convert</span><span style="color: #9399B2;">:</span><span>:Infallible</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:io</span><span style="color: #9399B2;">:</span><span>:Write</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:SocketAddr</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use http_body_util</span><span style="color: #9399B2;">:</span><span>:Full</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use hyper</span><span style="color: #9399B2;">:</span><span>:body</span><span style="color: #9399B2;">:</span><span>:Bytes</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use hyper</span><span style="color: #9399B2;">:</span><span>:server</span><span style="color: #9399B2;">:</span><span>:conn</span><span style="color: #9399B2;">:</span><span>:http1</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use hyper</span><span style="color: #9399B2;">:</span><span>:service</span><span style="color: #9399B2;">:</span><span>:service_fn</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use hyper</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Request</span><span style="color: #9399B2;">,</span><span> Response</span><span style="color: #9399B2;">,</span><span> StatusCode</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use hyper_util</span><span style="color: #9399B2;">:</span><span>:rt</span><span style="color: #9399B2;">:</span><span>:TokioIo</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use tokio</span><span style="color: #9399B2;">:</span><span>:net</span><span style="color: #9399B2;">:</span><span>:TcpListener</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> generate_big_text</span><span>(size: usize)</span><span style="color: #94E2D5;"> -&gt;</span><span> String</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut s </span><span style="color: #94E2D5;">=</span><span> String::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0.</span><span style="color: #94E2D5;">.</span><span>size</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        if</span><span> i</span><span style="color: #94E2D5;"> %</span><span style="color: #FAB387;"> 2</span><span style="color: #94E2D5;"> ==</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            s</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(</span><span style="color: #A6E3A1;">&#39;b&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            s</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(</span><span style="color: #A6E3A1;">&#39;a&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>    s</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> hello</span><span>(_: Request</span><span style="color: #94E2D5;">&lt;</span><span>hyper::body::Incoming</span><span style="color: #94E2D5;">&gt;</span><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>Response</span><span style="color: #94E2D5;">&lt;</span><span>Full</span><span style="color: #94E2D5;">&lt;</span><span>Bytes</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span><span> Infallible</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // Generate a big text</span></span>
+<span class="giallo-l"><span>    let big_text</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> generate_big_text</span><span>(</span><span style="color: #FAB387;">1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 50</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let gzip_encoded</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        let mut encoder</span><span style="color: #94E2D5;"> =</span><span> flate2::write::GzEncoder::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Vec</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(),</span><span style="color: #EBA0AC;font-style: italic;"> flate2</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">Compression</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">default</span><span style="color: #9399B2;">())</span><span>;</span></span>
+<span class="giallo-l"><span>        encoder.write_all</span><span style="color: #9399B2;">(</span><span>big_text.as_bytes(</span><span style="color: #9399B2;">)</span><span>).unwrap</span><span style="color: #9399B2;">()</span><span>;</span></span>
+<span class="giallo-l"><span>        encoder.finish</span><span style="color: #9399B2;">()</span><span>.unwrap</span><span style="color: #9399B2;">()</span></span>
+<span class="giallo-l"><span>    };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let response</span><span style="color: #94E2D5;"> =</span><span> Response::</span><span style="color: #89B4FA;font-style: italic;">builder</span><span>()</span></span>
+<span class="giallo-l"><span>        .status(StatusCode</span><span style="color: #94E2D5;">:</span><span>:OK)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">body</span><span>(Full::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Bytes</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">from(gzip_encoded)</span><span style="color: #9399B2;">)</span><span>)</span></span>
+<span class="giallo-l"><span>        .unwrap</span><span style="color: #9399B2;">()</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">response</span><span style="color: #9399B2;">)</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn main</span><span style="color: #9399B2;">()</span><span> -&gt; Result</span><span style="color: #89DCEB;">&lt;</span><span style="color: #9399B2;">(),</span><span style="color: #F9E2AF;font-style: italic;"> Box</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">dyn std</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">error</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">Error + Send + Sync</span><span style="color: #89DCEB;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let addr</span><span style="color: #94E2D5;"> =</span><span> SocketAddr::</span><span style="color: #89B4FA;font-style: italic;">from</span><span>(([</span><span style="color: #FAB387;">0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>]</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3000</span><span>));</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // We create a TcpListener and bind it to 127.0.0.1:3000</span></span>
+<span class="giallo-l"><span>    let listener</span><span style="color: #94E2D5;"> =</span><span> TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(addr)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // We start a loop to continuously accept incoming connections</span></span>
+<span class="giallo-l"><span>    loop</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        let</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">stream</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> _</span><span style="color: #9399B2;">)</span><span> = listener.</span><span style="color: #89B4FA;font-style: italic;">accept</span><span style="color: #9399B2;">()</span><span>.await?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // Use an adapter to access something implementing `tokio::io` traits as if they implement</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // `hyper::rt` IO traits.</span></span>
+<span class="giallo-l"><span>        let io</span><span style="color: #94E2D5;"> =</span><span> TokioIo::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(stream);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // Spawn a tokio task to serve multiple connections concurrently</span></span>
+<span class="giallo-l"><span>        tokio</span><span style="color: #94E2D5;">:</span><span>:task::</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">            // Finally, we bind the incoming connection to our `hello` service</span></span>
+<span class="giallo-l"><span>            if let </span><span style="color: #89B4FA;font-style: italic;">Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">err</span><span style="color: #9399B2;">)</span><span> = http1::Builder::</span><span style="color: #89B4FA;font-style: italic;">new</span><span style="color: #9399B2;">()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                // `service_fn` converts our function in a `Service`</span></span>
+<span class="giallo-l"><span>                .</span><span style="color: #89B4FA;font-style: italic;">serve_connection</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">io</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> service_fn</span><span>(</span><span style="color: #EBA0AC;font-style: italic;">hello</span><span style="color: #9399B2;">)</span><span>)</span></span>
+<span class="giallo-l"><span>                .await</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Error serving connection: {:?}&quot;</span><span style="color: #9399B2;">,</span><span> err)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre><br>
+<p>참조<br />
+<a rel="external" href="https://blog.naver.com/dlaxodud2388/221928144324">https://blog.naver.com/dlaxodud2388/221928144324</a><br />
+<a rel="external" href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Encoding</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223403930199/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Zig] union<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223403313214/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] 복구 불가능한 패닉과 복구 가능한 패닉<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

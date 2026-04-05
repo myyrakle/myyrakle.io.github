@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[DB] WAL과 fsync | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224039042217/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[DB] WAL과 fsync">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224039042217/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-10-13T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224039042217/">[DB] WAL과 fsync</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-10-13T00:00:00+00:00"><time datetime="2025-10-13T00:00:00+00:00">2025.10.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="285 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224039042217" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://m.blog.naver.com/sssang97/223233122052">https://m.blog.naver.com/sssang97/223233122052</a></p>
+<p>Write Ahead Log(이하 WAL)은 DB에 있어서 가장 중요한 근간이면서도, 가장 큰 성능 병목 지점이기도 하다.<br />
+이건 어떤 DB든 마찬가지다. 그리고 그 병목의 세부사항 중 하나가 디스크 쓰기 보장(fsync)이다.</p>
+<p>WAL이 제때 작성되어야 혹시나 장애가 발생하더라도 복구할 수가 있는건데, 그렇다고 무작정 write마다 fsync를 날려서 WAL을 확실하게 추가하면 성능 부하가 크게 걸린다. 이게 생각보다 엄청 큰 딜레마다.</p>
+<p>fsync를 너무 날려대면 디스크 저장은 확실하게 보장되니 안전하기야 하지만, 그만큼 디스크/리소스 부하가 커진다. 그렇다고 fsync를 게으르게 하면, 진짜 디스크 쓰기가 완료되기 전에 서버가 뻗을 경우 손실이 발생한다.</p>
+<br>
+<br>
+<br>
+<h2 id="postgresqlyi-gyeongu">PostgreSQL의 경우</h2>
+<p>PostgreSQL은 안정성을 성능보다 중요시하는 경우라서, fsync를 write마다 날리는 축에 속한다. 하지만 조정 가능한 옵션이 제공된다.</p>
+<p>WAL fsync와 직접적으로 관련된 파라미터로는 commit_delay가 있다. 단위는 마이크로초고 기본값은 0이라서 항상 즉시 쓰기를 수행한다.</p>
+<p>commit_delay에 500ms를 지정한다면, write가 발생했을 때 최대 500ms까지 다른 write를 기다렸다가 fsync를 날리는 식으로 동작한다. 모아서 쏘는 것이다.<br />
+당연히 이 값을 늘릴 수록 쓰기 성능은 향상되겠지만, 그만큼 장애시 데이터 내구성이 손실될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="cassandradbyi-gyeongu">CassandraDB의 경우</h2>
+<p>CassandraDB는 이 부분에서 내구성을 포기하고 성능을 가져가는 방법을 선택했다.<br />
+write마다 fsync 동기화를 하지는 않고, 백그라운드 루프를 통해서 정기적으로 fsync를 날리는 방식으로 디스크 저장을 느슨하게 보장한다.</p>
+<p>이에 대한 파라미터가 commitlog_sync_period_in_ms다. 기본값은 10000(10초)다.</p>
+<p>이 말인즉슨 10초마다 동기화를 한다는 것이고, 하드웨어 장애 등이 발생한다면 10초 내에 저장된 값은 진짜 증발할 수 있다는 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://cassandra.apache.org/doc/3.11/cassandra/architecture/storage_engine.html">https://cassandra.apache.org/doc/3.11/cassandra/architecture/storage_engine.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/67353944/will-the-write-ahead-log-become-the-bottleneck-of-cassandra">https://stackoverflow.com/questions/67353944/will-the-write-ahead-log-become-the-bottleneck-of-cassandra</a><br />
+<a rel="external" href="https://postgresql.kr/docs/9.5/runtime-config-wal.html">https://postgresql.kr/docs/9.5/runtime-config-wal.html</a><br />
+<a rel="external" href="https://wiki.postgresql.org/wiki/Group_commit">https://wiki.postgresql.org/wiki/Group_commit</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224041366107/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] JIT 최적화 직접 구현 시도.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224039069863/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] CPU 캐시 친화성 최적화.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

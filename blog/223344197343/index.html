@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] Send와 Sync | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223344197343/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] Send와 Sync">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223344197343/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-02-05T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223344197343/">[Rust] Send와 Sync</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-02-05T00:00:00+00:00"><time datetime="2024-02-05T00:00:00+00:00">2024.02.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="417 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223344197343" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Send와 Sync는 Rust가 지향하는 "안전한 동시성 프로그래밍"의 근간을 이루는 trait이다.</p>
+<p>사실 Send와 Sync은 시스템적으로 대단한 기능을 하는 요소는 아니다. 의미를 부여하는 용도의 마커일 뿐이다.</p>
+<p>이 2개의 트레잇이 특별한 점은 자동으로 구현이 된다는 것이다.<br />
+예를 들어 새 구조체를 정의할 경우, 내부 필드들이 전부 Send를 구현하고 있다면 그 타입은 자동으로 Send가 된다. 하나라도 Send를 구현하지 않는 타입이라면 Send를 구현하지 않는다.</p>
+<p>Send와 Sync를 충족하지 않는 unsafe한 타입은 포인터 타입 등이 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="send-teureis">Send 트레잇</h2>
+<p>Send 트레잇은 스레드 생성시 해당 타입의 값을 안전하게 이동시킬 수 있는지를 의미하는 트레잇이다.<br />
+예를 들면, 이런 상황이다.</p>
+<p><img src="/images/img_124b21f3d15142af.png" alt="" />
+move 클로저를 통해 클로저 밖의 num 변수를 이동시켜서 값을 사용하고 있다.<br />
+이것은 num의 타입인 i32가 Send를 구현하고 있어서 가능한 일이다.</p>
+<br>
+<p><img src="/images/img_7e56556806e8bac4.png" alt="" />
+만약 아래와 같이 Send를 위반하는 타입을 정의한다면</p>
+<br>
+<p><img src="/images/img_f7e1ca8eb564dc79.png" alt="" />
+바로 코드가 깨질 것이다.</p>
+<br>
+<p><img src="/images/img_9194912ecee50e6c.png" alt="" />
+스레드 안전성이 지켜지지 않는다고 한다.</p>
+<p>이걸 해결하는 가장 단순무식한 방법은, Send를 강제로 구현시키는 것이다.</p>
+<p><img src="/images/img_42421b5da2e0fb12.png" alt="" />
+이 트레잇 구현 자체가 어떤 결과를 낳을지 알지 못하기 떄문에 unsafe가 붙는다.<br />
+그래서 이 타입을 구현하는 사람이 반드시 safe함을 보장하도록 구현을 해야 한다.</p>
+<br>
+<p><img src="/images/img_5ccbc809ec42ec99.png" alt="" />
+물론 가장 좋은 방법은 안전하게 Send가 되도록 구현해놓은 기존 타입들을 사용하는 것이다.</p>
+<p>대표적으로 레퍼런스 카운팅 타입인 Arc<T>가 Send를 충족하는 안전한 타입이다.<br />
+반면 Rc<T>는 Send를 충족하지 않는다. Rc 자체가 thread-safe하지 않게 구현되어있기 때문에, clone은 마구 할 수 있더라도 그걸 스레드로 이동시키지는 않도록 잠금장치를 둔 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="sync-teureis">Sync 트레잇</h2>
+<p>Sync는 해당 타입이 스레드에 안전하게 참조로 공유될 수 있는지를 뜻하는 트레잇이다. Send가 값이 스레드로 옮겨질 수 있는지를 의미한다면, Sync는 여러 스레드에서 동시에 공유된 채로 사용할 수 있는지를 의미한다.</p>
+<p>조금 헷갈릴 수도 있는데, Arc 같은 타입에 Sync를 구현하지 않는 타입을 넣어보면 이게 어떻게 사용되는지 알 수 있다. Cell은 Send를 구현하지만 Sync는 구현하지 않는 대표적인 타입이다.</p>
+<p><img src="/images/img_89aeb285594aed7e.png" alt="" /></p>
+<p><img src="/images/img_dfb1da3ebc104a27.png" alt="" />
+Cell이 Sync를 구현하지 않는다고 불평을 내뱉는다.<br />
+Arc는 얼마든지 clone을 통해 복제될 수 있는데 반해, 정작 Cell이 복제된 상태에서의 thread safety한 동작을 보장하지 않기 때문에 (Sync를 구현하지 않기 때문에) 경고를 내뱉는 셈인 것이다.</p>
+<p>Rust는 이러한 제약을 통해 thread에 안전한 타입과 안전하지 않은 타입을 분류하고 thread safety를 보장한다.</p>
+<br>
+<br>
+<br>
+<h2 id="send-sync-gangjero-eobsaegi">Send Sync 강제로 없애기</h2>
+<p>흔한 상황은 아니겠지만, Send나 Sync를 구현하지 않게 만들 수도 있다.<br />
+가장 간편한 방법은 비슷한 마커 타입인 팬텀 데이터로 안전하지 않은 타입을 구겨넣는 것이다.</p>
+<p><img src="/images/img_dd2123ca47e2f431.png" alt="" />
+이러면 Send와 Sync에 대한 자동 구현이 막혀버리고</p>
+<br>
+<p><img src="/images/img_39b12ff132f0df45.png" alt="" />
+에러가 발생한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/nomicon/send-and-sync.html">https://doc.rust-lang.org/nomicon/send-and-sync.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/59428096/understanding-the-send-trait">https://stackoverflow.com/questions/59428096/understanding-the-send-trait</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223347574452/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] thread park<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223343353444/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>asyncgo v0.1.0<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

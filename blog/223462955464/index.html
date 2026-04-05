@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Algorithm] 분산 합의: raft, paxos, zab | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223462955464/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Algorithm] 분산 합의: raft, paxos, zab">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223462955464/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-05-30T00:00:00+00:00">
+    <meta property="article:tag" content="자료구조&#x2F;알고리즘">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223462955464/">[Algorithm] 분산 합의: raft, paxos, zab</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-05-30T00:00:00+00:00"><time datetime="2024-05-30T00:00:00+00:00">2024.05.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="686 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/jaryogujo-algorijeum/">자료구조&#x2F;알고리즘</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223462955464" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>분산 합의(distributed consensus)는 분산시스템의 성질과 한계를 결정짓는 주요 요소 중 하나다.<br />
+분산 합의란, 노드가 여러개인 클러스터 환경에서 여러개의 노드가 같은 데이터를 보유할때 노드끼리 같은 데이터를 동기화하는 것을 말한다.</p>
+<p>별거 아닐 것 같지만, 사실 기기 수준의 장애나 네트워크 딜레이 같은 여러 변수들 때문에 이에 대한 고려 없이는 신뢰성 있는 시스템을 만들 수 없다.</p>
+<p>여기서는 분산 합의에 사용되는 주요 알고리즘 몇가지를 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="raft">raft</h2>
+<p>뗏목 알고리즘이라고도 불리는 주요 알고리즘 중 하나다.<br />
+2013년에 Diego Ongaro와 John Ousterhout가 paxos의 단순한 대안으로서 제시했다.</p>
+<p>어원은 신뢰성(Reliable), 복제(Replicated), 중복(Redundant), 내결함성(Fault-Tolerant)의 글자를 적당히 따서 "Re - And Fault-Tolerant" =&gt; RAFT가 된 것이다.</p>
+<p>문제를 최대한 단순화해서 해결하는 기법이다.</p>
+<ol>
+<li>노드끼리 투표를 통해 leader를 선출한다.</li>
+<li>그러면 동기화에 대한 모든 책임을 leader가 갖고서 모든 중대사를 처리한다.</li>
+</ol>
+<p><img src="/images/img_755c215bc308a334.png" alt="" /></p>
+<p>leader는 데이터 동기화나 로그 복제를 총괄한다.<br />
+만약 leader가 실패하거나 장애가 발생한다면 나머지 노드들끼리 새 leader를 선출해서 책임을 위임한다.</p>
+<p>이 매커니즘의 가장 큰 장점은 단순성과 구현의 용이성이다.</p>
+<p>cockroachDB, elasticsearch, redis, etcd, rabbitMQ, clickhouse, nats 등 클러스터링을 지원하는 많은 상용 DB 시스템들에서 사용하고 있다.</p>
+<p>mongoDB 같은 경우도 raft의 변형을 사용한다.<br />
+paxos를 사용하는 상당수의 시스템들도 raft로 옮겨가려는 움직임을 보이곤 한다.</p>
+<p>raft가 추구하는 방향성은 가용성이다.<br />
+빠른 회복과 복구에 초점을 맞췄기 때문에, 장애 시 발생할 수 있는 약간의 결함, 데이터 불일치 등이 단점으로 꼽히곤 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="paxos">paxos</h2>
+<p>paxos는 raft가 등장하기 이전에 주로 사용되었던 합의 알고리즘이다. 1989년 즈음에 제안되었다.</p>
+<p>raft가 가용성을 얻고 약간의 정확성을 포기한 것과 반대로, paxos는 가용성을 좀 포기한 대신 정확성을 가져가는 것을 지향한다.</p>
+<p>구현이 복잡한 편이고, 노드의 실시간 추가/수정 등에 어려움도 있고 해서 새로 만들어지는 시스템들에는 잘 사용되지 않는다.</p>
+<p>정의 자체가 조금 추상적인 편이다.<br />
+Raft와 비슷하게 leader의 개념을 사용하긴 한다.</p>
+<p><img src="/images/img_14e09192fcc71bed.png" alt="" />
+paxos는 3가지 주요 역할을 통해 동기화에서의 합의를 구현한다.</p>
+<ol>
+<li>
+<p>Proposer은 합의를 제안한다.<br />
+합의를 제안할때 임의의 특정 숫자값 N, 정족수에 참여할 Proposer 목록을 함께 넘겨준다. 수신 대상은 Acceptor가 된다. 이를 prepare 단계라고 한다.<br />
+N은 이전 숫자값보다 항상 큰 값을 보내도록 한다.</p>
+</li>
+<li>
+<p>Acceptor는 Proposer에게서 합의 제안을 받고 처리한다.</p>
+</li>
+</ol>
+<ul>
+<li>prepare 메세지로 온 N이 이전에 받은 가장 큰 N보다 작다면 합의를 거부한다.</li>
+<li>prepare 메세지로 온 N이 이전에 받은 가장 큰 N보다 크다면 합의를 수용한다. 그리고 proposer에게 메세지를 반환해준다. 이를 promise라고 한다. promise가 이루어졌다면 acceptor는 이후의 합의 제안을 무시한다.</li>
+</ul>
+<ol start="3">
+<li>
+<p>Proposer가 Acceptor로부터 promise를 받으면, v라는 임의의 값을 설정해서 다시 Acceptor에게 Accept 요청을 보낸다. 그리고 Acceptor로부터 Accept가 떨어지면 합의에 성공한 것이다. 정족수가 보통은 그 성공의 기준이 될 것이다.</p>
+</li>
+<li>
+<p>Learner는 합의 결과를 모두에게 발표하는 역할을 맡는다.</p>
+</li>
+</ol>
+<p>paxos 자체에는 leader의 개념이 명시되어있지는 않지만, proposer가 자신이 leader가 되고 싶다고 주장하고 acceptor들이 승인한다면 leader가 될 수 있다.</p>
+<p>GCP Spanner, DynamoDB, ScyllaDB, CassandraDB 등의 DB 시스템들이 이 매커니즘을 사용한다.<br />
+여기서 ScyllaDB는 경량 트랜잭션에만 사용했는데, 이마저도 걷어내고 있는 중이라고 한다. (RAFT로 이전)</p>
+<p>AWS ECS 같은 클러스터 서비스도 paxos 알고리즘을 사용하곤 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="zab">zab</h2>
+<p>zab은 Zookeeper Atomic Broadcast의 준말로, 주키퍼에서 사용하는 분산 합의 매커니즘이다.<br />
+이 매커니즘은 순서의 보장에 최적화되어있다.</p>
+<p>"모든 노드에 대해서" 순서가 명확하게 보장하는 것을 목표로 한다.</p>
+<p><img src="/images/img_0473ebb11ba3ee7c.png" alt="" />
+zab도 여타 분산 구조와 마찬가지로 단일 leader에 여러개의 follower가 따라오는 중앙집권형 구조를 지향한다.<br />
+raft와 비슷하게 투표를 통해서 leader를 선출한다.</p>
+<p>write는 무조건 leader가 책임지고 받아서 follow들에게 직접 동기화한다. 여기서는 안전한 복제를 위해 2단계 커밋을 사용한다.<br />
+read의 경우에는 모든 노드가 공평하게 로드밸런싱을 한다.</p>
+<p>그리고 zab은 항상 예비 leader를 미리 선출해뒀다가, 기존 leader에게 문제가 생기면 바로 leader를 교체하고 기존 leader를 버리는 방식을 취한다. 예비 leader에게는 최소한의 leader 작업 히스토리가 보관되어있기 때문에 손실을 줄일 수 있다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://medium.com/@adityashete009/the-zab-algorithm-502781c54498">https://medium.com/@adityashete009/the-zab-algorithm-502781c54498</a><br />
+<a rel="external" href="https://medium.com/@remisharoon/paxos-vs-raft-vs-zab-a-comprehensive-dive-into-distributed-consensus-protocols-6243a3f6539b">https://medium.com/@remisharoon/paxos-vs-raft-vs-zab-a-comprehensive-dive-into-distributed-consensus-protocols-6243a3f6539b</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Paxos_%28computer_science%29">https://en.wikipedia.org/wiki/Paxos_(computer_science)</a><br />
+<a rel="external" href="https://www.scylladb.com/glossary/paxos-consensus-algorithm/">https://www.scylladb.com/glossary/paxos-consensus-algorithm/</a><br />
+<a rel="external" href="https://medium.com/@mani.saksham12/raft-and-paxos-consensus-algorithms-for-distributed-systems-138cd7c2d35a">https://medium.com/@mani.saksham12/raft-and-paxos-consensus-algorithms-for-distributed-systems-138cd7c2d35a</a><br />
+<a rel="external" href="https://gruuuuu.github.io/integration/paxos-raft/">https://gruuuuu.github.io/integration/paxos-raft/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/45871855/paxos-vs-raft-for-leader-election">https://stackoverflow.com/questions/45871855/paxos-vs-raft-for-leader-election</a><br />
+<a rel="external" href="https://www.linkedin.com/pulse/zab-consensus-algorithm-yeshwanth-n">https://www.linkedin.com/pulse/zab-consensus-algorithm-yeshwanth-n</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223464118742/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] kube-rs로 operator 만들어보기 - 2<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223461756266/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] kube-rs로 operator 만들어보기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

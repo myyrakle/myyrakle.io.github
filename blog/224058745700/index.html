@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] Lock: 조건 변수 (Condition Variable) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224058745700/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] Lock: 조건 변수 (Condition Variable)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224058745700/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-10-30T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224058745700/">[Concurrency] Lock: 조건 변수 (Condition Variable)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-10-30T00:00:00+00:00"><time datetime="2025-10-30T00:00:00+00:00">2025.10.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="332 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224058745700" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Condition Variable은 대표적인 동시성 primitive 구현 중 하나다.</p>
+<p>스레드 간에 기다리거나(wait) 알려서 깨워주는(notify) 등 동적인 상호작용에 최적화된 동기화 수단이다.<br />
+특히 오랫동안 기다리는 행위에 잘 최적화되어있고, 기다리는 동안 스레드를 차단해서 CPU 리소스를 소모하지 않는 것이 특징이다.</p>
+<p>대부분의 언어에서 기본 모듈로 제공한다.<br />
+C++에서는 "condition_variable", Rust는 "CondVar", Go는 sync.Cond, Java는 Condition이란 이름으로 들어가있다.</p>
+<p>다음은 간단한 예제 코드다.</p>
+<p><img src="/images/img_3ffecd23cdaa3a2b.png" alt="" />
+go</p>
+<p><img src="/images/img_d52e7fe05b319525.png" alt="" />
+rust<br />
+wait을 통해 스레드를 차단한 채 기다리고, notify를 통해 차단된 스레드를 깨울 수 있다.<br />
+모든 스레드를 깨우는 notify_all과 한놈만 깨우는 notify_one 2가지가 제공된다.</p>
+<p>다른 동기화 수단과 유독 다른 부분은, 단독으로 쓰이는게 아니라 Mutex와 강하게 결합되어있다는 것이다.<br />
+go는 아예 CondVar의 생성자에 Mutex를 넣는 식으로 만들어져있다.</p>
+<p>구현 수준에서도 mutex에 강하게 의존한다.<br />
+Rust의 경우에는 spin loop 없이 futex syscall을 곧장 날리는 형태로 구현이 된다.</p>
+<p><img src="/images/img_68ec7ce8ee34cebc.png" alt="" /></p>
+<p><img src="/images/img_ceada13c732512cf.png" alt="" /></p>
+<p><img src="/images/img_d3ec5de424d593c7.png" alt="" />
+futex 기반으로 즉시 wait을 걸고</p>
+<br>
+<p><img src="/images/img_a1a2f1f107fb45d5.png" alt="" />
+notify를 보면 futex awake를 날린다.</p>
+<br>
+<br>
+<br>
+<h2 id="hwalyong-siyi-ijeom">활용 시의 이점</h2>
+<p>그래서 이걸 왜, 어떨 때 쓰는걸까? 처음 접한다면 꽤 혼란스러울 수도 있다.</p>
+<p>기실 스레드 safe하게 기다리는 행위 자체는 Mutex로도 달성 가능한 것이다.<br />
+Mutex의 lock도 실제로 대기 상태에 빠지면 스레드를 차단한다.<br />
+물론 불필요한 spin loop가 있기 때문에 CondVar보다는 비용이 비싸다.</p>
+<p>CondVar가 필요해지는 지점은, 공유되는 값 접근과 별개로 주체적으로 대기/재시작을 해야 할 때다.</p>
+<p>Mutex의 lock에서 발생하는 대기는 단순하게 "하나 빼고 전부 대기"이기 때문에 이러한 논리를 구현하기 까다롭고 비효율적이다.</p>
+<br>
+<br>
+<br>
+<h2 id="vs-caeneol">vs 채널</h2>
+<p>condvar와 직접적으로 비교할 수 있는 대상은 채널일 것이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223131767231">https://blog.naver.com/sssang97/223131767231</a><br />
+채널은 condvar와 마찬가지로 빈번한 wait/wake 패턴 처리를 위한 동기화 수단이다.<br />
+receiver는 이벤트가 없으면 wait 상태에 빠지고, sender가 값과 함께 wake를 날리면 깨어나는 식으로 동작한다.</p>
+<p>단일 스레드가 wait을 하고 1개 이상의 스레드가 notify를 하는(mpsc) 경우에는 채널이 더 적합하고 깔끔하다.</p>
+<p>개인적으로는 채널을 먼저 고려해보고, receiver가 여러개가 되는 등 채널의 기능 범위를 벗어나게 되면 convar를 통해 제어를 하는 것을 권장한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/stable/std/sync/struct.Condvar.html">https://doc.rust-lang.org/stable/std/sync/struct.Condvar.html</a><br />
+<a rel="external" href="https://medium.com/@abhisheksagar_59776/mutex-vs-condition-variables-e0a15b2226a4">https://medium.com/@abhisheksagar_59776/mutex-vs-condition-variables-e0a15b2226a4</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224060027348/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Qdrant] 성능 최적화, 팁<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224057183978/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[File System] 파일 저널링 (File Journaling)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

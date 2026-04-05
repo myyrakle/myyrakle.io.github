@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] any Rust | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223292031798/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] any Rust">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223292031798/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-12-14T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223292031798/">[Rust] any Rust</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-12-14T00:00:00+00:00"><time datetime="2023-12-14T00:00:00+00:00">2023.12.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="247 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223292031798" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223057472977">https://blog.naver.com/sssang97/223057472977</a></p>
+<p>DI 시스템을 직접 구현하면서 any 떡칠을 좀 해보게 되었는데, 거기서 얻은 사용상의 주의점을 대략 정리해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>any의 기본적인 사용법은 별거 없다.<br />
+any 트레잇으로 박싱된 객체를 생성하면, 그것 자체로 any 타입의 동적 객체가 되는 것이다.</p>
+<p><img src="/images/img_5583c2d98356d70f.png" alt="" />
+그리고 downcast를 통해서 원래의 값을 타입 안전하게 가져올 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="typeid">TypeId</h2>
+<p>근데 보통 저것만으로는 부족하다.</p>
+<p>보통 any 떡칠을 해야할 상황이 오면 타입정보를 들고서 그때그때 그걸 기반으로 뭔가 처리를 해야할 때가 많은데, 이걸 위한 보조기능이 TypeId다.</p>
+<p>TypeId::of 제너릭 함수를 사용하면 해당 타입에 대한 타입 고유번호를 가져올 수 있다.</p>
+<p><img src="/images/img_09dca684ac10f5c4.png" alt="" />
+이런식으로 하나의 타입마다 고유한 값이 발급된다.</p>
+<p>이건 제너릭이 끼어들어도 크게 달라지진 않는다.<br />
+실제로 동등한 타입인지를 기준으로 Id를 발급하기 때문에, 같은 타입으로 여러번 제너릭을 구체화하더라도, 타입이 호환되면 같은 TypeId가 나온다.</p>
+<p><img src="/images/img_fa4ac3129363b7d1.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="boxwa-typeid">Box와 TypeId</h2>
+<p>근데 Any Box을 해서 쓰다보면 좀 혼동할 수 있는 부분이 있다.<br />
+이런식으로 박싱을 하고, 그냥 기존 타입과 동등할 것이라 가정하고 쓰면</p>
+<p><img src="/images/img_8628466c6547f1f7.png" alt="" />
+TypeId가 다르게 나온다.<br />
+저게 왜나면, 현재 타입을 기준으로 Id를 발급하는 것인데 저 boxed는 Box&lt;&gt;로 감싸인 또 별개의 타입이기 때문이다.</p>
+<p>만약 박싱된 Any 오브젝트에서 진짜 타입값을 꺼내고 싶다면 역참조를 해서 언박싱된 dyn Any 참조를 가져와야 한다.</p>
+<p><img src="/images/img_b3406bfe1fb5e2c4.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="teureis-any-bagsinghagi">트레잇 any 박싱하기</h2>
+<p>만약 이미 박싱된 트레잇 객체를 any로 만들고 싶다면 어떻게 해야할까?<br />
+사실 방법은 다를게 없다.</p>
+<p><img src="/images/img_bfbeb1efa4dc34fc.png" alt="" /></p>
+<p>이중박싱을 하면 된다.<br />
+트레잇 박싱을 먼저 하고, any로 한번 더 박싱을 한다.</p>
+<p><img src="/images/img_ea1ef3a4532b8e8a.png" alt="" />
+any 다운캐스트로 꺼내올때도 트레잇 박스로 가져오면 된다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223294999393/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>rupring v0.4.0<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223292046219/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] anyhow: 오류 처리 패키지<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

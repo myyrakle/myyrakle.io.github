@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[CassandraDB] 데이터베이스 아키텍쳐 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223706344662/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[CassandraDB] 데이터베이스 아키텍쳐">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223706344662/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-12-26T00:00:00+00:00">
+    <meta property="article:tag" content="CassandraDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223706344662/">[CassandraDB] 데이터베이스 아키텍쳐</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-12-26T00:00:00+00:00"><time datetime="2024-12-26T00:00:00+00:00">2024.12.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1351 words"><time datetime="PT7M">7 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/cassandradb/">CassandraDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223706344662" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_37339c11daff7b40.png" alt="" />
+카산드라DB가 다른 데이터베이스들과 비교해서 어떤 내부 구조를 가지고 있고, 어떤 장점과 단점, 한계가 있는지를 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sogseong">기본 속성</h2>
+<p><strong>NoSQL</strong><br />
+카산드라DB는 알다시피, NoSQL이다. 그 중에서도 Key-Value NoSQL 쯤으로 분류된다.<br />
+SQL 스타일의 스키마 정의 구조, SQL 쿼리 등을 제공하긴 하지만, RDB 수준의 복잡한 쿼리(Join 등), 일관성 보장을 제공하진 않는다.</p>
+<p><strong>글로벌 수준의 분산 DB</strong><br />
+카산드라 DB는 수평적으로 대규모 확장 가능한 구조를 지향하며, 글로벌 서비스를 위한 글로벌 수준 복제까지도 염두에 두고 설계되었다.<br />
+그래서 <strong>여러개의 데이터센터 간</strong>에 연결되는 것까지 고려해서 많은 기능과 옵션을 제공한다.<br />
+분산 복제 구조에 있어서는 DynamoDB에 큰 영향을 받았다.</p>
+<p><strong>높은 쓰기 처리량</strong><br />
+multi master 형태의 분산 구조를 제공하기 때문에, write 처리량을 확장하는 것이 매우 쉽다.<br />
+카산드라DB는 전반적으로 일관성이나 read 능력을 좀 포기하고 write 처리량에 집중한 데이터베이스다.</p>
+<p>**대규모 데이터 클러스터 **<br />
+카산드라는 초대형 데이터세트를 감당하기 위해 만들어졌다. 넷플릭스나 디스코드(과거), 애플 같은데서도 노드 수천개짜리 대규모 Cassandra 클러스터를 메인급 DB로 사용하고 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="indegseu-gujo-lsm-teuri">인덱스 구조: LSM 트리</h2>
+<p>CassandraDB를 포함한 NoSQL DB들이 전통적인 RDB들과 차별화되는 부분이  인덱스 구조다.</p>
+<p>LSM 기반의 인덱스 시스템을 사용하고, 이를 기반으로 데이터를 저장하기 때문에 RDB 대비해서 write 성능, 그 중에서도 append(insert) 성능이 매우 뛰어나다.</p>
+<p>자세한 원리나 구조는 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223232181952">https://blog.naver.com/sssang97/223232181952</a></p>
+<br>
+<br>
+<br>
+<h2 id="replication">Replication</h2>
+<p>카산드라는 가용성과 수평 확장성을 제공하기 위해 꽤나 독특한 복제 구조를 갖는다.</p>
+<p>상당수의 DB들이 단일 master를 갖고, master가 write를 책임지고 slave가 read를 처리하게 한다.<br />
+이 구조는 구현하기에 간편하고 관리하기도 편하지만, write 처리량을 늘리는데 한계가 있고 마스터가 다운될 경우에 다운타임이 크게 발생한다는 문제가 있다.</p>
+<p>카산드라는 쓰기 처리량까지 수평적으로 확장하고, 가용성을 보다 보장하기 위해서 multi master 구조를 가진다.</p>
+<p><img src="/images/img_9075296f2144d657.jpg" alt="" />
+master나 slave가 따로 있는게 아니라, 모든 노드가 동등하게 read/write를 처리하는 것이다.</p>
+<p><strong>gossip 프로토콜</strong></p>
+<p>복제 형태도 메쉬 형태로 마구잡이로 서로 쏘는 게 아니라, 가쉽(gossip)이란 매커니즘을 통해 복제를 전송한다.</p>
+<p><img src="/images/img_9399e28ef3aa2cdf.png" alt="" />
+4개의 노드가 있더라도 서로를 다 바라보고 다 쏘는게 아니라, 무작위의 노드에게 데이터를 연속적으로 날리면서 주고받을 뿐이다.<br />
+영희가 철수에게, 철수가 스미스에게, 소문(Gossip)을 퍼트리듯이 정보가 전달된다고 해서 가십 프로토콜이라 한다. 결국에는 소문이 모든 사람을 거쳐가므로 데이터 동기화는 똑같이 된다.</p>
+<p>그리고 송신자와 수신자가 명확하게 결합되어있지 않은 이러한 통신 구조 덕에 노드의 추가나 삭제가 매우 유연한 편이다.</p>
+<p><strong>복제 전략</strong><br />
+카산드라는 replication factor라는 옵션을 통해서 데이터의 복제본을 몇개나 만들지를 결정한다.</p>
+<p>그리고 Replication Strategy를 통해서 복제가 어떻게 배치될지를 정할 수도 있다. 예를 들어, 각 복제본이 서로 다른 데이터센터에 배치되게 한다거나 하는 세부설정들이 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteo-patisyeon">데이터 파티션</h2>
+<p>Cassandra는 무제한의 규모 확장을 달성하기 위해 복잡한 추가 설정 없이도 자동으로 데이터 파티셔닝, 샤딩을 수행한다.</p>
+<p>그러니까, 데이터가 insert되면 그 복제본을 모두가 공유하는게 아니라 적당히 파티션으로 분산해서 저장한다는 것이다.</p>
+<p><strong>파티션 키</strong><br />
+카산드라는 테이블의 Primary Key가 파티션을 결정하는 파티션 키가 된다. primary key가 복합컬럼이라면, 첫번째 컬럼이 파티션 키다.<br />
+파티션 키를 기준으로 어느 노드에 저장될지를 결정한다.</p>
+<p><strong>파티션</strong><br />
+"클러스터링 키"를 사용한다면, 복합 키이니 당연히 같은 파티션 키의 값은 여러개 중복될 수 있다. 이 경우 같은 파티션 키를 가진 데이터 집합을 파티션이라고 부른다.<br />
+각각의 파티션은 하나의 디스크 영역에 모아서 저장하는데, 개별 파티션이 수만, 수십만 row 단위를 넘어가면 성능이 극심하게 저하된다. 이런 쏠림 현상을 skew라고 부른다.<br />
+그래서 파티션 키는 중복성이 낮고 적당히 분배가 잘 되는 값을 사용해야 한다.</p>
+<p><strong>클러스터링 키</strong><br />
+primary가 복합 컬럼으로 구성되었다면, 첫번째 컬럼을 제외한 나머지 컬럼들이 모두 클러스터링 키가 된다.<br />
+클러스터 키는 이 파티션 단위를 정렬해서 저장하는 기준이 된다. 그래서 dynamo에서는 이걸 정렬 키라고 부른다.</p>
+<p><strong>토큰 링</strong><br />
+카산드라는 token ring이라고 하는 consistent 해싱 기법을 사용해서 파티션을 노드 간에 분산한다.</p>
+<p><img src="/images/img_b33faa1bf05a8f6a.jpg" alt="" />
+이를 통해 동적으로 추가되거나 삭제되는 노드들이 발생해도 파티션을 적절히 분산할 수 있다.</p>
+<p>자세한 매커니즘은 별도 포스트를 참고한다.<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/223457713545">https://m.blog.naver.com/sssang97/223457713545</a></p>
+<br>
+<br>
+<br>
+<h2 id="capgwa-deiteo-ilgwanseong">CAP과 데이터 일관성</h2>
+<p>데이터베이스의 성질을 대표하는 지표 중에 하나로 CAP이란 것이 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223115732041">https://blog.naver.com/sssang97/223115732041</a></p>
+<p>카산드라의 경우에는 multi master 구조로 고가용성을 보장할 수 있다. 일부 노드가 터져도, 그 역할을 나머지가 땜빵하면 되기 때문이다. (Availablity)</p>
+<p>그리고 파티션 내구성(Partition tolerance) 또한 충분히 보장한다. 각각의 노드는 거의 독립적으로 동작한다.</p>
+<p>하지만 노드간의 모든 데이터 복제가 비동기적으로 전송되고, 복제 지연에 대한 책임이 거의 누구에게도 없어서 일관성(Consistency)을 보장하기가 매우 어렵다는 단점이 있다.</p>
+<p>따라서 카산드라는 일반적으로 AP 시스템으로 본다.</p>
+<br>
+<br>
+<br>
+<h2 id="ilgwanseong-rebel-consistency-level">일관성 레벨 (consistency level)</h2>
+<p>하지만 카산드라도 일관성 부족을 메꿀만한 기능들을 일부 제공한다.<br />
+이걸 극단적으로 활용한다면, 일관성을 얻는 대신 가용성을 포기하는 CP 시스템처럼 쓸 수 있다.</p>
+<p>consistency level이란 옵션을 통해서 쿼리를 날릴때 복제되는 것을 기다릴지 말지를 기다리도록 할 수 있다. mongodb의 read/write concern과 동등한 개념이라 보면 된다.</p>
+<p>consistency level을 결정할때는 노드 중에 coordinator node라는 것을 뽑아서 그 노드가 완료 여부를 확인해주도록 한다.</p>
+<p><img src="/images/img_6824301f4b4bbacc.jpg" alt="" />
+이건 고정적으로 정해져있는게 아니라, 그때그때, 알고리즘으로 판단해서 선별한다.</p>
+<p>여기서 쓰기와 읽기에 대한 consistency level은 동작이 좀 다르다.</p>
+<p><strong>쓰기</strong><br />
+쓰기 작업에 대해서 write consistency level을 적용할 경우, 해당 쓰기 요청은 특정 level만큼의 노드에 복제가 완료되기까지 대기한다.<br />
+예를 들어 level을 ALL로 준다면 모든 노드에 복제된 후에 완료되기 때문에 write 후에 바로 read를 하더라도 반드시 최신 데이터를 조회할 수 있다.</p>
+<p><strong>읽기</strong><br />
+읽기 작업에 대해서 read consistency level을 적용한다면, 읽기 요청에 대해서 특정 level만큼의 노드가 응답해야 한다.<br />
+그렇지 않는다면 읽기가 실패한다.</p>
+<p>level은 ALL이 가장 강력한 일관성을 제공하지만, 이러면 카산드라를 쓰는 의미가 없어서 잘 안 쓴다.<br />
+보통 일관성을 보장해야한다고 하면 쿼럼(정족수)이나 데이터센터 그룹 단위 쿼럼 기반으로 설정하는 경우가 많다.</p>
+<br>
+<br>
+<br>
+<h2 id="seukima">스키마</h2>
+<p>카산드라는 테이블로 스키마를 먼저 정의하고 데이터를 저장하지만, 내부 저장 구조 자체는 대단히 유연한 편이다.</p>
+<p>최종적으로 디스크에 저장되는 구조에는 사실 스키마에 대한 값이 없다. 그러니까, 테이블 스키마 구조를 변경해도 그 스키마 변경사항은 그 시점의 데이터부터만 적용된다는 것이다.</p>
+<p>이를 wide column 지향의 구조라고 한다.<br />
+이것도 row base 구조이긴 한데, 각 row가 다른 모양으로 저장될 수 있다.</p>
+<p>mongodb 같은 비정형 구조에 비할 정도는 아니지만, 스키마 변경에 대응하기에 유리한 편이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeongryeol">정렬</h2>
+<p>카산드라는 read보다 write에 집중한 DB라 읽기 쿼리에 있어서는 제한이 많은데, 대표적인 것이 정렬이다.</p>
+<p>정렬(order by) 쿼리는, 파티션 키를 기반으로 단일 노드가 선택되었을 경우에 클러스터링 키를 기준으로만 정렬 가능하다. 그렇지 않고 order by를 막 걸어대면 쿼리가 에러를 던지면서 실패한다.</p>
+<p>그래서 웬만한 읽기 수준 가공은 클라이언트에서 처리해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="deiteoyi-sujeonggwa-beojeon-gwanri">데이터의 수정과 버전 관리</h2>
+<p>카산드라에서 데이터의 수정(update)은 사실상 새로운 데이터 버전을 삽입하는 형태로 이루어진다.</p>
+<p>그래서 update 쿼리는 데이터가 없을때 시도하면 실제로 데이터를 insert해서 만든다! 카산드라에서 insert와 update 작업에는 차이가 별로 없다.</p>
+<p>그리고 insert/update 쿼리는 항상 타임스탬프 값과 함께 값을 집어넣는다.<br />
+만약 동시적으로 동일 키에 대해서 다른 update 요청이 들어온다면, 카산드라는 가장 최신 타임스탬프의 쓰기만을 인정하고 나머지는 전부 버린다.</p>
+<p>아무튼 최신 값을 기준으로 다 복제는 시키니까, 완벽한 일관성은 아니지만 되긴 된다는 점에서 최종 일관성(Eventual consistency)을 지킨다고 표현하기도 한다.</p>
+<p>상당히 낙관적인 구조라고 할 수 있겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="teuraenjaegsyeon">트랜잭션</h2>
+<p>카산드라는 트랜잭션의 데이터 롤백, Lock 같은 기능을 제공하지 않는다.</p>
+<p>그냥 ACID나 트랜잭션이 없다고 봐도 된다. CAS 형식의 낙관적인 write 정도를 제공하는게 다다.<br />
+알아서 잘 해야한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://cassandra.apache.org/doc/latest/cassandra/architecture/index.html">https://cassandra.apache.org/doc/latest/cassandra/architecture/index.html</a><br />
+<a rel="external" href="https://jins-dev.tistory.com/entry/%EA%B0%80%EC%8B%AD-%ED%94%84%EB%A1%9C%ED%86%A0%EC%BD%9C-Gossip-Protocol-%EC%9D%B4%EB%9E%80">https://jins-dev.tistory.com/entry/%EA%B0%80%EC%8B%AD-%ED%94%84%EB%A1%9C%ED%86%A0%EC%BD%9C-Gossip-Protocol-%EC%9D%B4%EB%9E%80</a><br />
+<a rel="external" href="https://cassandra.apache.org/doc/latest/cassandra/architecture/guarantees.html">https://cassandra.apache.org/doc/latest/cassandra/architecture/guarantees.html</a><br />
+<a rel="external" href="https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html">https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html</a><br />
+<a rel="external" href="https://cassandra.apache.org/doc/latest/cassandra/architecture/storage-engine.html">https://cassandra.apache.org/doc/latest/cassandra/architecture/storage-engine.html</a><br />
+<a rel="external" href="https://www.read.seas.harvard.edu/~kohler/class/cs239-w08/decandia07dynamo.pdf">https://www.read.seas.harvard.edu/~kohler/class/cs239-w08/decandia07dynamo.pdf</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/20205797/which-part-of-the-cap-theorem-does-cassandra-sacrifice-and-why">https://stackoverflow.com/questions/20205797/which-part-of-the-cap-theorem-does-cassandra-sacrifice-and-why</a><br />
+<a rel="external" href="https://docs.datastax.com/en/archived/cassandra/2.0/cassandra/dml/dmlAboutDataConsistency.html">https://docs.datastax.com/en/archived/cassandra/2.0/cassandra/dml/dmlAboutDataConsistency.html</a><br />
+<a rel="external" href="https://blog.nullbus.net/91">https://blog.nullbus.net/91</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/32867869/how-cassandra-chooses-the-coordinator-node-and-the-replication-nodes">https://stackoverflow.com/questions/32867869/how-cassandra-chooses-the-coordinator-node-and-the-replication-nodes</a><br />
+<a rel="external" href="https://woooongs.tistory.com/m/89">https://woooongs.tistory.com/m/89</a><br />
+<a rel="external" href="https://docs.datastax.com/en/cassandra-oss/2.2/cassandra/dml/dmlTransactionsDiffer.html">https://docs.datastax.com/en/cassandra-oss/2.2/cassandra/dml/dmlTransactionsDiffer.html</a><br />
+<a rel="external" href="https://medium.com/code-zen/cassandra-schemas-for-beginners-like-me-9714cee9236a">https://medium.com/code-zen/cassandra-schemas-for-beginners-like-me-9714cee9236a</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/compare/the-difference-between-cassandra-and-mongodb/">https://aws.amazon.com/ko/compare/the-difference-between-cassandra-and-mongodb/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223705401331/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>rupring v0.13.0<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223700820162/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>로드밸런서와 웹<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

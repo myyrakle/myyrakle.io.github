@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 타임존 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223771082484/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 타임존">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223771082484/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-02-24T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223771082484/">[PostgreSQL] 타임존</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-24T00:00:00+00:00"><time datetime="2025-02-24T00:00:00+00:00">2025.02.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="259 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223771082484" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PostgreSQL은 타임존을 자체적으로 어느 정도 관리할 수 있게 해주는 기능들을 제공한다.</p>
+<p>현재 데이터베이스에 적용된 타임존은 show tinmezone 명령어로 조회할 수 있다.</p>
+<p><img src="/images/img_8912d7c1edd4e29d.png" alt="" />
+이게 보통 설치할때 OS 환경을 따라가는 경우가 많은데, 타사에서 제공하는 DB를 쓴다면 UTC로 저장되어있는 경우가 많고, 실제로도 그게 국룰이다.</p>
+<p>국가별 시간을 처리할때 가장 일반적인 권장사항은 UTC로 데이터를 저장하고, 그걸 클라이언트에서 변환해서 표현하는 것이다.<br />
+단순 조회 수준에서 가능하다면 프론트엔드 수준에서 타임존을 계산하면 되고, 내부 로직에서 특정 국가 기준으로 날짜 계산을 한다거나 하면 서버 애플리케이션 수준에서 타임존을 더해서 계산하면 되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="taimjon-byeonhwan">타임존 변환</h2>
+<p>PostgreSQL은 자체적인 타임존 변환 기능을 제공한다.<br />
+시간 값 오른편에** at time zone '시간대' **표현을 집어넣으면 된다.</p>
+<p><img src="/images/img_e21195419c856627.png" alt="" />
+그럼 해당 시간대에 맞게 변환을 수행해줄 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="timestampwa-timestamptz">TIMESTAMP와 TIMESTAMPTZ</h2>
+<p>PostgreSQL에서 시간을 다루다보면 가장 오해하기 쉬운게 이 2가지 타입이다.<br />
+이 2가지는 일자+시간을 합해서 관리하는 8바이트 시간 타입이다.</p>
+<p>근데 사실, 이 2개의 타입은 본질적으로 다르지 않다.<br />
+둘 다 8바이트짜리 데이터 타입이고, TIMESTAMPTZ라고 해서 타임존에 대한 정보를 저장하는 것도 아니다.</p>
+<p>차이가 있다면, timestamp는 시간을 받아서 저장할때 무식하게 때려넣는다는 것이고, timestamptz는 시간을 받았을때 타임존을 고려해서 UTC로 변환한 채로 넣는다는 것이다.</p>
+<p>아래는 그 동작을 확인할 수 있는 간단한 예제 쿼리다.<br />
+알아보기 쉽도록 UTC로 타임존을 고정하고 돌려봤다.</p>
+<p><img src="/images/img_a403378162964e94.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>set time zone</span><span style="color: #A6E3A1;"> &#39;UTC&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;2021-01-01 00:00:00 +03:00&#39;</span><span>::timestamp</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> a</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;2021-01-01 00:00:00 +03:00&#39;</span><span>::timestamptz</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> b</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>timestamp로 변환한 경우에는 그냥 시간을 무식하게 변환해서 넣었다. 그래서 사실 실제로 UTC 기준으로는 3시간을 빼서 저장해야 함에도 지역별 시간이 들어간 것이다.<br />
+timestamptz로 변환한 경우에는 오른쪽에 붙은 offset-타임존 정보를 고려해서 3시간을 빼고, UTC 기준으로 값을 변환했다.</p>
+<p>이런 오묘한 동작 탓에 timestamp는 시간대와 관련한 버그를 유발하기가 매우 쉽다.<br />
+그래서 가급적이면 timestamp는 없다고 생각하고 timestamptz을 사용하는 것이 권장된다. 대다수 ORM들에서도 시간 필드를 생성할때 timestamptz를 기본 옵션으로 사용한다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223772493859/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana Tempo] Event와 오류 처리<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223772111293/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Prometheus] Storage: Retention 설정<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

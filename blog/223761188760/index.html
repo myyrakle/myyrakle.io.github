@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana Tempo] Tempo를 통한 Trace 관리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223761188760/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana Tempo] Tempo를 통한 Trace 관리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223761188760/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-02-15T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223761188760/">[Grafana Tempo] Tempo를 통한 Trace 관리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-02-15T00:00:00+00:00"><time datetime="2025-02-15T00:00:00+00:00">2025.02.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="693 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223761188760" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_6e9dc7d364290a2f.png" alt="" />
+Tempo는 Trace 관리를 위한 오픈소스 시스템 중 하나다.</p>
+<p>예를 들어 웹서버를 굴린다고 하면, API 요청 하나하나의 기록을 Trace라고 부른다.<br />
+API 요청들의 히스토리와 성공/실패 정보 등을 기록하고 보는 용도로 사용하는 것이다.</p>
+<p>Tempo는 자체로도 독립적으로 쓸 수는 있는 일종의 데이터베이스 역할도 하고, trace를 받아서 저장하는 서버 역할도 겸한다. Tempo의 저장용 블록 시스템은 TempoDB라고 한다. 저장소 백엔드는 커스텀 가능하다.</p>
+<p>근데 tempo만을 독립적으로 사용하는 경우는 잘 없고, metric을 보관하는 용도로 prometheus를 함께 사용하는게 국룰이다. 하지만 여기서는 다 제외하고 Tempo만을 중점적으로 다루겠다.</p>
+<p>Tempo는 Opentelemetry 규격도 만족하기 때문에 otel 에이전트 환경만 있으면 꽤 편하게 연동하고 사용할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="tempo-guseonghagi-with-docker-compose">Tempo 구성하기 (with Docker Compose)</h2>
+<p>Docker compose를 사용해서 단일 로컬 환경에서의 tempo 환경을 간단하게 구축해보겠다.<br />
+예제 코드 전체는 여기있다.<br />
+<a rel="external" href="https://github.com/myyrakle/infrastructures/tree/master/docker-compose/grafana-and-tempo">https://github.com/myyrakle/infrastructures/tree/master/docker-compose/grafana-and-tempo</a></p>
+<p>다음은 tempo yaml 구성 파일이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>stream_over_http_enabled</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>server</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  http_listen_port</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3200</span></span>
+<span class="giallo-l"><span>  log_level</span><span style="color: #9399B2;">:</span><span> info</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>query_frontend</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  search</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>    throughput_bytes_slo</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1.073741824e+09</span></span>
+<span class="giallo-l"><span>    metadata_slo</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>        throughput_bytes_slo</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1.073741824e+09</span></span>
+<span class="giallo-l"><span>  trace_by_id</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>  metrics</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    max_duration</span><span style="color: #9399B2;">:</span><span> 120h                </span></span>
+<span class="giallo-l"><span>    query_backend_after</span><span style="color: #9399B2;">:</span><span> 5m</span></span>
+<span class="giallo-l"><span>    duration_slo</span><span style="color: #9399B2;">:</span><span> 5s</span></span>
+<span class="giallo-l"><span>    throughput_bytes_slo</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1.073741824e+09</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>distributor</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  receivers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    otlp</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      protocols</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        http</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          endpoint</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;0.0.0.0:4318&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>ingester</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  max_block_duration</span><span style="color: #9399B2;">:</span><span> 5m               # cut the headblock when</span><span style="color: #F38BA8;"> this</span><span> much time passes</span><span style="color: #94E2D5;">.</span><span> this is being set for demo purposes and should probably be left alone normally</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>compactor</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  compaction</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    block_retention</span><span style="color: #9399B2;">:</span><span> 1h                # overall Tempo trace retention</span><span style="color: #94E2D5;">.</span><span> set for demo purposes</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>metrics_generator</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  registry</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    external_labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      source</span><span style="color: #9399B2;">:</span><span> tempo</span></span>
+<span class="giallo-l"><span>      cluster</span><span style="color: #9399B2;">:</span><span> docker</span><span style="color: #94E2D5;">-</span><span>compose</span></span>
+<span class="giallo-l"><span>  traces_storage</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo/generator/traces</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>storage</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  trace</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    backend</span><span style="color: #9399B2;">:</span><span> local                     # backend configuration to use</span></span>
+<span class="giallo-l"><span>    wal</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo/wal             # where to store the wal locally</span></span>
+<span class="giallo-l"><span>    local</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo/blocks</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>overrides</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  defaults</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    metrics_generator</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      processors</span><span style="color: #9399B2;">:</span><span> [service</span><span style="color: #94E2D5;">-</span><span>graphs</span><span style="color: #9399B2;">,</span><span> span</span><span style="color: #94E2D5;">-</span><span>metrics</span><span style="color: #9399B2;">,</span><span> local</span><span style="color: #94E2D5;">-</span><span>blocks] # enables metrics generator</span></span>
+<span class="giallo-l"><span>      generate_native_histograms</span><span style="color: #9399B2;">:</span><span> both</span></span></code></pre>
+<p>제대로 하면 여기서 metric 저장소로 prometheus도 엮어서 쓰고 그러는데, 최대한 단순하게 구성해놨다.</p>
+<p>Dockerfile도 파서 yaml을 넣게 하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>FROM grafana</span><span style="color: #94E2D5;">/</span><span>tempo</span><span style="color: #9399B2;">:</span><span>latest</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>USER root</span></span>
+<span class="giallo-l"><span>RUN chown</span><span style="color: #FAB387;"> 10001</span><span>:</span><span style="color: #FAB387;">10001</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/tempo</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>COPY</span><span style="color: #94E2D5;"> ./</span><span>tempo</span><span style="color: #94E2D5;">.</span><span>yaml</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>tempo</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>USER</span><span style="color: #FAB387;"> 10001</span></span></code></pre>
+<p>docker compose yaml을 작성해서 이제 띄워보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>services</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  tempo</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      context</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> .</span></span>
+<span class="giallo-l"><span>      dockerfile</span><span style="color: #9399B2;">:</span><span> Dockerfile</span><span style="color: #94E2D5;">.</span><span>tempo</span></span>
+<span class="giallo-l"><span>    user</span><span style="color: #9399B2;">:</span><span> root</span></span>
+<span class="giallo-l"><span>    command</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #A6E3A1;"> &quot;-config.file=/etc/tempo.yaml&quot;</span><span> ]</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - ./</span><span>tempo</span><span style="color: #94E2D5;">.</span><span>yaml:</span><span style="color: #94E2D5;">/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>tempo</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> tempo_data</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">var</span><span>/tempo</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;4317:4317&quot;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;4318:4318&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  grafana</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    environment</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> GF_PATHS_PROVISIONING</span><span style="color: #94E2D5;">=/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #94E2D5;">/</span><span>provisioning</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> GF_AUTH_ANONYMOUS_ENABLED</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">true</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> GF_AUTH_ANONYMOUS_ORG_ROLE</span><span style="color: #94E2D5;">=</span><span>Admin</span></span>
+<span class="giallo-l"><span>    entrypoint</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> sh</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - -</span><span>euc</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - |</span></span>
+<span class="giallo-l"><span>        mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #94E2D5;">/</span><span>provisioning</span><span style="color: #94E2D5;">/</span><span>datasources</span></span>
+<span class="giallo-l"><span>        cat</span><span style="color: #94E2D5;"> &lt;&lt;</span><span>EOF</span><span style="color: #94E2D5;"> &gt; /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #94E2D5;">/</span><span>provisioning</span><span style="color: #94E2D5;">/</span><span>datasources</span><span style="color: #94E2D5;">/</span><span>ds</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"><span>        apiVersion</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>        datasources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> Tempo</span></span>
+<span class="giallo-l"><span>          type</span><span style="color: #9399B2;">:</span><span> tempo</span></span>
+<span class="giallo-l"><span>          access</span><span style="color: #9399B2;">:</span><span> proxy</span></span>
+<span class="giallo-l"><span>          orgId</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>          url</span><span style="color: #9399B2;">:</span><span> http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//tempo:3200</span></span>
+<span class="giallo-l"><span>          basicAuth</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>          isDefault</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>          version</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>          editable</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>          apiVersion</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>          uid</span><span style="color: #9399B2;">:</span><span> tempo</span></span>
+<span class="giallo-l"><span>          jsonData</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>            httpMethod</span><span style="color: #9399B2;">:</span><span> GET</span></span>
+<span class="giallo-l"><span>            serviceMap</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              datasourceUid</span><span style="color: #9399B2;">:</span><span> prometheus</span></span>
+<span class="giallo-l"><span>            streamingEnabled</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              search</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>        EOF</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        /</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> grafana</span><span style="color: #94E2D5;">/</span><span>grafana</span><span style="color: #9399B2;">:</span><span>latest</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;13000:3000&quot;</span></span>
+<span class="giallo-l"><span>    volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> grafana_data</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">var</span><span>/lib/grafana</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> grafana_etc</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span>etc</span><span style="color: #94E2D5;">/</span><span>grafana</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  grafana_data</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span>
+<span class="giallo-l"><span>  grafana_etc</span><span style="color: #9399B2;">:</span><span> </span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span>
+<span class="giallo-l"><span>  tempo_data</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    driver</span><span style="color: #9399B2;">:</span><span> local</span></span></code></pre>
+<p><img src="/images/img_ff99192657664d06.png" alt="" />
+실행하고, 별다른 오류 없이 그라파나 대시보드도 잘 뜨면 된 것이다.</p>
+<p><img src="/images/img_47397fbc7a939eaa.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="agent-guseong-go-echo">Agent 구성 (Go, Echo)</h2>
+<p>이제 저 Tempo에 Trace를 쌓아보자.</p>
+<p>예제 코드는 Go, Echo 환경이다.<br />
+특별한 이유는 없고, 어떤 언어든 otel sdk 라이브러리가 있으면 사용법 자체는 대동소이할 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;context&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;time&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/labstack/echo/v4&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;go.opentelemetry.io/contrib/instrumentation/runtime&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;go.opentelemetry.io/otel&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;go.opentelemetry.io/otel/codes&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;go.opentelemetry.io/otel/sdk/resource&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;go.opentelemetry.io/otel/sdk/trace&quot;</span></span>
+<span class="giallo-l"><span>	semconv</span><span style="color: #A6E3A1;"> &quot;go.opentelemetry.io/otel/semconv/v1.4.0&quot;</span></span>
+<span class="giallo-l"><span>	otelTrace</span><span style="color: #A6E3A1;"> &quot;go.opentelemetry.io/otel/trace&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> initTracer</span><span>()</span><span style="color: #94E2D5;"> *</span><span>trace</span><span style="color: #94E2D5;">.</span><span>TracerProvider</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	ctx</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Background</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Create the OTLP traceExporter</span></span>
+<span class="giallo-l"><span>	traceExporter</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> otlptracehttp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">New</span><span>(ctx</span><span style="color: #9399B2;">,</span><span> otlptracehttp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithEndpointURL</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;http://localhost:4318&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	)</span><span style="color: #9399B2;">,</span><span> otlptracehttp</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithInsecure</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		panic</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Create the tracer provider</span></span>
+<span class="giallo-l"><span>	traceProvider</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> trace</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewTracerProvider</span><span>(</span></span>
+<span class="giallo-l"><span>		trace</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithBatcher</span><span>(traceExporter)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		trace</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithResource</span><span>(resource</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewWithAttributes</span><span>(</span></span>
+<span class="giallo-l"><span>			semconv</span><span style="color: #94E2D5;">.</span><span>SchemaURL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			semconv</span><span style="color: #94E2D5;">.</span><span>ServiceNameKey</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(</span><span style="color: #A6E3A1;">&quot;go-server&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			semconv</span><span style="color: #94E2D5;">.</span><span>ServiceNamespaceKey</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(</span><span style="color: #A6E3A1;">&quot;dev&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Set the global tracer provider</span></span>
+<span class="giallo-l"><span>	otel</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">SetTracerProvider</span><span>(traceProvider)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	err</span><span style="color: #94E2D5;"> =</span><span> runtime</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Start</span><span>(runtime</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WithMinimumReadMemStatsInterval</span><span>(time</span><span style="color: #94E2D5;">.</span><span>Second))</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		panic</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> traceProvider</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	traceProvider</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> initTracer</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	tracer</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> traceProvider</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Tracer</span><span>(</span><span style="color: #A6E3A1;">&quot;foo&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	defer</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> traceProvider</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Shutdown</span><span>(context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Background</span><span>())</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatalf</span><span>(</span><span style="color: #A6E3A1;">&quot;failed to shutdown tracer: %v&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> echo</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">New</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Use</span><span>(otelecho</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Middleware</span><span>(</span><span style="color: #A6E3A1;">&quot;go-server&quot;</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Use</span><span>(</span><span style="color: #89B4FA;font-style: italic;">func</span><span>(next echo</span><span style="color: #94E2D5;">.</span><span>HandlerFunc) echo</span><span style="color: #94E2D5;">.</span><span>HandlerFunc</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		return </span><span style="color: #89B4FA;font-style: italic;">func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">c</span><span> echo.Context</span><span style="color: #9399B2;">)</span><span> error </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>			err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> next</span><span>(c)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>			span</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> otelTrace</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">SpanFromContext</span><span>(c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Request</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Context</span><span>())</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			if</span><span> span</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>				responseStatusCode</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Response</span><span>()</span><span style="color: #94E2D5;">.</span><span>Status</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>				spanStatus</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> codes</span><span style="color: #94E2D5;">.</span><span>Ok</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">				if</span><span> responseStatusCode</span><span style="color: #94E2D5;"> &gt;=</span><span style="color: #FAB387;"> 400</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>					spanStatus</span><span style="color: #94E2D5;"> =</span><span> codes</span><span style="color: #94E2D5;">.</span><span>Error</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">				}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>				span</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">SetStatus</span><span>(spanStatus</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			return</span><span> err</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GET</span><span>(</span><span style="color: #A6E3A1;">&quot;/trace&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(c echo</span><span style="color: #94E2D5;">.</span><span>Context) error</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		_</span><span style="color: #9399B2;">,</span><span> span </span><span style="color: #94E2D5;">:=</span><span> tracer</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Start</span><span>(c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Request</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Context</span><span>()</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;test-span&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">200</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Millisecond)</span></span>
+<span class="giallo-l"><span>		span</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">End</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		_</span><span style="color: #9399B2;">,</span><span> span</span><span style="color: #94E2D5;"> =</span><span> tracer</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Start</span><span>(c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Request</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Context</span><span>()</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;test-span2&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		time.Sleep(</span><span style="color: #FAB387;">500</span><span> * time.Millisecond)</span></span>
+<span class="giallo-l"><span>		span.End()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		return c.String(http.StatusOK</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;trace completed&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	})</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e.GET(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">c</span><span> echo.Context</span><span style="color: #9399B2;">)</span><span> error </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusOK</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Hello, World!&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e.GET(</span><span style="color: #A6E3A1;">&quot;/foo&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">c</span><span> echo.Context</span><span style="color: #9399B2;">)</span><span> error </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusOK</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;foo&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e.GET(</span><span style="color: #A6E3A1;">&quot;/bar&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">c</span><span> echo.Context</span><span style="color: #9399B2;">)</span><span> error </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">2</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusOK</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;bar&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e.GET(</span><span style="color: #A6E3A1;">&quot;/not-found&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">c</span><span> echo.Context</span><span style="color: #9399B2;">)</span><span> error </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">2</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusNotFound</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;NOT FOUND&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e.GET(</span><span style="color: #A6E3A1;">&quot;/internal&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">c</span><span> echo.Context</span><span style="color: #9399B2;">)</span><span> error </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">2</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusInternalServerError</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;INTERNAL SERVER ERROR&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e.Logger.Fatal(e.Start(</span><span style="color: #A6E3A1;">&quot;:1323&quot;</span><span>))</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>코드를 하나씩 보면</p>
+<p><img src="/images/img_c4e8395ebbdb416c.png" alt="" /></p>
+<p><img src="/images/img_b1b28bf688b76748.png" alt="" />
+이게 기본적인 설정 부분이다.<br />
+OTEL 포맷으로 HTTP 연결을 하고, Service명과 Namespace를 전달해줬다.<br />
+Namespace는 통상적으로 k8s의 네임스페이스를 위한거긴 한데, stage 등에 활용해도 좋을 것이다.</p>
+<p>그리고 미들웨어를 적당히 등록한다.</p>
+<p><img src="/images/img_0d6ab6491783e456.png" alt="" />
+API 호출 단위 Span에 대해서 추가적인 설정을 하고싶다면 위 코드의 두번째 미들웨어처럼 이래저래 조작하면 된다. 내 경우에는 Span Status에 대한 성공/실패 처리를 기본으로 해주고싶어서 미들웨어 처리를 좀 했다.</p>
+<p>그리고 실행해서 API를 이래저래 찔러보면 Tempo에 Trace 기록이 쌓일 것이다.</p>
+<p>이제 쌓인걸 대시보드를 통해 조회해보자.</p>
+<br>
+<br>
+<br>
+<h2 id="grafana-daesibodeu-guseong">Grafana 대시보드 구성</h2>
+<p>이제 Tempo로 쌓인 Trace를 대시보드로 조회해보자.<br />
+그냥 남들이 만들어놓은 대시보드 템플릿 갖다써도 되는데, 일단 여기서는 직접 깎아보자.</p>
+<p>일반적으로 사용되는건 Table Panel이다.</p>
+<p><img src="/images/img_c0daa1e9c3117461.png" alt="" />
+고르고</p>
+<br>
+<p><img src="/images/img_a96662351e472f2b.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span><span>resource</span><span style="color: #94E2D5;">.</span><span>service</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;go-server&quot;</span><span style="color: #9399B2;">}</span></span></code></pre>
+<p>데이터소스는 Tempo로. 쿼리도 적당히 짜준다.</p>
+<p>저 표현식은 TraceQL이라고 부르는건데, 여기서는 저 서비스명만 필터링하도록 했다. 필터값은 Grafana Variable 기반으로 구멍을 뚫어 쓸 수도 있을 것이나, 여기서는 다루지 않는다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223755563107">https://blog.naver.com/sssang97/223755563107</a></p>
+<p>그리고 조회해보면</p>
+<p><img src="/images/img_7ec8082379e62dd5.png" alt="" />
+이런 식으로 Trace가 잘 쌓인 것을 볼 수 있을 것이다.</p>
+<p>기본값이 Trace긴 한데, 원한다면 테이블 모드를 Span으로 바꿔서 볼 수도 있다.</p>
+<p><img src="/images/img_44289778fd09a022.png" alt="" />
+저 아래쪽에 Table Format이다.</p>
+<p>그리고 바꿔서 조회해보면 이렇게 바뀐다.</p>
+<p><img src="/images/img_2b2748c5ba08c03d.png" alt="" />
+대체로는 Trace보단 Span이 정보가 더 많아서 유용한 편이다.</p>
+<p>테이블 컬럼을 숨기거나 노출시키는건 오른쪽 Overrides에서 조정할 수 있다.</p>
+<p><img src="/images/img_fe9b4e48b51c0977.png" alt="" /></p>
+<p><img src="/images/img_e8c052d091b1c238.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="span-danwi-hwalyonghagi-attribute">Span 단위 활용하기: Attribute</h2>
+<p>이번에는 Span 단위를 적극 활용해서 Trace에 좀더 상세한 정보를 심고 조회하는 방법들을 몇가지 다뤄보겠다.</p>
+<p>사실 Trace는 별 정보도 없는 껍데기, 그룹에 불과할 뿐이다. 실질적인 정보는 전부 Span에 담기며, 하나의 Trace는 무조건 하나 이상의 Span으로 구성된다.<br />
+추가적인 Span 단위가 필요하다면 최상위 Span에 child Span들이 Tree 형태로 뻗어나가는 형태로 사용된다.</p>
+<p>Span들에는 이런저런 값들을 마구잡이로 구겨넣을 수 있다. 별다른 제한도 없고, 미리 지정해둘 필요도 없다.</p>
+<p><img src="/images/img_de9ebb79a754b3b4.png" alt="" />
+이렇게 값을 넣고 찔러보면</p>
+<br>
+<p><img src="/images/img_40bccced12496668.png" alt="" />
+실제로도 조회 대상에 잘 들어가며, 필터값으로도 사용할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="child-span">Child Span</h2>
+<p>Span은 여러개의 Span을 자식으로 가질 수 있다.<br />
+이를 통해 기능의 하위 단위들이 얼마나 레이턴시를 잡아먹고, 어떤 컨텍스트를 가지고 있는지를 추적할 수 있다.</p>
+<p>사용법은 그다지 어려울건 없다.</p>
+<p><img src="/images/img_187bb66316d4f24a.png" alt="" /></p>
+<p><img src="/images/img_a7739353b779d282.png" alt="" />
+이런 식으로, 컨텍스트 기반으로 span을 생성해서 이름 짓고, Attribute 넣을거 있으면 넣고, 다 끝나면 End로 종료를 하면 되는 것이다.</p>
+<p>그리고 찔러보면</p>
+<p><img src="/images/img_cd11e76ceedc91ec.png" alt="" /></p>
+<p><img src="/images/img_4f0ba9c3078e3c82.png" alt="" />
+이런 식으로 하위 Span들이 생성된 것을 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gita-eungyong">기타 응용</h2>
+<p>Span 기반으로 테이블을 만들어서 보면, 자질구레한 Child Span까지 노출되는게 좀 불편할 수 있다.<br />
+그럴 때는 미들웨어에서 최상위 Span을 나타내는 레이블 값을 구겨넣고</p>
+<p><img src="/images/img_93c49eee94d95084.png" alt="" /></p>
+<p>그걸로 필터링해서 볼 수 있다.</p>
+<p><img src="/images/img_8b7166bd41227d2e.png" alt="" /></p>
+<p>그리고 이외의 Span 속성들도 열에 자유롭게 노출할 수 있다.<br />
+예를 들어, Status Code는 대부분이 궁금해할만한 속성이다.</p>
+<p><img src="/images/img_20855b91db6bd924.png" alt="" /></p>
+<p><img src="/images/img_9b0a8367c486882e.png" alt="" />
+이런 느낌으로 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/getting-started/docker-example/">https://grafana.com/docs/tempo/latest/getting-started/docker-example/</a><br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/api_docs/">https://grafana.com/docs/tempo/latest/api_docs/</a><br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/configuration/">https://grafana.com/docs/tempo/latest/configuration/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223764113482/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana] Opentelemetry: metric 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223758647557/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Zig] zig에 대한 생각 글.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

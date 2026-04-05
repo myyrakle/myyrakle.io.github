@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ECS로 서버 배포 및 자동화하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222626113440/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ECS로 서버 배포 및 자동화하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222626113440/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-01-19T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222626113440/">[AWS] ECS로 서버 배포 및 자동화하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-01-19T00:00:00+00:00"><time datetime="2022-01-19T00:00:00+00:00">2022.01.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="572 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222626113440" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>사용할 것들.<br />
+ECS + ECR + Docker + S3 + 로드밸런서 + Route53 + Github Action</p>
+<p>서버환경<br />
+Nest.js (뭘로해도 상관없음)</p>
+<p>ECS는 쿠버네티스까지 올리기는 뭐한데, 그렇다고 조촐하게 인스턴스를 직접 제어하고 싶지는 않을때, 그 중간점으로 적절한 선택이다.</p>
+<p>내가 배포에 사용할 프로세스는 다음과 같다.</p>
+<ol>
+<li>미리 작성해둔 기반 docker 이미지를 ECR에서 가져옴.</li>
+<li>도커 빌드로 바로 실행시킬 수 있도록 처리 (종속성 설치, 컴파일, S3에서 환경변수 다운로드)</li>
+<li>빌드한 이미지를 업로드</li>
+<li>ECS에 올라간 이미지로 작업정의 업데이트</li>
+</ol>
+<p>꼭 이런 방식으로 해야하는건 아니고, 상황에 따라 변용하면 된다.<br />
+가령 내 경우에는 환경변수값을 비공개 S3에 저장해놓고 썼지만, 아예 다른 파일DB나 Key-Value DB 등에 저장해놓고 써도 무방하다.</p>
+<br>
+<br>
+<br>
+<h2 id="ecr-saengseong-mic-imiji-jageob">ECR 생성 및 이미지 작업</h2>
+<p>먼저 ECR에 들어가서 배포용 이미지를 관리할 도커 레포지토리를 만들어준다.</p>
+<p><img src="/images/img_73441946e303b60e.png" alt="" /></p>
+<p>이에 대한 자세한 내용은 다음 포스트를 참조하길 바란다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222459232906">https://blog.naver.com/sssang97/222459232906</a></p>
+<p>그리고 우분투 베이스로 해서 "test-repo:base"의 형태로 기반 이미지 파일을 작성해 push해뒀다.</p>
+<br>
+<br>
+<br>
+<h2 id="dokeobildeu-jagseong">도커빌드 작성</h2>
+<p>배포 올라갈때 컴파일을 해도 되긴 되지만, 그러면 올라가는 속도가 느려지고 자원을 더 많이 먹게 된다.<br />
+그래서 웬만하면 빌드 떠놓은채로 이미지를 올리는게 낫다.</p>
+<p>내 경우에는 다음과 같이 빌드파일을 작성해뒀다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>FROM</span><span style="color: #94E2D5;"> ....</span><span>dkr</span><span style="color: #94E2D5;">.</span><span>ecr</span><span style="color: #94E2D5;">.</span><span>ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span>2</span><span style="color: #94E2D5;">.</span><span>amazonaws</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #94E2D5;">-</span><span>backend</span><span style="color: #9399B2;">:</span><span>base</span></span>
+<span class="giallo-l"><span>ENV TZ</span><span style="color: #94E2D5;">=</span><span>Asia</span><span style="color: #94E2D5;">/</span><span>Seoul</span></span>
+<span class="giallo-l"><span>ENV HOME</span><span style="color: #94E2D5;">=/</span><span>home</span></span>
+<span class="giallo-l"><span>WORKDIR $HOME</span><span style="color: #94E2D5;">/</span><span>test</span><span style="color: #94E2D5;">-</span><span>backend</span></span>
+<span class="giallo-l"><span>RUN git branch master</span></span>
+<span class="giallo-l"><span>RUN git checkout master</span></span>
+<span class="giallo-l"><span>RUN git pull origin master </span></span>
+<span class="giallo-l"><span>RUN aws s3 sync s3</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//test-env/test-backend . # 환경변수 다운로드</span></span>
+<span class="giallo-l"><span>RUN npm i # 의존성 설치</span></span>
+<span class="giallo-l"><span>RUN npm run build</span><span style="color: #9399B2;">:</span><span>prod # 컴파일</span></span>
+<span class="giallo-l"><span>WORKDIR $HOME</span></span>
+<span class="giallo-l"><span>EXPOSE</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span>COPY</span><span style="color: #94E2D5;"> ./</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh</span><span style="color: #94E2D5;"> ./</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh # 실행파일 이동</span></span>
+<span class="giallo-l"><span>CMD sh</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh # 실행</span></span></code></pre>
+<p>그리고 빌드해서 배포용 태그로 한번 올려준다.<br />
+내 경우에는 :latest 태그를 배포용으로 사용했다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="keulreoseuteo-saengseong">클러스터 생성</h2>
+<p>먼저 사용할 클러스터를 적절히 생성해준다.</p>
+<p><img src="/images/img_f73d973db7f4f37d.png" alt="" />
+기본값인 네트워킹 전용으로 고르고,</p>
+<br>
+<p><img src="/images/img_ee4f7e31031dd406.png" alt="" />
+이름만 잘 지어준다.</p>
+<br>
+<br>
+<br>
+<h2 id="jageob-jeongyi-saengseong">작업 정의 생성</h2>
+<p>그럼 이번엔 실제로 클러스터에 올라갈 작업정의를 만들어주자.</p>
+<p><img src="/images/img_29e140d4ddc31407.png" alt="" />
+웬만하면 Fargate로 하는게 정신건강에 이롭다.</p>
+<br>
+<p><img src="/images/img_cdc94946958cfa03.png" alt="" />
+이름 잘 지어주고</p>
+<br>
+<p><img src="/images/img_4209828cf145a813.png" alt="" />
+메모리와 CPU 양을 지정해준다.<br />
+보통 저정도면 충분할 것이다. 부하 늘면 스케일링하면 되고</p>
+<br>
+<p><img src="/images/img_86663b76d3a0c1a9.png" alt="" />
+컨테이너에 방금 만들었던 배포용 이미지를 지정해주고, 포트 매핑까지 해주면, 끝이다.<br />
+이대로 만들어주자.</p>
+<br>
+<br>
+<br>
+<h2 id="daesang-geurub-saengseong">대상 그룹 생성</h2>
+<p>서비스를 만들기 전에 로드밸런서부터 만들어둬야 하는데, 로드밸런서를 만들려면 대상그룹부터 만들어야 한다.<br />
+만드는 법은 어렵지 않다.</p>
+<p><img src="/images/img_d710baf8305155a4.png" alt="" />
+IP Address 모드로 선택해주고, 이름 잘 짓고, VPC를 옳게 넣어준다.</p>
+<p>vpc는 그냥 이름으로 넣으면 된다.</p>
+<p><img src="/images/img_00a662e98f26f2d0.png" alt="" /></p>
+<br>
+<p><img src="/images/img_c26ca72e10aaaf9a.png" alt="" />
+그러고 생성만 해주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="rodeubaelreonseo-saengseong">로드밸런서 생성</h2>
+<p>이제 로드밸런서를 만들어주자.<br />
+어플리케이션 로드밸런서로 하고</p>
+<p><img src="/images/img_d92eb1bdb56a9d27.png" alt="" /></p>
+<p>이름 잘 짓고</p>
+<p><img src="/images/img_6394a5a48282b0ed.png" alt="" /></p>
+<p>늘 그렇듯이 가용영역 잘 박아주고</p>
+<p><img src="/images/img_4bb0b182e784fd06.png" alt="" /></p>
+<p>아까 만든 대상그룹을 리스너에 넣어주면 된다.</p>
+<p><img src="/images/img_6c42e7733d22c55d.png" alt="" /></p>
+<p>그리고 도메인 인증서도 있으면 잘 넣어준다.</p>
+<p><img src="/images/img_f804014f832a1167.png" alt="" />
+이래야 HTTPS 연동이 잘 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="keulreoseuteoe-seobiseu-saengseong">클러스터에 서비스 생성</h2>
+<p>다음엔 클러스터에 방금 만든 작업정의를 기반으로 "서비스"를 생성하면, 이제 기본적인 세팅은 거의 다 된 것이다.</p>
+<p><img src="/images/img_ce0acf2e4a9840a7.png" alt="" />
+클러스터와 작업정의를 잘 넣어주고, 이름 잘 지어주고, 작업 개수 지정해주면 된다.</p>
+<p>방금 만든 로드밸런서를 넣어준다.</p>
+<p><img src="/images/img_9df1ffd62fddbd91.png" alt="" /></p>
+<p><img src="/images/img_1daa2fd469cda224.png" alt="" /></p>
+<p>그러면 서비스와 함께 작업목록이 뜰텐데, 아무거나 들어가서</p>
+<p><img src="/images/img_79f8e76a2b24b64b.png" alt="" /></p>
+<p>링크로 접속 잘 되는지 보고</p>
+<p><img src="/images/img_5ef55cf41bc756a5.png" alt="" /></p>
+<p>로드밸런서 엔트포인트도 잘 들어가지는지 보자.</p>
+<p><img src="/images/img_5052a58aaa4efd09.png" alt="" />
+다 잘 되면 된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="domein-yeondong">도메인 연동</h2>
+<p>이번엔 도메인을 붙여주자.<br />
+이미 route53에 도메인이 다 들어있다는 전제 하에 진행하겠다.</p>
+<p><img src="/images/img_7fa224e18791c727.png" alt="" />
+해당 도메인 항목에 들어가서 레코드 생성 클릭.</p>
+<p>마법사 모드로 전환해서 단순 라우팅.</p>
+<p><img src="/images/img_e870c89315394fcf.png" alt="" /></p>
+<p>서브도메인 잘 지정해주고, 로드밸런서 찾아서 붙여주면 끝이다.</p>
+<p><img src="/images/img_b70389152bb8d79f.png" alt="" /></p>
+<p>그렇게 해서 잘 호출되면 된다.</p>
+<p><img src="/images/img_7422430a875faf16.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="github-action-yeondong">Github Action 연동</h2>
+<p>그럼 이제 저걸 push할때마다 자동으로 올라가게 해보자.</p>
+<p>내가 사용한 action 로직은 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># This workflow will build and push a</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> container image to Amazon ECR</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span># and then will deploy a</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> task definition to Amazon ECS</span><span style="color: #9399B2;">,</span><span> when a release is created</span></span>
+<span class="giallo-l"><span>#</span></span>
+<span class="giallo-l"><span># To use</span><span style="color: #F38BA8;"> this</span><span> workflow</span><span style="color: #9399B2;">,</span><span> you will need to complete the following set</span><span style="color: #94E2D5;">-</span><span>up steps</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>#</span></span>
+<span class="giallo-l"><span># </span><span style="color: #FAB387;">1.</span><span> Create an ECR repository to store your images</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#    For example</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> `aws ecr create-repository --repository-name my-ecr-repo --region us-east-2`</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#    Replace the value</span><span style="color: #CBA6F7;"> of</span><span style="color: #A6E3A1;"> `ECR_REPOSITORY`</span><span style="color: #CBA6F7;"> in</span><span> the workflow below</span><span style="color: #CBA6F7;"> with</span><span> your repository</span><span style="color: #A6E3A1;">&#39;s name.</span></span>
+<span class="giallo-l"><span>#    Replace the value</span><span style="color: #CBA6F7;"> of</span><span style="color: #A6E3A1;"> `aws-region`</span><span style="color: #CBA6F7;"> in</span><span> the workflow below</span><span style="color: #CBA6F7;"> with</span><span> your repository</span><span style="color: #A6E3A1;">&#39;s region.</span></span>
+<span class="giallo-l"><span>#</span></span>
+<span class="giallo-l"><span># </span><span style="color: #FAB387;">2.</span><span> Create an ECS task definition</span><span style="color: #9399B2;">,</span><span> an ECS cluster</span><span style="color: #9399B2;">,</span><span> and an ECS service</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#    For example</span><span style="color: #9399B2;">,</span><span> follow the Getting Started guide on the ECS console</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>#      https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//us-east-2.console.aws.amazon.com/ecs/home?region=us-east-2#/firstRun</span></span>
+<span class="giallo-l"><span>#    Replace the values for</span><span style="color: #A6E3A1;"> `service`</span><span> and</span><span style="color: #A6E3A1;"> `cluster`</span><span style="color: #CBA6F7;"> in</span><span> the workflow below</span><span style="color: #CBA6F7;"> with</span><span> your service and cluster names</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#</span></span>
+<span class="giallo-l"><span># </span><span style="color: #FAB387;">3.</span><span> Store your ECS task definition</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> a JSON file in your repository</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#    The format should follow the output</span><span style="color: #CBA6F7;"> of</span><span style="color: #A6E3A1;"> `aws ecs register-task-definition --generate-cli-skeleton`</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#    Replace the value</span><span style="color: #CBA6F7;"> of</span><span style="color: #A6E3A1;"> `task-definition`</span><span style="color: #CBA6F7;"> in</span><span> the workflow below</span><span style="color: #CBA6F7;"> with</span><span> your JSON file</span><span style="color: #A6E3A1;">&#39;s name.</span></span>
+<span class="giallo-l"><span>#    Replace the value</span><span style="color: #CBA6F7;"> of</span><span style="color: #A6E3A1;"> `container-name`</span><span style="color: #CBA6F7;"> in</span><span> the workflow below</span><span style="color: #CBA6F7;"> with</span><span> the name</span><span style="color: #CBA6F7;"> of</span><span> the container</span></span>
+<span class="giallo-l"><span>#    </span><span style="color: #CBA6F7;">in</span><span> the</span><span style="color: #A6E3A1;"> `containerDefinitions`</span><span> section</span><span style="color: #CBA6F7;"> of</span><span> the task definition</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#</span></span>
+<span class="giallo-l"><span># </span><span style="color: #FAB387;">4.</span><span> Store an IAM user access key</span><span style="color: #CBA6F7;"> in</span><span> GitHub Actions secrets named</span><span style="color: #A6E3A1;"> `AWS_ACCESS_KEY_ID`</span><span> and</span><span style="color: #A6E3A1;"> `AWS_SECRET_ACCESS_KEY`</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>#    See the documentation for each action used below for the recommended IAM policies for</span><span style="color: #F38BA8;"> this</span><span> IAM user</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>#    and best practices on handling the access key credentials</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Controls when the workflow will run</span></span>
+<span class="giallo-l"><span>on</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    # Triggers the workflow on push or pull request events but only for the main branch</span></span>
+<span class="giallo-l"><span>    push</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        branches</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> master # master에 반응해 동작</span></span>
+<span class="giallo-l"><span>    workflow_dispatch</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>name</span><span style="color: #9399B2;">:</span><span> Deploy Server to Amazon</span><span style="color: #89B4FA;font-style: italic;"> ECS</span><span> (LIVE)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>jobs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    deploy</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        name</span><span style="color: #9399B2;">:</span><span> Deploy</span></span>
+<span class="giallo-l"><span>        runs</span><span style="color: #94E2D5;">-</span><span>on</span><span style="color: #9399B2;">:</span><span> ubuntu</span><span style="color: #94E2D5;">-</span><span>latest</span></span>
+<span class="giallo-l"><span>        environment</span><span style="color: #9399B2;">:</span><span> production</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        steps</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> name</span><span style="color: #9399B2;">:</span><span> Checkout</span></span>
+<span class="giallo-l"><span>              uses</span><span style="color: #9399B2;">:</span><span> actions</span><span style="color: #94E2D5;">/</span><span>checkout@v1</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> name</span><span style="color: #9399B2;">:</span><span> Configure AWS credentials</span></span>
+<span class="giallo-l"><span>              uses</span><span style="color: #9399B2;">:</span><span> aws</span><span style="color: #94E2D5;">-</span><span>actions</span><span style="color: #94E2D5;">/</span><span>configure</span><span style="color: #94E2D5;">-</span><span>aws</span><span style="color: #94E2D5;">-</span><span>credentials@v1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">              with</span><span>:</span></span>
+<span class="giallo-l"><span>                  aws</span><span style="color: #94E2D5;">-</span><span>access</span><span style="color: #94E2D5;">-</span><span>key</span><span style="color: #94E2D5;">-</span><span>id</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_ACCESS_KEY_ID</span><span style="color: #9399B2;"> }}</span><span> # S3 접근용</span><span style="color: #89B4FA;font-style: italic;"> 키</span><span> (github sercret으로 넣어둠)</span></span>
+<span class="giallo-l"><span>                  aws</span><span style="color: #94E2D5;">-</span><span>secret</span><span style="color: #94E2D5;">-</span><span>access</span><span style="color: #94E2D5;">-</span><span>key</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_SECRET_ACCESS_KEY</span><span style="color: #9399B2;"> }}</span><span> # S3 접근용 키</span></span>
+<span class="giallo-l"><span>                  aws</span><span style="color: #94E2D5;">-</span><span>region</span><span style="color: #9399B2;">:</span><span> ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> name</span><span style="color: #9399B2;">:</span><span> Login to Amazon ECR</span></span>
+<span class="giallo-l"><span>              id</span><span style="color: #9399B2;">:</span><span> login</span><span style="color: #94E2D5;">-</span><span>ecr</span></span>
+<span class="giallo-l"><span>              uses</span><span style="color: #9399B2;">:</span><span> aws</span><span style="color: #94E2D5;">-</span><span>actions</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>ecr</span><span style="color: #94E2D5;">-</span><span>login@v1</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> name</span><span style="color: #9399B2;">:</span><span> Build</span><span style="color: #9399B2;">,</span><span> tag</span><span style="color: #9399B2;">,</span><span> and push image to Amazon ECR</span></span>
+<span class="giallo-l"><span>              id</span><span style="color: #9399B2;">:</span><span> build</span><span style="color: #94E2D5;">-</span><span>image</span></span>
+<span class="giallo-l"><span>              env</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>                  ECR_REGISTRY</span><span style="color: #9399B2;">:</span><span> # ECR 엔드포인트</span></span>
+<span class="giallo-l"><span>                  ECR_REPOSITORY</span><span style="color: #9399B2;">:</span><span> # ECR 레포지토리 이름</span></span>
+<span class="giallo-l"><span>                  IMAGE_TAG</span><span style="color: #9399B2;">:</span><span> latest # 배포용 이미지 태그</span></span>
+<span class="giallo-l"><span>              run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>                  # Build a docker container and</span></span>
+<span class="giallo-l"><span>                  # push it to ECR so that it can</span></span>
+<span class="giallo-l"><span>                  # be deployed to ECS</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>                  docker image prune</span><span style="color: #94E2D5;"> -</span><span>a</span></span>
+<span class="giallo-l"><span>                  docker build</span><span style="color: #94E2D5;"> -</span><span>t $ECR_REGISTRY</span><span style="color: #94E2D5;">/</span><span>$ECR_REPOSITORY</span><span style="color: #9399B2;">:</span><span>$IMAGE_TAG</span><span style="color: #94E2D5;"> ./</span><span>ecs</span><span style="color: #94E2D5;">/</span><span>master # 여기에 도커파일 넣어둠</span></span>
+<span class="giallo-l"><span>                  docker push $ECR_REGISTRY</span><span style="color: #94E2D5;">/</span><span>$ECR_REPOSITORY</span><span style="color: #9399B2;">:</span><span>$IMAGE_TAG</span></span>
+<span class="giallo-l"><span>                  echo</span><span style="color: #A6E3A1;"> &quot;::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> name</span><span style="color: #9399B2;">:</span><span> Deploy Amazon ECS task definition</span></span>
+<span class="giallo-l"><span>              uses</span><span style="color: #9399B2;">:</span><span> aws</span><span style="color: #94E2D5;">-</span><span>actions</span><span style="color: #94E2D5;">/</span><span>amazon</span><span style="color: #94E2D5;">-</span><span>ecs</span><span style="color: #94E2D5;">-</span><span>deploy</span><span style="color: #94E2D5;">-</span><span>task</span><span style="color: #94E2D5;">-</span><span>definition@v1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">              with</span><span>:</span></span>
+<span class="giallo-l"><span>                  task</span><span style="color: #94E2D5;">-</span><span>definition</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> ./</span><span>ecs</span><span style="color: #94E2D5;">/</span><span>master</span><span style="color: #94E2D5;">/</span><span>task</span><span style="color: #94E2D5;">-</span><span>definition</span><span style="color: #94E2D5;">.</span><span>json # 작업정의 설정파일</span></span>
+<span class="giallo-l"><span>                  service</span><span style="color: #9399B2;">:</span><span> 서비스명</span></span>
+<span class="giallo-l"><span>                  cluster</span><span style="color: #9399B2;">:</span><span> 클러스터명</span></span>
+<span class="giallo-l"><span>                  wait</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>service</span><span style="color: #94E2D5;">-</span><span>stability</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span></code></pre>
+<p>그리고 저기서 task-definition.json 파일은 직접 작성해도 되긴 하는데, 이미 만들어둔거 긁어오는게 편하다.</p>
+<p>작업 정의 들어가서 JSON 탭 누르고</p>
+<p><img src="/images/img_23b22da57acdf58c.png" alt="" />
+복붙해오면 된다.</p>
+<br>
+<p><img src="/images/img_099b5f4d4f618445.png" alt="" />
+이렇게 해서 터지지 않고 잘 올라가면 끝이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/premiumsupport/knowledge-center/create-alb-auto-register/">https://aws.amazon.com/ko/premiumsupport/knowledge-center/create-alb-auto-register/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222625427545/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Git] stash<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222621617227/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.58.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Profile-guided optimization (PGO) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223176448202/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Profile-guided optimization (PGO)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223176448202/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-08-06T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223176448202/">[Go] Profile-guided optimization (PGO)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-06T00:00:00+00:00"><time datetime="2023-08-06T00:00:00+00:00">2023.08.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="235 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223176448202" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PGO는 프로그램을 실행해서 수집한 프로파일 데이터로 최적화를 돌리는 가장 심오한 최적화 기법이다.<br />
+Go도 최근에 지원하기 시작했다. 버전 1.20부터 사용 가능하다.</p>
+<p><strong>장점</strong><br />
+성능이 빨라진다. 보통은 2-4% 정도고, 극적인 경우는 아직 많지 않은 것 같다.</p>
+<p><strong>단점</strong><br />
+현재 알려진 바로는, 바이너리가 오히려 더 커질 수는 있다. Rust PGO는 더 작아지던데 왜지..?<br />
+그리고 당연하지만 빌드 시간이 오래걸린다.</p>
+<p>아직 나온지 얼마 되지도 않았고, 기능도 매우 부실해서 사실 굳이 쓸 이유는 없다.<br />
+좀더 기다려야 할 것이다...</p>
+<br>
+<br>
+<br>
+<h2 id="peuropailring">프로파일링</h2>
+<p>PGO를 먹이기 위해서는 프로파일링을 통해 해당 머신에서 발생한 실행 로그 기록이 필요하다.</p>
+<p>별도 포스트를 참조하면 좋겠다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223176350882">https://blog.naver.com/sssang97/223176350882</a><br />
+여기서는 프로파일링에 대해서는 적당히 넘기겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-kodeu">예제 코드</h2>
+<p>아래는 Hello API와 피보나치 계산 API가 있는 간단한 서버 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span>	_</span><span style="color: #A6E3A1;"> &quot;net/http/pprof&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;strconv&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n int) int</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> n</span><span style="color: #94E2D5;"> &lt;=</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span> n</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 간단한 http 서버 예제</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(w http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> r</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		fmt.Fprintf(w</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Hello, World!&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	})</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	http.HandleFunc(</span><span style="color: #A6E3A1;">&quot;/fibonacci&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">w</span><span> http.ResponseWriter</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> r</span><span> *http.Request</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span>		n</span><span style="color: #9399B2;">,</span><span> error</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> strconv</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Atoi</span><span>(r</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">URL</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Query</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Get</span><span>(</span><span style="color: #A6E3A1;">&quot;n&quot;</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> error</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fprintf</span><span>(w</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;숫자를 입력해주세요.&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">			return</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		result</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> fibonacci</span><span>(n)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fprintf</span><span>(w</span><span style="color: #9399B2;">,</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span><span style="color: #A6E3A1;">&quot;피보나치 %d번째 수는 %d입니다.&quot;</span><span style="color: #9399B2;">,</span><span> n</span><span style="color: #9399B2;">,</span><span> result))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt.Println(</span><span style="color: #A6E3A1;">&quot;서버 시작 중...&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	err </span><span style="color: #94E2D5;">:=</span><span> http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">ListenAndServe</span><span>(</span><span style="color: #A6E3A1;">&quot;:8080&quot;</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span>	if err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		fmt.Println(</span><span style="color: #A6E3A1;">&quot;서버 시작 실패: &quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>프로파일링을 위해서 "net/http/pprof"를 import했다는게 유일한 특이점이다.</p>
+<p>저렇게 해서 빌드하고</p>
+<p><img src="/images/img_d40adb90c5ee9e7c.png" alt="" /></p>
+<p>실행해본다.</p>
+<p><img src="/images/img_9caaf1631418902e.png" alt="" /></p>
+<p><img src="/images/img_702bd7b1b7e93488.png" alt="" /></p>
+<p>그리고 pprof 페이지로 이동해서 프로파일 정보를 다운받는다.</p>
+<p><img src="/images/img_ea6b1081b7c18e78.png" alt="" /></p>
+<p>프로파일 파일을 적당히 *.pgo와 같은 형태로 옮겨준다.<br />
+보통은 default.pgo로 하는게 권장된다. 이렇게 지어두면 auto 모드에서 자동으로 읽어간다.</p>
+<p><img src="/images/img_2408dc27c778b365.png" alt="" /></p>
+<p>그리고 빌드할때 다음과 같이 pgo 옵션을 줘서 빌드를 수행하면</p>
+<p><img src="/images/img_f06425a488ebef7a.png" alt="" />
+PGO 빌드가 완료되는 것이다.</p>
+<p>안타깝게도 이런 간단한 케이스에서는 pgo로 인한 뭔가 개선이 일어나진 않는 것 같았다.<br />
+성능도 별 차이는 없고, 바이너리 사이즈에도 차이는 없었다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://go.dev/doc/pgo">https://go.dev/doc/pgo</a><br />
+<a rel="external" href="https://www.pixelstech.net/article/1677391324-Understanding-PGO-in-GoLang-1-20">https://www.pixelstech.net/article/1677391324-Understanding-PGO-in-GoLang-1-20</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223176350882/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] pprof: 프로파일러<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223175717079/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>terraform best practice.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

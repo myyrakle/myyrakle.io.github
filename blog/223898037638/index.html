@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Pytorch] 모델 서빙하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223898037638/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Pytorch] 모델 서빙하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223898037638/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-06-13T00:00:00+00:00">
+    <meta property="article:tag" content="Pytorch">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223898037638/">[Pytorch] 모델 서빙하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-13T00:00:00+00:00"><time datetime="2025-06-13T00:00:00+00:00">2025.06.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="399 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/pytorch/">Pytorch</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223898037638" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>만들어진 모델 파일을 가져다가 사용해보는 방법을 다뤄본다.<br />
+학습 과정 같은 것은 다루지 않는다.</p>
+<p>여기서 사용해볼 모델은 resnet-18이라고 하는, 이미지 분류 모델이다.<br />
+<a rel="external" href="https://huggingface.co/microsoft/resnet-18">https://huggingface.co/microsoft/resnet-18</a><br />
+이미지를 받으면 그게 어떤 형태의 이미지인지 분석해서 텍스트 목록으로 알려주는 기능을 갖고 있다.</p>
+<p>예시로 사용한 테스트코드는 깃헙을 참조<br />
+<a rel="external" href="https://github.com/myyrakle/ml_examples/tree/master/pytorch/start-with-resnet-18">https://github.com/myyrakle/ml_examples/tree/master/pytorch/start-with-resnet-18</a></p>
+<br>
+<br>
+<br>
+<h2 id="jongsogseong-seolci-uv">종속성 설치 (uv)</h2>
+<p>보통 이 정도는 기본으로 깔고 간다고 생각하면 된다.<br />
+pillow는 이미지 처리 모듈, torch가 pytorch 모듈, transformer가 모델을 로드해서 쏘기 위한 모듈이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>uv add pillow torch transformers</span></span></code></pre>
+<p><img src="/images/img_27e5218c657ff06d.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gibon-seting">기본 세팅</h2>
+<p>먼저 모델부터 로딩해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>from transformers</span><span style="color: #CBA6F7;"> import</span><span> AutoImageProcessor</span><span style="color: #9399B2;">,</span><span> AutoModelForImageClassification</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">from</span><span> PIL import Image</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 모델 로딩</span></span>
+<span class="giallo-l"><span>image_processor = AutoImageProcessor.from_pretrained(</span><span style="color: #A6E3A1;">&quot;microsoft/resnet-18&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>model = AutoModelForImageClassification.from_pretrained(</span><span style="color: #A6E3A1;">&quot;microsoft/resnet-18&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># ID과 레이블 값 매핑 조회</span></span>
+<span class="giallo-l"><span>print(model.config.id2label)</span></span></code></pre>
+<p><img src="/images/img_f50c167e3a3080bc.png" alt="" />
+기본적으로 이런 모델들은, 출력의 형태가 정해져있다.</p>
+<p>그래서 모델 자체에 class id와 label name의 매핑이 존재하고, 모델 추론의 결과로는 class id가 반환되어서 그걸로 이 config에서 값을 찾아서 사용하는 식이 되는 것이다.</p>
+<br>
+<p>이제 추론을 돌려보자.<br />
+먼저 이미지를 하나 준비하고</p>
+<p><img src="/images/img_be4e14534d34bbdd.png" alt="" /></p>
+<p>이번에는 추론 코드까지 작성해보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>from transformers</span><span style="color: #CBA6F7;"> import</span><span> AutoImageProcessor</span><span style="color: #9399B2;">,</span><span> AutoModelForImageClassification</span></span>
+<span class="giallo-l"><span>import torch</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">from</span><span> PIL import Image</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 모델 로딩</span></span>
+<span class="giallo-l"><span>image_processor = AutoImageProcessor.from_pretrained(</span><span style="color: #A6E3A1;">&quot;microsoft/resnet-18&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>model = AutoModelForImageClassification.from_pretrained(</span><span style="color: #A6E3A1;">&quot;microsoft/resnet-18&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 이미지 넣어서 입력 생성</span></span>
+<span class="giallo-l"><span>image = Image.open(</span><span style="color: #A6E3A1;">&quot;cat.jpg&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>inputs = image_processor(image</span><span style="color: #9399B2;">,</span><span> return_tensors=</span><span style="color: #A6E3A1;">&quot;pt&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(model.config.id2label)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># gradient 계산 비활성화한 채로 모델 추론 실행</span></span>
+<span class="giallo-l"><span>with torch.no_grad(): </span></span>
+<span class="giallo-l"><span>    logits = model(</span><span style="color: #F38BA8;">**</span><span>inputs).logits</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 모델 결과값 출력</span></span>
+<span class="giallo-l"><span>predicted_label = logits.argmax(-1).item() # 가장 높은 점수를 가진 클래스의 인덱스</span></span>
+<span class="giallo-l"><span>print(f</span><span style="color: #A6E3A1;">&quot;Predicted label: {predicted_label}&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>print(model.config.id2label[predicted_label])</span></span></code></pre>
+<p>logits의 결과값으로 추론된 class 인덱스들이 반환되고, 그걸로 id 매핑을 뒤져서 값을 가져왔다.</p>
+<br>
+<p><img src="/images/img_8cd7f557d8b1b3ef.png" alt="" />
+그러면 tabby, tabby cat이라는 값이 추론된 것을 볼 수 있다.</p>
+<p>혹은, 상위 N개를 가져와서 처리하는 식으로 할 수도 있다.<br />
+애초에 이런 추론 결과는 정확하지 않고 그냥 점수가 높은 것을 가져오는 식으로 동작하기 때문이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 상위 k개 클래스 보기</span></span>
+<span class="giallo-l"><span>k</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 5</span><span>  # 상위 5개</span></span>
+<span class="giallo-l"><span>top_k</span><span style="color: #94E2D5;"> =</span><span> torch</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">topk</span><span>(logits</span><span style="color: #9399B2;">,</span><span> k)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">print</span><span>(f</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F5C2E7;">\n</span><span style="color: #A6E3A1;">상위 {k}개 예측:&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #89B4FA;font-style: italic;"> range</span><span>(k):</span></span>
+<span class="giallo-l"><span>    idx</span><span style="color: #94E2D5;"> =</span><span> top_k</span><span style="color: #94E2D5;">.</span><span>indices[</span><span style="color: #FAB387;">0</span><span>][i]</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">item</span><span>()</span></span>
+<span class="giallo-l"><span>    score</span><span style="color: #94E2D5;"> =</span><span> top_k</span><span style="color: #94E2D5;">.</span><span>values[</span><span style="color: #FAB387;">0</span><span>][i]</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">item</span><span>()</span></span>
+<span class="giallo-l"><span>    label</span><span style="color: #94E2D5;"> =</span><span> model</span><span style="color: #94E2D5;">.</span><span>config</span><span style="color: #94E2D5;">.</span><span>id2label[idx]</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    print</span><span>(f</span><span style="color: #A6E3A1;">&quot;{i+1}. {label}: {score:.4f}&quot;</span><span>)</span></span></code></pre>
+<p><img src="/images/img_ebccca8ba1931f80.png" alt="" />
+그러면 이런 식으로 응답이 나온다. score가 추론된 점수다.</p>
+<br>
+<br>
+<br>
+<h2 id="model-pail">모델 파일</h2>
+<p>위에서는 모델 파일을 명시적으로 다운받지 않고, 그냥 레포지토리 경로로 로드했었다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>image_processor</span><span style="color: #94E2D5;"> =</span><span> AutoImageProcessor</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">from_pretrained</span><span>(</span><span style="color: #A6E3A1;">&quot;microsoft/resnet-18&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>model</span><span style="color: #94E2D5;"> =</span><span> AutoModelForImageClassification</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">from_pretrained</span><span>(</span><span style="color: #A6E3A1;">&quot;microsoft/resnet-18&quot;</span><span>)</span></span></code></pre>
+<p>이런 식으로 치면 transformers 모듈은 huggingface 레포지토리에서 모델을 찾아서 자동으로 다운받는다.<br />
+처음 시작하기에는 간편하지만, 모델을 huggingface에 올리지 않을 수도 있고, 아무튼 로컬에 모델을 직접 다운받아서 쓰고 싶을 수도 있다.</p>
+<p>모델 자체는 huggingface cli를 통해 설치할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pip install huggingface</span><span style="color: #94E2D5;">-</span><span>hub</span></span>
+<span class="giallo-l"><span>huggingface</span><span style="color: #94E2D5;">-</span><span>cli download microsoft</span><span style="color: #94E2D5;">/</span><span>resnet</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">18</span><span style="color: #94E2D5;"> --</span><span>local</span><span style="color: #94E2D5;">-</span><span>dir</span><span style="color: #94E2D5;"> ./</span><span>resnet</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">18</span></span></code></pre>
+<p><img src="/images/img_0ae8072d406eeef9.png" alt="" /></p>
+<p><img src="/images/img_ef9e8f7a1e2c24f4.png" alt="" /></p>
+<p>그러면 디렉터리 기반으로 이렇게 이것저것 다운이 된다.</p>
+<p><img src="/images/img_a1d30cefa7d35728.png" alt="" /></p>
+<p><img src="/images/img_c34b707b9843e3e7.png" alt="" />
+안에 뭐가 들어있는지는 모델마다 다르다.<br />
+하지만 대체로 config.json이 모델 구조를 정의하는 파일, preprocessor_config.json이 전처리 설정파일.</p>
+<p>그리고 이 경우에는 model.safetensors가 프레임워크 독립적인 모델 파일이다. 그냥 기본 옵션으로 로드할 경우에는 model.safetensors만 있어도 된다.<br />
+참고로 tf_model.h5가 텐서플로 모델이고, pytorch_model.bin은 파이토치 모델(.pt)이다.</p>
+<p>그러면 이제 저 디렉터리를 기반으로 로컬에 존재하는 모델을 로드해서 쓸 수 있고</p>
+<p><img src="/images/img_e69226ace6938b76.png" alt="" /></p>
+<p><img src="/images/img_c2679dc142169d0a.png" alt="" />
+마찬가지로 잘 동작할 것이다.</p>
+<p>use_safetensor=False 옵션을 넣으면 강제로 pytorch_model.bin을 사용하도록 할 수 있다.</p>
+<p><img src="/images/img_0f525a92f9a58269.png" alt="" />
+저 pytorch_model.bin이 일반적으로 말하는 .pt 파일이다.</p>
+<p>safetensor를 만든 huggingface 측에서는 일반적인 모델 pickle 형식보다 safetensor를 쓰기를 권장한다. 훨씬 보안에 안전하고 로딩 등이 빠르다는 이유에서다.<br />
+이 포맷들에 대해서는 별도 포스트에서 따로 다뤄보겠다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://wikidocs.net/201325">https://wikidocs.net/201325</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223897567083/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[DuckDB] 소개<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223895750835/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Python] Anaconda: 종속성 내보내기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

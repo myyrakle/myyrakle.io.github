@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Pyroscope] Rust 메모리 사용량 수집 구현 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223977680068/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Pyroscope] Rust 메모리 사용량 수집 구현">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223977680068/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-08-21T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223977680068/">[Pyroscope] Rust 메모리 사용량 수집 구현</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-21T00:00:00+00:00"><time datetime="2025-08-21T00:00:00+00:00">2025.08.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="237 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223977680068" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Pyroscope Rust 에이전트는 현재 CPU 사용량에 대한 수집만을 제공한다.</p>
+<p>당연하다. Rust 같은 시스템 수준 언어에서는 메모리에 대한 관리자가 따로 없어서 메모리 사용량을 수집할 수 있는 뭔가의 중간 레이어가 없기 때문이다.</p>
+<p>그래서 Rust에서 메모리 프로파일링을 하려면 jemalloc 같은 서드파티 메모리 allocator를 사용해야 한다.<br />
+여기서는 jemalloc을 써서 메모리 pprof를 뽑고, pyroscope에 집어넣어서 실시간 시각화를 구성하는 방법까지를 다뤄본다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajeon-jogeongwa-jongsogseong">사전 조건과 종속성</h2>
+<p>jemalloc은 사실상 Linux에서만 사용 가능한 환경이다. 그래서 Linux만 된다고 보면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>tokio</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1.0&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;full&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>tikv</span><span style="color: #94E2D5;">-</span><span>jemallocator</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.6.0&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;profiling&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;unprefixed_malloc_on_supported_platforms&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>jemalloc_pprof</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.8.1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;symbolize&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>reqwest</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.12.23&quot;</span></span></code></pre>
+<p>그리고 jemalloc 관련된 모듈 몇개를 추가해준다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="jemalloc-hwalseonghwa">jemalloc 활성화</h2>
+<p>전역변수 기반으로 제어할 수 있게 되어있다. 적당히 이런 식으로 쳐준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">cfg</span><span>(</span><span style="color: #89B4FA;font-style: italic;">not</span><span>(target_env</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;msvc&quot;</span><span>))]</span></span>
+<span class="giallo-l"><span>#[global_allocator]</span></span>
+<span class="giallo-l"><span>static ALLOC</span><span style="color: #9399B2;">:</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #94E2D5;"> =</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">allow</span><span>(non_upper_case_globals)]</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">unsafe</span><span>(export_name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;malloc_conf&quot;</span><span>)]</span></span>
+<span class="giallo-l"><span>pub static malloc_conf</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> &amp;</span><span>[u8]</span><span style="color: #94E2D5;"> =</span><span> b</span><span style="color: #A6E3A1;">&quot;prof:true,prof_active:true,lg_prof_sample:20</span><span style="color: #F5C2E7;">\0</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>샘플링 간격은 20으로 했는데, 필요에 따라 조정해도 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="pyroscope-sujib-guhyeon">pyroscope 수집 구현</h2>
+<p>자, 그럼 pyroscope에 데이터를 부어주는 백그라운드 스레드를 만들어보자.<br />
+10초를 간격으로 해서 쌓인 메모리 덤프를 pprof로 뽑고, 그걸 pyroscope에 부어주는 형태가 된다.</p>
+<p>pyroscope에 붓는건 ingest API를 쓰면 되는데, 복잡하진 않다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> send_to_pyroscope</span><span>(</span></span>
+<span class="giallo-l"><span>    pprof_data: Vec</span><span style="color: #94E2D5;">&lt;</span><span>u8</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    from: u64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    until: u64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let client</span><span style="color: #94E2D5;"> =</span><span> reqwest::Client::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>();</span></span>
+<span class="giallo-l"><span>    let pyroscope_url</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;http://localhost:4040/ingest&quot;</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let response</span><span style="color: #94E2D5;"> =</span><span> client</span></span>
+<span class="giallo-l"><span>        .post(pyroscope_url)</span></span>
+<span class="giallo-l"><span>        .header(</span><span style="color: #A6E3A1;">&quot;Content-Type&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;application/octet-stream&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>        .query(&amp;[</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;name&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;rust-app{}&quot;</span><span>),</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;from&quot;</span><span style="color: #9399B2;">,</span><span> &amp;from.to_string())</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;until&quot;</span><span style="color: #9399B2;">,</span><span> &amp;until.to_string())</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;format&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;pprof&quot;</span><span>),</span></span>
+<span class="giallo-l"><span>        ])</span></span>
+<span class="giallo-l"><span>        .body(pprof_data)</span></span>
+<span class="giallo-l"><span>        .send()</span></span>
+<span class="giallo-l"><span>        .await?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    if response.status().is_success() {</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;Successfully sent pprof data to Pyroscope&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>    } else {</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;Failed to send data: {}&quot;</span><span style="color: #9399B2;">,</span><span> response.status());</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>from - until로 초 단위 시간을 넣고, pprof를 바이트열로 request body에 때려넣기만 하면 된다.</p>
+<p>다음이 저걸 활용한 setup 함수다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> setup_pyroscope</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    tokio</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        let mut prof_ctl</span><span style="color: #94E2D5;"> =</span><span> jemalloc_pprof::</span><span style="color: #FAB387;">PROF_CTL</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_ref</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span>await;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        if prof_ctl.activated() </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Profiling is activated.&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span> else </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            panic</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Profiling is not activated.&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        if let </span><span style="color: #89B4FA;font-style: italic;">Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">e</span><span style="color: #9399B2;">)</span><span> = prof_ctl.</span><span style="color: #89B4FA;font-style: italic;">activate</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            eprintln</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to activate profiler: {}&quot;</span><span style="color: #9399B2;">,</span><span> e)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> start</span><span style="color: #94E2D5;"> =</span><span> SystemTime::</span><span style="color: #89B4FA;font-style: italic;">now</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>            tokio</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(tokio::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_secs</span><span>(</span><span style="color: #FAB387;">10</span><span>))</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> end</span><span style="color: #94E2D5;"> =</span><span> SystemTime::</span><span style="color: #89B4FA;font-style: italic;">now</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> pprof_data</span><span style="color: #94E2D5;"> =</span><span> prof_ctl</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">dump_pprof</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to dump pprof data&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Dumped pprof data of size: {}&quot;</span><span style="color: #9399B2;">,</span><span> pprof_data</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>())</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> start</span><span style="color: #94E2D5;"> =</span><span> start</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">duration_since</span><span>(UNIX_EPOCH)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_secs</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> end</span><span style="color: #94E2D5;"> =</span><span> end</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">duration_since</span><span>(UNIX_EPOCH)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_secs</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            if let</span><span> Err(e) </span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> send_to_pyroscope</span><span>(pprof_data</span><span style="color: #9399B2;">,</span><span> start</span><span style="color: #9399B2;">,</span><span> end)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                eprintln!(</span><span style="color: #A6E3A1;">&quot;Error sending pprof data: {}&quot;</span><span style="color: #9399B2;">,</span><span> e);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>계속 루프 뺑뺑이 돌면서 10초 간격으로 부어주도록 구성했다.</p>
+<p>그럼 저게 돌아가는지도 한번 보자.<br />
+메모리를 점유하는 waste_memory라는 공통 함수를 두고, 메모리를 다르게 사용하는 a와 b라는 함수를 루프마다 돌리게 했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> waste_memory</span><span>(bytes: usize)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut vec </span><span style="color: #94E2D5;">=</span><span> Vec::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    for _</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0.</span><span style="color: #94E2D5;">.</span><span>bytes</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        vec</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(0u8)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Wasted {} bytes of memory&quot;</span><span style="color: #9399B2;">,</span><span> bytes)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> a</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    waste_memory</span><span>(</span><span style="color: #FAB387;">1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 30</span><span>)</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // Waste 30 MB of memory</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> b</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    waste_memory</span><span>(</span><span style="color: #FAB387;">1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 500</span><span>)</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // Waste 500 MB of memory</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    setup_pyroscope</span><span style="color: #9399B2;">()</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        a</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        b</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        tokio</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(tokio::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_secs</span><span>(</span><span style="color: #FAB387;">1</span><span>))</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그리고 실행해보면</p>
+<br>
+<p><img src="/images/img_bcd30aa7d781f6fe.png" alt="" />
+이런 식으로 계속 쌓일 것이다.</p>
+<br>
+<p><img src="/images/img_e243bc9360d90b6f.png" alt="" />
+그럼 이렇게 flamegraph로 시각화해서 볼 수도 있고, 기간 필터를 걸어서 특정 부분만 볼 수도 있다.</p>
+<br>
+<br>
+<p>전체 테스트 코드</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>SystemTime</span><span style="color: #9399B2;">,</span><span> UNIX_EPOCH</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">cfg</span><span>(</span><span style="color: #89B4FA;font-style: italic;">not</span><span>(target_env</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;msvc&quot;</span><span>))]</span></span>
+<span class="giallo-l"><span>#[global_allocator]</span></span>
+<span class="giallo-l"><span>static ALLOC</span><span style="color: #9399B2;">:</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #94E2D5;"> =</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">allow</span><span>(non_upper_case_globals)]</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">unsafe</span><span>(export_name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;malloc_conf&quot;</span><span>)]</span></span>
+<span class="giallo-l"><span>pub static malloc_conf</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> &amp;</span><span>[u8]</span><span style="color: #94E2D5;"> =</span><span> b</span><span style="color: #A6E3A1;">&quot;prof:true,prof_active:true,lg_prof_sample:20</span><span style="color: #F5C2E7;">\0</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> setup_pyroscope</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    tokio</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        let mut prof_ctl</span><span style="color: #94E2D5;"> =</span><span> jemalloc_pprof::</span><span style="color: #FAB387;">PROF_CTL</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_ref</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span>await;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        if prof_ctl.activated() </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Profiling is activated.&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span> else </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            panic</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Profiling is not activated.&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        if let </span><span style="color: #89B4FA;font-style: italic;">Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">e</span><span style="color: #9399B2;">)</span><span> = prof_ctl.</span><span style="color: #89B4FA;font-style: italic;">activate</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            eprintln</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to activate profiler: {}&quot;</span><span style="color: #9399B2;">,</span><span> e)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> start</span><span style="color: #94E2D5;"> =</span><span> SystemTime::</span><span style="color: #89B4FA;font-style: italic;">now</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>            tokio</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(tokio::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_secs</span><span>(</span><span style="color: #FAB387;">10</span><span>))</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> end</span><span style="color: #94E2D5;"> =</span><span> SystemTime::</span><span style="color: #89B4FA;font-style: italic;">now</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> pprof_data</span><span style="color: #94E2D5;"> =</span><span> prof_ctl</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">dump_pprof</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;Failed to dump pprof data&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Dumped pprof data of size: {}&quot;</span><span style="color: #9399B2;">,</span><span> pprof_data</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>())</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> start</span><span style="color: #94E2D5;"> =</span><span> start</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">duration_since</span><span>(UNIX_EPOCH)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_secs</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> end</span><span style="color: #94E2D5;"> =</span><span> end</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">duration_since</span><span>(UNIX_EPOCH)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_secs</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            if let</span><span> Err(e) </span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> send_to_pyroscope</span><span>(pprof_data</span><span style="color: #9399B2;">,</span><span> start</span><span style="color: #9399B2;">,</span><span> end)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                eprintln!(</span><span style="color: #A6E3A1;">&quot;Error sending pprof data: {}&quot;</span><span style="color: #9399B2;">,</span><span> e);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> send_to_pyroscope</span><span>(</span></span>
+<span class="giallo-l"><span>    pprof_data: Vec</span><span style="color: #94E2D5;">&lt;</span><span>u8</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    from: u64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    until: u64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let client</span><span style="color: #94E2D5;"> =</span><span> reqwest::Client::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>();</span></span>
+<span class="giallo-l"><span>    let pyroscope_url</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;http://localhost:4040/ingest&quot;</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let response</span><span style="color: #94E2D5;"> =</span><span> client</span></span>
+<span class="giallo-l"><span>        .post(pyroscope_url)</span></span>
+<span class="giallo-l"><span>        .header(</span><span style="color: #A6E3A1;">&quot;Content-Type&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;application/octet-stream&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>        .query(&amp;[</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;name&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;rust-app{}&quot;</span><span>),</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;from&quot;</span><span style="color: #9399B2;">,</span><span> &amp;from.to_string())</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;until&quot;</span><span style="color: #9399B2;">,</span><span> &amp;until.to_string())</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            (</span><span style="color: #A6E3A1;">&quot;format&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;pprof&quot;</span><span>),</span></span>
+<span class="giallo-l"><span>        ])</span></span>
+<span class="giallo-l"><span>        .body(pprof_data)</span></span>
+<span class="giallo-l"><span>        .send()</span></span>
+<span class="giallo-l"><span>        .await?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    if response.status().is_success() {</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;Successfully sent pprof data to Pyroscope&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>    } else {</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;Failed to send data: {}&quot;</span><span style="color: #9399B2;">,</span><span> response.status());</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> waste_memory</span><span>(bytes: usize)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut vec </span><span style="color: #94E2D5;">=</span><span> Vec::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    for _</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0.</span><span style="color: #94E2D5;">.</span><span>bytes</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        vec</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(0u8)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Wasted {} bytes of memory&quot;</span><span style="color: #9399B2;">,</span><span> bytes)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> a</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    waste_memory</span><span>(</span><span style="color: #FAB387;">1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 30</span><span>)</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // Waste 100 MB of memory</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> b</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    waste_memory</span><span>(</span><span style="color: #FAB387;">1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 1024</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 500</span><span>)</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // Waste 200 MB of memory</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    setup_pyroscope</span><span style="color: #9399B2;">()</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    loop </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        a</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        b</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        tokio</span><span style="color: #9399B2;">:</span><span>:time</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(tokio::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_secs</span><span>(</span><span style="color: #FAB387;">1</span><span>))</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://linux.die.net/man/3/jemalloc">https://linux.die.net/man/3/jemalloc</a><br />
+<a rel="external" href="https://crates.io/crates/jemalloc_pprof">https://crates.io/crates/jemalloc_pprof</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223978974431/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] bloom index<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223978348723/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>AWS의 괄목할만한 개선사항들.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[GCP] Bigtable | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223093604808/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[GCP] Bigtable">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223093604808/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-04T00:00:00+00:00">
+    <meta property="article:tag" content="GCP">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223093604808/">[GCP] Bigtable</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-04T00:00:00+00:00"><time datetime="2023-05-04T00:00:00+00:00">2023.05.04</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="388 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/gcp/">GCP</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223093604808" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_54d9a69d5f4c2019.png" alt="" />
+Bigtable은 초대형 스토리지 데이터베이스 서비스다.<br />
+Hbase 기반으로 만들어졌고, 페타바이트 단위의 무식한 데이터를 쌓아놓는데 최적화되어있다.</p>
+<p>Apache HBase와 Cassandra의 대안 중 하나고, 마이그레이션도 잘 지원하는 편이다.</p>
+<p>보통 bigtable에 무식하게 쌓다가 분석이 필요하면 데이터를 꺼내서 mapreduce를 돌리거나, bigtable-&gt;bigquery로 데이터를 옮겨넣어서 쓰는 방법을 많이들 취하는 것 같다.</p>
+<p>다만 자체적으로 MapReduce 기능을 제공하지는 않는다. 자체적으로 클라이언트 수준에서 구현해서 써야한다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://cloud.google.com/bigtable/pricing?hl=ko">https://cloud.google.com/bigtable/pricing?hl=ko</a></p>
+<p>비용은 기본적으로 노드가 떠있는 시간과 저장된 크기를 기반으로 매겨진다.<br />
+저렴한 편은 아니다. 매우 비싸다.</p>
+<br>
+<p><img src="/images/img_9aa530c6cd1f7343.png" alt="" />
+시간당 0.85달러니까, 노드가 하나만 떠있어도 한달에 612달러=80만원이 넘게 나가는 셈이다. 꽤 비싸다.</p>
+<br>
+<p><img src="/images/img_8a3b8c48bcb254f8.png" alt="" />
+스토리지 비용은 SSD와 HDD 비용이 다르다.<br />
+1테라만 저장한다고 치면, SSD는 한달에 220달러=30만원, HDD는 34달러=5만원 정도 나간다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="inseuteonseu-mandeulgi">인스턴스 만들기</h2>
+<p>인스턴스를 만들고 써보면서 테스트를 해보자.</p>
+<p><img src="/images/img_c1f0d6bba04d0340.png" alt="" />
+이름 짓고</p>
+<br>
+<p><img src="/images/img_c9efae1022467636.png" alt="" />
+스토리지 타입을 선택한다.<br />
+나는 좀더 저렴한 하드를 택하겠다..</p>
+<br>
+<p><img src="/images/img_07dfed199baf7171.png" alt="" />
+리전과 노드 개수를 선택한다.</p>
+<br>
+<p><img src="/images/img_6971e15f642cac6c.png" alt="" /></p>
+<p>이렇게 만들어지면 잘 된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="teibeul-mandeulgi">테이블 만들기</h2>
+<p>bigtable도 여타 DB들과 마찬가지로 테이블 단위로 데이터 구조를 관리한다.</p>
+<p><img src="/images/img_08839229657c5194.png" alt="" />
+테이블 만들기 누르고</p>
+<br>
+<p><img src="/images/img_0f90797b2f8232c1.png" alt="" />
+이름을 짓고, 컬럼 패밀리들을 적절히 정의한다.<br />
+제대로 써먹으려면 컬럼 패밀리를 최소한 하나 이상은 둬야한다.</p>
+<p>컬럼 패밀리는 쉽게 말해 컬럼들의 그룹이다.<br />
+Bigtable에서 테이블은 하나의 기본키와 여러개의 컬럼패밀리로 이루어진다.</p>
+<p><img src="/images/img_f38f70ac7fce1da7.png" alt="" />
+각 컬럼 패밀리에는 컬럼이 여러개 들어갈 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="cliro-darweobogi">CLI로 다뤄보기</h2>
+<p>bigtable은 cbt라는 전용 CLI 도구를 지원한다.<br />
+없다면 gcloud로 설치하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>gcloud components install cbt</span></span></code></pre>
+<p>cloud shell을 통해 쓴다면 기본으로 깔려있다.</p>
+<p>인스턴스 목록을 조회하는 명령은 다음과 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cbt listinstances</span></span></code></pre>
+<p><img src="/images/img_874640b9dd91534c.png" alt="" /></p>
+<p>그리고 특정 인스턴스의 테이블 목록을 조회하려면, ls 명령을 쓰면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>인스턴스명 ls</span></span></code></pre>
+<p><img src="/images/img_eef67adb984ebb4f.png" alt="" /></p>
+<p>테이블 내의 컬럼 정보를 조회하려면 이렇게 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>인스턴스명 ls 테이블명</span></span></code></pre>
+<p><img src="/images/img_6c4af235067fa1a4.png" alt="" /></p>
+<p>데이터를 삽입하려면 set 명령을 사용하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>인스턴스명 set 테이블명 키값 컬럼패밀리</span><span style="color: #9399B2;">:</span><span>컬럼</span><span style="color: #94E2D5;">=</span><span>값</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>예) </span></span>
+<span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>bigtable</span><span style="color: #94E2D5;">-</span><span>test set orders</span><span style="color: #FAB387;"> 1</span><span> test</span><span style="color: #9399B2;">:</span><span>price</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">5000</span><span> test</span><span style="color: #9399B2;">:</span><span>product_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">12</span><span> test</span><span style="color: #9399B2;">:</span><span>buyer_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span><span> </span></span>
+<span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>bigtable</span><span style="color: #94E2D5;">-</span><span>test set orders</span><span style="color: #FAB387;"> 2</span><span> test</span><span style="color: #9399B2;">:</span><span>price</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">7000</span><span> test</span><span style="color: #9399B2;">:</span><span>product_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">15</span><span> test</span><span style="color: #9399B2;">:</span><span>buyer_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span><span> </span></span>
+<span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>bigtable</span><span style="color: #94E2D5;">-</span><span>test set orders</span><span style="color: #FAB387;"> 3</span><span> test</span><span style="color: #9399B2;">:</span><span>price</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">3000</span><span> test</span><span style="color: #9399B2;">:</span><span>product_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">11</span><span> test</span><span style="color: #9399B2;">:</span><span>buyer_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">2</span><span> </span></span>
+<span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>bigtable</span><span style="color: #94E2D5;">-</span><span>test set orders</span><span style="color: #FAB387;"> 4</span><span> test</span><span style="color: #9399B2;">:</span><span>price</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1000</span><span> test</span><span style="color: #9399B2;">:</span><span>product_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">13</span><span> test</span><span style="color: #9399B2;">:</span><span>buyer_id</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">3</span></span></code></pre>
+<p><img src="/images/img_b4c1a8ca428f7cbc.png" alt="" /></p>
+<p>읽을때는 read 명령을 쓴다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>인스턴스명 read 테이블명</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>bigtable</span><span style="color: #94E2D5;">-</span><span>test read orders</span></span></code></pre>
+<p><img src="/images/img_a4f1a6baac2a7118.png" alt="" /></p>
+<p>지우려면 deleterow 명령을 쓰면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cbt</span><span style="color: #94E2D5;"> -</span><span>instance</span><span style="color: #94E2D5;">=</span><span>인스턴스명 deleterow 테이블명 키</span></span></code></pre>
+<p><img src="/images/img_af6b8a83f3134e7b.png" alt="" /></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://cloud.google.com/bigtable?hl=ko">https://cloud.google.com/bigtable?hl=ko</a><br />
+<a rel="external" href="https://cloud.google.com/bigtable/docs/create-instance-write-data-cbt-cli?hl=ko">https://cloud.google.com/bigtable/docs/create-instance-write-data-cbt-cli?hl=ko</a><br />
+<a rel="external" href="https://medium.com/google-cloud/getting-started-with-bigtable-on-gcp-adfb896e0b26">https://medium.com/google-cloud/getting-started-with-bigtable-on-gcp-adfb896e0b26</a><br />
+<a rel="external" href="https://github.com/googleapis/nodejs-bigtable/tree/main/samples#before-you-begin">https://github.com/googleapis/nodejs-bigtable/tree/main/samples#before-you-begin</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223092993008/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] 맵리듀스(map reduce)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223093745416/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Datadog] 개요<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

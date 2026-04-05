@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ELB - Target Group: 로드밸런싱 알고리즘 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224055250029/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ELB - Target Group: 로드밸런싱 알고리즘">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224055250029/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-10-27T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224055250029/">[AWS] ELB - Target Group: 로드밸런싱 알고리즘</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-10-27T00:00:00+00:00"><time datetime="2025-10-27T00:00:00+00:00">2025.10.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="290 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224055250029" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>AWS의 로드밸런서는 총 3가지 로드밸런싱 알고리즘을 제공한다.<br />
+로드밸런서 수준 설정은 아니고, Target Group 단위에서 관리된다.</p>
+<p><img src="/images/img_c29b8a757ac01d79.png" alt="" />
+nginx나 haproxy를 직접 쓰는 것과 비교하면 구성에 한계가 있긴 한데, 일반적인 상황에서는 대체로 충분하다.</p>
+<br>
+<br>
+<br>
+<h2 id="raundeu-robin-round-robin">라운드 로빈 (Round Robin)</h2>
+<p>대부분의 LB 시스템에서 기본값으로 간주되는 옵션이다.<br />
+무조건 공평하게 요청을 분산한다. 가중치 개념도 없다.</p>
+<p>개별 API들의 처리 시간/소모 리소스가 엇비슷하고, 서버마다 처리 능력이 거의 같을 경우에 적합하다.<br />
+일반적인 웹서비스에는 대체로 적합하나, 규모가 일반적인 형태를 벗어나면 한계가 생긴다.</p>
+<br>
+<br>
+<br>
+<h2 id="coeso-mihaegyeol-yoceong-leastconnection">최소 미해결 요청 (leastconnection)</h2>
+<p>커넥션 유지 상태인 요청이 적은 서버에 우선적으로 라우팅을 하는 알고리즘이다.<br />
+요청마다 처리 시간의 차이가 현격하고, 요청의 처리시간이 길어질수록 서버 처리능력에 문제가 생기는 경우에 유용하다. 혹은 서버마다 스펙 자체가 달라서 처리능력이 다를 때도 쓸만하다.</p>
+<p>내 경우에는 모델 서버를 서빙할 때 주로 사용했다.<br />
+AI 모델들은 보통 GPU 수준의 단일 병목 때문에 GPU 사용 시간이 길어질수록 처리량에 제동이 걸리고, 그만큼 물려있는 커넥션이 많을 것이기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gajungci-raendeomgwa-isang-wanhwa-anomaly-mitigation">가중치 랜덤과 이상 완화(Anomaly mitigation)</h2>
+<p>가중치 랜덤은 말 그대로 랜덤으로 분산한다는 것이다.<br />
+이걸 어디다 쓰냐 싶지만, 이상 완화라는 부가기능 때문에라도 쓸 가치가 제법 있다.</p>
+<p><img src="/images/img_291bade35a431662.png" alt="" /></p>
+<p>다른 로드밸런싱 알고리즘들은 기본적으로, 개별 API가 실패하든지 말든지 신경쓰지 않고 헬스체크만 살아있으면 정상이라고 판단하고 계속 라우팅한다.<br />
+하지만 이상 완화를 켜면 개별 API의 실패도 회색 실패(gray failures)로 분류하고, 회색 실패가 높은 서버의 우선순위를 낮춰서 분포하게 해준다.</p>
+<p>내 경우에도 이게 꽤 효과적인 사례가 있었다. 개별 API의 타임아웃 발생률이 높아지면 어느정도 쉴 시간을 줘야 했기 때문이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/tech/networking-and-content-delivery-improving-availability-with-application-load-balancer-automatic-target-weights/">https://aws.amazon.com/ko/blogs/tech/networking-and-content-delivery-improving-availability-with-application-load-balancer-automatic-target-weights/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/elasticloadbalancing/latest/application/load-balancer-target-groups.html">https://docs.aws.amazon.com/ko_kr/elasticloadbalancing/latest/application/load-balancer-target-groups.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224054775530/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>동시성 가이드라인 Index<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224053855547/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] Lock: parking_lot<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

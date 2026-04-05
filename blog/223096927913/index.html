@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Persistent Volume | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223096927913/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Persistent Volume">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223096927913/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-09T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223096927913/">[k8s] Persistent Volume</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-09T00:00:00+00:00"><time datetime="2023-05-09T00:00:00+00:00">2023.05.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="645 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223096927913" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>기본적으로 컨테이너들은 지속적인 상태를 가지지 않는다.<br />
+이건 docker와 docker 베이스인 쿠버에서 동일하게 나타나는 현상이다.</p>
+<p>예를 들어, 컨테이너 안에서 파일을 추가한 상태에서 컨테이너를 죽이고 동일한 이미지로 띄우더라도, "이미지" 시점의 상태만 갖고 있고, 이전의 컨테이너에서 추가했던 파일은 증발한 채일 것이다.</p>
+<p>이런 stateless한 형태는 지속적인 관리에 메리트를 주기도 하지만, 상태가 유실된다는 점에서 한계도 있다.</p>
+<p>docker나 쿠버네티스는 볼륨이라는 상태관리 매커니즘을 활용해서 이러한 문제를 해결한다.<br />
+볼륨은 컨테이너가 재시작되더라도 상태가 유지된다. 저장한 파일 같은 것들이 날라가지 않는다는 것이다.</p>
+<p>볼륨에는 임시(ephemeral) 볼륨과 퍼시스턴트(persistent) 볼륨 등이 존재한다.<br />
+임시 볼륨은 수명이 파드에 종속된다. 파드가 죽으면 그대로 상태가 사라지는 것이다.<br />
+퍼시스턴트 볼륨은 직접 삭제하지 않는 한 상태가 영구적으로 보존된다.</p>
+<br>
+<br>
+<br>
+<h2 id="kubeonetiseu-bolryumyi-gujo">쿠버네티스 볼륨의 구조</h2>
+<p>k8s 볼륨은 docker 볼륨에 비해서 구조가 꽤 복잡하고 기능이 더 많은 편이다.</p>
+<p><img src="/images/img_4dea4182aa805843.png" alt="" />
+볼륨은 그 자체로 고유한 상태를 가지는 스토리지다.<br />
+볼륨의 구현방법은 클러스터 구축 환경에 따라 다르다.<br />
+AWS, GCP, Azure 같은 클라우드 서비스에서 운영하는 경우에는 해당 클라우드에서 제공하는 볼륨 서비스를 이용할 수 있고, 온프레미스 환경이라면 직접 스토리지 솔루션을 구성해서 사용해야 한다.</p>
+<p>그리고 파드는 볼륨에 바로 꽂아서 사용하는 것이 아니라, Volumn Claim이라는 중간 인터페이스를 통해서 접근을 한다. Volumn Claim은 볼륨 원본과는 별개로 용량 제한, 읽기/쓰기 제한 등을 또 설정할 수 있다.<br />
+퍼시스턴스 볼륨이 용량을 제대로 한번 잡아주면, 여러개의 Claim이 나눠쓸 수 있는 구조다.</p>
+<p>여기서는 퍼시스턴트 볼륨을 활용해서 간단하게 로그 저장소를 만들어보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="persistent-bolryum-mandeulgi-gke">Persistent 볼륨 만들기 (GKE)</h2>
+<p>Persistant 볼륨을 만드는 방법은 클러스터 구축 환경에 따라서 크게 달라진다.<br />
+내가 사용한 환경은 GCP GKE다.</p>
+<p>GKE에서는 볼륨을 직접 만들 필요가 없고, 볼륨 클레임을 만들면 바로 파드에 붙여서 사용이 가능하다.<br />
+Storage Class도 GCP에서 미리 제공하는 것을 골라쓸 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> PersistentVolumeClaim</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> log</span><span style="color: #94E2D5;">-</span><span>data</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  accessModes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> ReadWriteOnce # 단일 노드의 멀티파드에서 R</span><span style="color: #94E2D5;">/</span><span>W 가능</span></span>
+<span class="giallo-l"><span>  resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    requests</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      storage</span><span style="color: #9399B2;">:</span><span> 30Gi # 용량은 30기가</span></span>
+<span class="giallo-l"><span>  storageClassName</span><span style="color: #9399B2;">:</span><span> standard</span><span style="color: #94E2D5;">-</span><span>rwo # 표준 스토리지</span></span></code></pre>
+<p>accessModes는 ReadWriteOnce, ReadOnlyMany, ReadWriteMany 중 하나가 될 수 있다.</p>
+<ol>
+<li>ReadWriteOnce: 볼륨은 단일 노드에 의한 읽기-쓰기로 마운트될 수 있습니다.</li>
+<li>ReadOnlyMany: 볼륨은 여러 노드에 의한 읽기 전용으로 마운트될 수 있습니다.</li>
+<li>ReadWriteMany: 볼륨은 여러 노드에 의한 읽기-쓰기로 마운트될 수 있습니다. Compute Engine 영구 디스크가 지원하는 PersistentVolume 리소스는 이 액세스 모드를 지원하지 않습니다.</li>
+</ol>
+<p>storageClassName은 standard-rwo와 premium-rwo가 제공되는데, 스탠다드는 하드디스크 저장이고, 프리미엄은 SSD 저장이다. 필요에 따라 고르면 된다.</p>
+<p><img src="/images/img_b4267ff2fb3652fa.png" alt="" /></p>
+<p>요금은 이걸 참조하면 된다.<br />
+<a rel="external" href="https://cloud.google.com/compute/disks-image-pricing?hl=ko#disk">디스크 및 이미지 가격 책정  |  Compute Engine: 가상 머신(VM)  |  Google Cloud</a></p>
+<p>아무튼 저걸로 볼륨 클레임을 생성하면</p>
+<p><img src="/images/img_ac47921a7c86ff4f.png" alt="" />
+이런식으로 추가가 될 것이다.</p>
+<p>이번에는 로그를 볼륨에 저장하는 데몬 파드를 띄워서 잘 동작하는지 테스트를 해보겠다.<br />
+소스코드는<br />
+<a rel="external" href="https://github.com/myyrakle/infrastructures/tree/master/Dockerfiles/examples/log-daemon-for-test">https://github.com/myyrakle/infrastructures/tree/master/Dockerfiles/examples/log-daemon-for-test</a><br />
+여기서 볼 수 있다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Pod</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> log</span><span style="color: #94E2D5;">-</span><span>daemon</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> name</span><span style="color: #9399B2;">:</span><span> log</span><span style="color: #94E2D5;">-</span><span>data</span></span>
+<span class="giallo-l"><span>      persistentVolumeClaim</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        claimName</span><span style="color: #9399B2;">:</span><span> log</span><span style="color: #94E2D5;">-</span><span>data</span></span>
+<span class="giallo-l"><span>  containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> name</span><span style="color: #9399B2;">:</span><span> log</span><span style="color: #94E2D5;">-</span><span>daemon</span></span>
+<span class="giallo-l"><span>      image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>log</span><span style="color: #94E2D5;">-</span><span>daemon</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>test</span></span>
+<span class="giallo-l"><span>      volumeMounts</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> log</span><span style="color: #94E2D5;">-</span><span>data</span></span>
+<span class="giallo-l"><span>          mountPath</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/log/nodejs</span></span>
+<span class="giallo-l"><span>      resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        requests</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          memory</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;.5Gi&quot;</span></span>
+<span class="giallo-l"><span>          cpu</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;500m&quot;</span></span>
+<span class="giallo-l"><span>        limits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          memory</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;.5Gi&quot;</span></span>
+<span class="giallo-l"><span>          cpu</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;500m&quot;</span></span></code></pre>
+<p>저 데몬이 /var/log/nodejs 경로에 로그파일을 쌓기 때문에, 경로를 저걸로 마운팅했다.<br />
+그러면 /var/log/nodejs 경로에 쓰고 읽는 동작은 컨테이너 내에서 이루어지는게 아니라, 볼륨 내의 저장소에서 발생한다!</p>
+<p>저대로 실행해보겠다.</p>
+<p><img src="/images/img_57bd895dda5ba7e0.png" alt="" /></p>
+<p><img src="/images/img_9ca21c992bda9481.png" alt="" /></p>
+<p>그러면 Persistant Volume이 자동으로 생성된다.</p>
+<p><img src="/images/img_9b01331b628b4a50.png" alt="" /></p>
+<p>그리고 들어가서 로그파일을 확인해보면</p>
+<p><img src="/images/img_6d796752c81457c1.png" alt="" />
+잘 써져있을 것이다.</p>
+<p>상태저장이 잘 되는지 확인해보자.<br />
+데몬 파드를 죽이고 다시 띄웠다.</p>
+<p><img src="/images/img_6a165a76a430b4e5.png" alt="" />
+볼륨을 적용하지 않았다면 로그 데이터도 증발했을 것이다.</p>
+<p>들어가서 보면</p>
+<p><img src="/images/img_62fcd7fb13aee8e1.png" alt="" />
+이전의 로그파일들도 남아있고</p>
+<p>그 이후로 새 로그파일들을 쓰고 있을 것이다.</p>
+<p><img src="/images/img_be0ae80207409960.png" alt="" />
+이런 느낌으로 쓰면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="persistent-bolryum-mandeulgi-onpeuremiseu">Persistent 볼륨 만들기 (온프레미스)</h2>
+<p>클라우드에서 제공하는 솔루션을 쓰고 싶지 않거나, 온프레미스 환경일 경우에는 직접 구성을 해야 한다.</p>
+<p>스토리지를 위한 서버까지 따로 띄우고 그걸 통해 볼륨을 만들고, 볼륨 클레임을 만들어서 쓴다.<br />
+구성 방법에는 여러가지가 있다. NFS, Cinder, HostPath 등등... 이건 별도 포스트에서 다뤄보겠다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/storage/volumes/">https://kubernetes.io/ko/docs/concepts/storage/volumes/</a><br />
+<a rel="external" href="https://kimjingo.tistory.com/153">https://kimjingo.tistory.com/153</a><br />
+<a rel="external" href="https://cloud.google.com/kubernetes-engine/docs/concepts/persistent-volumes?hl=ko">https://cloud.google.com/kubernetes-engine/docs/concepts/persistent-volumes?hl=ko</a><br />
+<a rel="external" href="https://kubernetes.io/docs/tasks/administer-cluster/change-pv-reclaim-policy/">https://kubernetes.io/docs/tasks/administer-cluster/change-pv-reclaim-policy/</a><br />
+<a rel="external" href="https://github.com/docker-library/postgres/issues/263">https://github.com/docker-library/postgres/issues/263</a><br />
+<a rel="external" href="https://github.com/appscode/third-party-tools/blob/master/storage/nfs/README.md">https://github.com/appscode/third-party-tools/blob/master/storage/nfs/README.md</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223098863299/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>DNSSEC<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223097354723/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] async&#x2F;await: Future를 바닥부터 구현해보기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Monitoring] Elastic APM 스택 구성하기 (Docker) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223960536375/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Monitoring] Elastic APM 스택 구성하기 (Docker)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223960536375/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-08-06T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223960536375/">[Monitoring] Elastic APM 스택 구성하기 (Docker)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-06T00:00:00+00:00"><time datetime="2025-08-06T00:00:00+00:00">2025.08.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="419 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223960536375" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Elasticsearch은 모니터링을 위한 자체적인 APM 스택을 제공한다.<br />
+Elasticsearch를 로그 및 메트릭 저장소로 활용하고, Kibana를 대시보드로 활용하는 것이다.</p>
+<p>흔히 이걸 ELK 스택이라고 부르는데, Elasticsearch + Logstash + Kibana의 축약이다. 사실 여기서 Logstash는 필수요소가 아니다. 빼도 된다.</p>
+<p>실제로 의미있는 구성요소는 Elasticsearch + Kibana + APM-Server다.</p>
+<p>키바나를 구성하는 방법은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223960423534">https://blog.naver.com/sssang97/223960423534</a></p>
+<br>
+<br>
+<br>
+<h2 id="integration-apm-seting">Integration: APM 세팅</h2>
+<p>먼저 키바나 페이지에 들어가서 설치를 해줘야하는 확장이 몇개 있다.<br />
+apm 대시보드를 만들려면 elastic apm 확장부터 깔아줘야 한다.</p>
+<p><img src="/images/img_faadebea60f3ec24.png" alt="" />
+integration 들어가서</p>
+<br>
+<p><img src="/images/img_e1281a82d38ec188.png" alt="" /></p>
+<p><img src="/images/img_565d06a896c5958f.png" alt="" /></p>
+<p><img src="/images/img_c1ec4b5b1d663d8b.png" alt="" /></p>
+<p><img src="/images/img_3e87e8c40eda9358.png" alt="" /></p>
+<p><img src="/images/img_b2967f776a3da461.png" alt="" />
+적당히 깔아준다. 이름 잘 짓고 기본값으로 초기화해도 무방하다.</p>
+<br>
+<br>
+<br>
+<h2 id="integration-fleet-server-seoljeong">Integration: Fleet Server 설정</h2>
+<p>이건 사실 직접 써야하는건 아니다.<br />
+하지만 이 도구들로 인해서 필수적인 프리셋이나 애셋들이 설정되기 때문에 깔아줘야 한다.</p>
+<p><img src="/images/img_99ed0e6cf846431d.png" alt="" /></p>
+<p><img src="/images/img_7b347de3da1bd5f4.png" alt="" />
+대충 만들고</p>
+<p><img src="/images/img_88a231acd1013711.png" alt="" /></p>
+<p><img src="/images/img_052032c576fd3cf5.png" alt="" />
+이런저런 템플릿들이 잘 설정된걸 봤다면 된 것이다.</p>
+<br>
+<br>
+<h2 id="apm-seobeo-guseong">APM 서버 구성</h2>
+<p>그러면 이제 apm 서버를 또 띄워줘야 한다.<br />
+이게 agent에게서 trace 정보를 받으면, 그걸 잘 가공해서 elasticsearch에 쌓아주는 역할을 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>  apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> docker</span><span style="color: #94E2D5;">.</span><span>elastic</span><span style="color: #94E2D5;">.</span><span>co</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">8.18</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0</span></span>
+<span class="giallo-l"><span>    container_name</span><span style="color: #9399B2;">:</span><span> apm</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    command</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> &gt;</span></span>
+<span class="giallo-l"><span>      sh</span><span style="color: #94E2D5;"> -</span><span>c</span><span style="color: #A6E3A1;"> &quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        . /config/elastic_password.env</span></span>
+<span class="giallo-l"><span>        ELASTIC_PASSWORD</span><span style="color: #94E2D5;">=</span><span>$$</span><span style="color: #9399B2;">{</span><span>ELASTIC_PASSWORD</span><span style="color: #9399B2;">}</span><span> </span></span>
+<span class="giallo-l"><span>        echo $$ELASTIC_PASSWORD</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        rm</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        touch</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;apm-server:&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  host: </span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">0.0.0.0:8200</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  auth:&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;    secret_token: </span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">q1w2e3r4</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;output.elasticsearch:&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  enabled: true&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  hosts: [</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">http://elasticsearch:9200</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">]&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  username: </span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">elastic</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo \</span><span style="color: #A6E3A1;">&quot;  password: $$ELASTIC_PASSWORD</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;"> &gt;&gt; /usr/share/apm-server/apm-server.yml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;path:&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  data: /usr/share/apm-server/data&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  home: /usr/share/apm-server&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  config: /usr/share/apm-server/config&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;  logs: /usr/share/apm-server/logs&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &#39;logging.level: info&#39;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        cat</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>share</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">/</span><span>apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">.</span><span>yml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        exec apm</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;"> -</span><span>e</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    volumes:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      - ./</span><span>config</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #9399B2;">:</span><span>ro</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;18200:8200&quot;</span></span>
+<span class="giallo-l"><span>    networks</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> elastic</span></span>
+<span class="giallo-l"><span>    depends_on</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      elasticsearch</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        condition</span><span style="color: #9399B2;">:</span><span> service_healthy</span></span>
+<span class="giallo-l"><span>      kibana</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        condition</span><span style="color: #9399B2;">:</span><span> service_healthy</span></span></code></pre>
+<p>이것도 config 관리가 지저분해지긴 한다.<br />
+여기서는 에이전트가 쓸 시크릿 토큰을 정의해줘야 한다. elasticsearch와는 연관없는 apm-server 측의 인증 구성이다.<br />
+q1w2e3r4을 알아서 잘 고쳐쓸것</p>
+<br>
+<p><img src="/images/img_f3f85e2f55f450a7.png" alt="" />
+큰 오류 없이 잘 실행된다면 되었고</p>
+<p>설정한 키로 api도 잘 찔러진다면 또 된 것이다.</p>
+<p><img src="/images/img_035404bf23190e8a.png" alt="" />
+저기서 publish_ready가 true여야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="agent-guseong-go">Agent 구성 (Go)</h2>
+<p>그럼 이제 에이전트 띄워서 쏴보기만 하면 된다.<br />
+예제는 go다. 다른것도 다 된다.</p>
+<p><img src="/images/img_d224e403356d8f26.png" alt="" /></p>
+<p><img src="/images/img_db29b5341dcb56a4.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>  sample</span><span style="color: #94E2D5;">-</span><span>app</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      context</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> ./</span><span>sample</span><span style="color: #94E2D5;">-</span><span>app</span></span>
+<span class="giallo-l"><span>      dockerfile</span><span style="color: #9399B2;">:</span><span> Dockerfile</span></span>
+<span class="giallo-l"><span>    container_name</span><span style="color: #9399B2;">:</span><span> sample</span><span style="color: #94E2D5;">-</span><span>app</span></span>
+<span class="giallo-l"><span>    environment</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    # Install necessary packages</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> ELASTIC_APM_SERVICE_NAME</span><span style="color: #94E2D5;">=</span><span>elastic</span><span style="color: #94E2D5;">-</span><span>apm</span><span style="color: #94E2D5;">-</span><span>sample</span><span style="color: #94E2D5;">-</span><span>app</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> ELASTIC_APM_SERVER_URL</span><span style="color: #94E2D5;">=</span><span>http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//apm-server:8200</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> ELASTIC_APM_ENVIRONMENT</span><span style="color: #94E2D5;">=</span><span>development</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> ELASTIC_APM_SECRET_TOKEN</span><span style="color: #94E2D5;">=</span><span>q1w2e3r4</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span style="color: #A6E3A1;"> &quot;8080:8080&quot;</span></span>
+<span class="giallo-l"><span>    networks</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> elastic</span></span></code></pre>
+<p>서비스명, apm-server의 엔드포인트, env, 방금 만든 시크릿까지를 환경변수에 넣어주면 된다.</p>
+<br>
+<p><img src="/images/img_ec8092f9c3c7abdc.png" alt="" />
+실행해서 좀 찔러보면</p>
+<br>
+<p><img src="/images/img_838ca6a48b5c0e05.png" alt="" />
+해당 서비스에 해당하는 대시보드가 만들어져있을 것이고</p>
+<br>
+<p><img src="/images/img_a0c2771d4c1b82f1.png" alt="" /></p>
+<p>실제 trace나 메트릭도 잘 쌓인 것을 볼 수 있을 것이다.</p>
+<p>전체 코드 및 구성 참조<br />
+<a rel="external" href="https://github.com/myyrakle/docker-compose/tree/master/elastic-apm">https://github.com/myyrakle/docker-compose/tree/master/elastic-apm</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.elastic.co/docs/solutions/observability/apm/get-started">https://www.elastic.co/docs/solutions/observability/apm/get-started</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/71615937/elasticsearch-kibana-docker-compose-value-of-elastic-is-forbidden">https://stackoverflow.com/questions/71615937/elasticsearch-kibana-docker-compose-value-of-elastic-is-forbidden</a><br />
+<a rel="external" href="https://discuss.elastic.co/t/standalone-apm-server-with-elasticsearch-8-in-docker-not-able-to-connect/319892/2">https://discuss.elastic.co/t/standalone-apm-server-with-elasticsearch-8-in-docker-not-able-to-connect/319892/2</a><br />
+<a rel="external" href="https://www.elastic.co/guide/en/apm/server/7.15/elasticsearch-output.html">https://www.elastic.co/guide/en/apm/server/7.15/elasticsearch-output.html</a><br />
+<a rel="external" href="https://www.elastic.co/docs/reference/apm/agents/go/configuration">https://www.elastic.co/docs/reference/apm/agents/go/configuration</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223960423534/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Elasticsearch] Kibana 구성 (with Docker)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223961353123/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Opensearch] 벡터 검색과 필터링 (Filtering)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

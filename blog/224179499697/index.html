@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>분산 트랜잭션: calvin | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224179499697/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="분산 트랜잭션: calvin">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224179499697/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-02-11T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224179499697/">분산 트랜잭션: calvin</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-11T00:00:00+00:00"><time datetime="2026-02-11T00:00:00+00:00">2026.02.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="579 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224179499697" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>calvin은 분산 트랜잭션 이론 중 하나다. 2012년에 Yale 대학에서 발표했다.</p>
+<p>이론적으로 주목받긴 했는데, 주요 구현체 중에서 이걸 메인으로 사용한 것은 딱히 없다.<br />
+Spanner와 비슷하면서도 대비되는 특징을 가진다.</p>
+<br>
+<br>
+<br>
+<h2 id="gijon-bunsan-teuraenjaegsyeonyi-munje-2pc">기존 분산 트랜잭션의 문제: 2PC</h2>
+<p>일반적으로 많이 사용되는 핵심 구현 패턴은 2PC라는 것이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223465481384">https://blog.naver.com/sssang97/223465481384</a><br />
+이건 매우 직관적인 방법으로 전체 노드에 대한 글로벌 트랜잭션을 구현한다.<br />
+노드마다 write를 날리고 Lock을 걸어둔 다음에, 모든 노드의 write가 완료된다면 Lock을 풀고 트랜잭션을 완료된 것으로 처리하는 것이다.</p>
+<p>이 방법은 강력한 Lock을 보장할 수 있지만, 매우 느리고, 네트워크 딜레이가 길고, Lock으로 인한 전체 노드 정지 시간이 길어질 수 있다는 것이 치명적인 단점이었다.</p>
+<p><img src="/images/img_5d85ca0785a75c75.png" alt="" /></p>
+<p><img src="/images/img_2b4977e619d13075.png" alt="" /></p>
+<p><img src="/images/img_4cb894ebd2812c14.png" alt="" />
+이렇게 번잡한 과정을 거치는데다, 하나 할때마다 전체 Lock을 걸어버리니 처리량이 썩 좋지 않게 나오는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="calvinyi-bangbeobron">calvin의 방법론</h2>
+<p>생각해보자. 애초에 Lock을 대체 왜 거는가?<br />
+그 목적 중 하나는 데이터 무결성이다. A-&gt;B 순서로 쓰기가 발생한 것이 실제로 B-&gt;A로 기록된다면, 당연히 데이터가 다를 것이다. Lock은 이런 순서 꼬임 문제를 방지하는 가장 비관적인 방식이다.</p>
+<p>calvin은 이 부분에 집중한다.<br />
+순서가 문제라면, 트랜잭션 순서를 관리하는 관리포인트를 추가하고, 전체 Lock 없이 개별 Lock으로만 처리하게 하자는 것이다.<br />
+트랜잭션을 미리 정리해버리기 때문에 결정론적 Lock(Deterministic Lock) 방식이라고도 부른다.</p>
+<p><img src="/images/img_46f623e0218fc225.png" alt="" />
+쓰기 트랜잭션이 여러개 날라오면, 일단 시퀀서라는 중심 노드가 그 쓰기를 먼저 받는다.<br />
+그리고 트랜잭션들을 즉시 복제하지 않고 일정량 모은 다음에, 그 트랜잭션 목록을 로그로서 저장한다.</p>
+<br>
+<p><img src="/images/img_7dd312ef39a946e9.png" alt="" />
+그리고 모아놓은 트랜잭션 리스트를 일정 주기로 떠넘겨버리고, 개별 노드에서 알아서 쓰기를 처리하도록 위임하는 것이다.</p>
+<p>만약 노드에서 받은 트랜잭션을 모종의 이유로 처리하지 못한다면, 시퀀서에서 저장해놓은 트랜잭션 로그를 통해 replay를 한다. 이를 통해 장애 내구성을 높인다.</p>
+<p>네트워크 전송 횟수 자체가 적고 쓰기를 몰아서 처리하기 때문이, 경쟁이 심한 환경에서의 쓰기 처리량은 가장 우수하다는 평가를 받는다.<br />
+하지만 후술할 문제들 때문에 널리 쓰이진 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="calvinyi-munje">calvin의 문제</h2>
+<p>모든게 완벽하고 훌륭했으면 당연히 모두가 calvin을 기반으로 트랜잭션을 구현했을 것이다.<br />
+하지만 현실은 그렇지 않고, 주요 분산 DB는 전부 Spanner의 직계다.<br />
+이게 좀  치명적인 단점이 많다.</p>
+<br>
+<br>
+<h4 id="bogjeyi-wanryo-hwagin-bulga">복제의 완료 확인 불가</h4>
+<p>calvin의 시퀀서는 트랜잭션을 모아서 개별 노드에 던지기는 하지만, 2PC와 다르게 개별 노드의 완료를 확인하거나 기다리지 않는다. 그저 언젠가는 되겠거니 할 뿐이다.<br />
+그래서 read after write를 보장할 수 없다.</p>
+<br>
+<br>
+<h4 id="danil-jangae-jijeom">단일 장애 지점</h4>
+<p>calvin에서는 시퀀서라는 존재가 많은 책임을 진다.<br />
+복제 자체도 그렇지만, 글로벌 로그라는 중앙 상태가 추가되기 때문에, 시퀀서 노드에서 장애가 발생할 경우의 영향이 매우 치명적이다.<br />
+그래서 calvin은 가용성을 포기한 CP로 분류된다.</p>
+<br>
+<br>
+<h4 id="jogeonbu-sujeongyi-guhyeoni-eoryeoum">조건부 수정의 구현이 어려움</h4>
+<p>단순한 삽입인 INSERT는 문제가 없다.</p>
+<p>하지만 UPDATE WHERE name = 'ALICE' 같은 조건 기반의 write는 calvin에서 좀 어려운 주제다.<br />
+name = 'ALICE'인 데이터를 수정하려면, name = 'ALICE'인 데이터를 찾아서 그 행에 대한 Lock을 걸어야 한다. 하지만 이걸 찾아서 행에 Lcok을 걸려면 인덱스 등을 통해서 어떤 행인지 탐색을 해야한다.<br />
+근데 값을 가져와서 행을 찾더라도, 그게 동시성 환경에서는 여전히 유효하다는 보장이 없다.</p>
+<p>그래서 루프를 돌거나 Lock을 걸어서 무결성을 보장해야하는데, 필연적으로 성능 저하가 발생할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="guhyeonce">구현체</h2>
+<p>calvin을 적극 차용한 구현체로는 FaunaDB라고 있는데, 잘 쓰이는 DB는 아니다.<br />
+이거 말고는 딱히 없는거같다...<br />
+calvin의 기묘하고 제약적인 구조 때문에 Fauna는 독특한 설계를 갖고 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://fauna.com/blog/distributed-consistency-at-scale-spanner-vs-calvin">https://fauna.com/blog/distributed-consistency-at-scale-spanner-vs-calvin</a><br />
+<a rel="external" href="https://queue.acm.org/detail.cfm?id=3025012">https://queue.acm.org/detail.cfm?id=3025012</a><br />
+<a rel="external" href="https://github.com/yaledb/calvin">https://github.com/yaledb/calvin</a><br />
+<a rel="external" href="https://www.vldb.org/pvldb/vol7/p821-ren.pdf">https://www.vldb.org/pvldb/vol7/p821-ren.pdf</a><br />
+<a rel="external" href="https://dbmsmusings.blogspot.com/2017/04/distributed-consistency-at-scale.html">https://dbmsmusings.blogspot.com/2017/04/distributed-consistency-at-scale.html</a><br />
+<a rel="external" href="https://www.yugabyte.com/blog/google-spanner-vs-calvin-global-consistency-at-scale/">https://www.yugabyte.com/blog/google-spanner-vs-calvin-global-consistency-at-scale/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224179448373/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] localstack<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224178033104/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] ArgoCD Notification으로 Slack에 배포 알림 구성하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

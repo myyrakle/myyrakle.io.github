@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] EC2 기반의 서버 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223101655611/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] EC2 기반의 서버 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223101655611/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-14T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223101655611/">[AWS] EC2 기반의 서버 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-14T00:00:00+00:00"><time datetime="2023-05-14T00:00:00+00:00">2023.05.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="426 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223101655611" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>AWS에서 EC2와 ELB, AutoScailingGroup 등을 이용해서 웹서버를 구성하는 방법을 간단히 다뤄본다.</p>
+<p>대충 만들어서 대충 운영할 거라면 그냥 EC2 하나만 띄워서 IP에 도메인달고 그러면 되지만, 확장성있는 서버 구성을 원한다면 로드밸런서가 필수적이다.</p>
+<p>아래와 같은 형태로 여러개의 인스턴스들을 띄워 지속적인 scailout이 가능하기 때문이다.</p>
+<p><img src="/images/img_e3da3eb15392d8fa.png" alt="" />
+<a rel="external" href="https://cloud.in28minutes.com/aws-certification-elastic-load-balancers-elb">https://cloud.in28minutes.com/aws-certification-elastic-load-balancers-elb</a><br />
+또한 재배포를 할 때에도 새 버전의 인스턴스를 띄워서 로드밸런서에서 스위칭을 하면 되기 때문에, 배포에 있어서도 이점이 크다.</p>
+<p>근데 개인적으로, 좋은 배포나 지속적인 스케일링 관리를 원한다면 ec2보단 컨테이너 단위의 관리를 추천한다. ECS라든지, EKS라든지...<br />
+인스턴스 관리로 매니징하는건 한계가 좀 있더라.</p>
+<p>대신 비용면에서 좀더 저렴한 편이고, Network Loadbalancer로 L4 로드밸런싱을 타기 때문에 성능적 이점이 약간 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="daesanggeurub-mandeulgi">대상그룹 만들기</h2>
+<p>로드밸런서를 만들려면 먼저 대상그룹을 만들어야 한다.<br />
+대상그룹은 로드밸런서와 붙어서 인스턴스 목록을 관리해주고, 헬스체크 등을 해주는 역할을 해준다.</p>
+<p>인스턴스 타입으로 해서 대강 만들어준다.</p>
+<p><img src="/images/img_9756880d83fc5e7c.png" alt="" />
+적당히 이름만 잘 지어서 만들어주면 끝이다.<br />
+인스턴스 등록은 나중에 오토스케일링 그룹이 대행해줄 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="rodeubaelreonseo-mandeulgi">로드밸런서 만들기</h2>
+<p>인스턴스 타입의 대상그룹을 사용하려면 Network Loadbalancer를 만들어줘야 한다.</p>
+<p><img src="/images/img_c24755deb8ee617a.png" alt="" /></p>
+<p>이름 짓고,</p>
+<p><img src="/images/img_3f117e2eae9538ef.png" alt="" /></p>
+<p>VPC와 서브넷을 지정해주고</p>
+<p><img src="/images/img_a5defce5caf47600.png" alt="" /></p>
+<p>방금 만든 대상그룹을 리스너로 등록해준다.</p>
+<p><img src="/images/img_36d00ec3d48b4f42.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gibon-ec2-imiji-jageobhagi">기본 EC2 이미지 작업하기</h2>
+<p>먼저 서버 베이스로 사용할 EC2를 작업해준다.<br />
+나는 우분투로 시작해서 nodejs 등, 서버에 필요한 디펜던시들을 깔아줬다.</p>
+<p><img src="/images/img_f192609cd8de0c63.png" alt="" /></p>
+<p>서버 실행도 가능하게 초기화해주고</p>
+<p><img src="/images/img_8c55daac3af2036a.png" alt="" /></p>
+<p>실행용 스크립트도 구성해준다.</p>
+<p><img src="/images/img_1e686a267759728b.png" alt="" /></p>
+<p>그리고 인스턴스가 시작됐을때 자동으로 부팅되게 하기 위해서 systemd 서비스를 활용했다.<br />
+아래 구성을 작성해서</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>systemd</span><span style="color: #94E2D5;">/</span><span>system</span><span style="color: #94E2D5;">/</span><span>server</span><span style="color: #94E2D5;">.</span><span>service</span></span></code></pre>
+<p>이런식으로 방금 만든 스크립트를 트리거하도록 했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[Unit]</span></span>
+<span class="giallo-l"><span>Description</span><span style="color: #94E2D5;">=</span><span>Job that runs your user script</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[Service]</span></span>
+<span class="giallo-l"><span>ExecStart</span><span style="color: #94E2D5;">=/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>sh</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>ubuntu</span><span style="color: #94E2D5;">/</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>Type</span><span style="color: #94E2D5;">=</span><span>oneshot</span></span>
+<span class="giallo-l"><span>RemainAfterExit</span><span style="color: #94E2D5;">=</span><span>yes</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[Install]</span></span>
+<span class="giallo-l"><span>WantedBy</span><span style="color: #94E2D5;">=</span><span>multi</span><span style="color: #94E2D5;">-</span><span>user</span><span style="color: #94E2D5;">.</span><span>target</span></span></code></pre>
+<p>그리고 systemctl로 등록하면 끝이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl daemon</span><span style="color: #94E2D5;">-</span><span>reload</span></span>
+<span class="giallo-l"><span>sudo systemctl enable server</span><span style="color: #94E2D5;">.</span><span>service</span></span></code></pre>
+<p><img src="/images/img_568bd0987a5bf937.png" alt="" /></p>
+<p>서버가 기대한대로 동작하는지 확인한다,</p>
+<p><img src="/images/img_418a3cecf03ee0b6.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="ami-mic-tempeulris-guseong">AMI 및 템플릿 구성</h2>
+<p>그리고 저걸로 이미지와 템플릿을 따놔야 한다.<br />
+그래야 오토스케일링 그룹이 저걸 그대로 실행해줄 수 있다.</p>
+<p>이미지는 이렇게 따면 되고</p>
+<p><img src="/images/img_2631320511e5b3ce.png" alt="" /></p>
+<p><img src="/images/img_034f66b99dccf73b.png" alt="" /></p>
+<p>템플릿은 이렇게 따면 된다.</p>
+<p><img src="/images/img_f180342ded1ab2cb.png" alt="" /></p>
+<p><img src="/images/img_ba74f0e652eefa44.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="otoseukeilring-geurub">오토스케일링 그룹</h2>
+<p>지속적으로 EC2 인스턴스의 수를 늘리거나 줄이게 하려면 오토스케일링 그룹을 사용해야 한다.<br />
+로드밸런서와 연동해서 상태확인을 기반으로 EC2 인스턴스를 직접 띄우거나 줄이는 공급자 역할을 한다.</p>
+<p><img src="/images/img_74bfb62dbd959960.png" alt="" /></p>
+<br>
+<br>
+<p><img src="/images/img_539cd31391e4f516.png" alt="" />
+네트워크 설정 잘 해주고</p>
+<br>
+<p><img src="/images/img_fbef255cd8476678.png" alt="" />
+로드밸런서와 연결도 해준다.</p>
+<br>
+<p><img src="/images/img_eae9594153389d2a.png" alt="" />
+혹시 중간에 터지면 다시 띄울 수 있도록 해주고</p>
+<br>
+<p><img src="/images/img_dc30f387f8d94a0e.png" alt="" />
+용량을 적절히 설정해준다.</p>
+<br>
+<p><img src="/images/img_2953b3aab29864b6.png" alt="" />
+이러면 CPU가 튈때 인스턴스를 늘려줄 수 있다.</p>
+<br>
+<p><img src="/images/img_dbcb883cbc2e15db.png" alt="" />
+필요하다면 SNS 등을 활용해 알림을 받게 할 수 있다.</p>
+<br>
+<p><img src="/images/img_1938bc9b6fe0c951.png" alt="" />
+그래서 이렇게 생성되면 잘 된 것이다.</p>
+<p>좀 기다리면 스케일링 그룹이 인스턴스를 띄워줄 것이고</p>
+<p><img src="/images/img_eccbf2b139136005.png" alt="" /></p>
+<p>대상그룹에서 헬스체크도 잘 되면</p>
+<p><img src="/images/img_f126760f5743aff5.png" alt="" /></p>
+<p>로드밸런서로도 접속이 될 것이다.</p>
+<p><img src="/images/img_4cdfc7fa6dfc35aa.png" alt="" /></p>
+<p>이외에 CI/CD까지 완전하게 무중단으로 구성하려면 고려할게 좀더 많아진다.<br />
+그건 별도 포스트에서 다뤄보겠다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223101386886/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] Network Policy<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223100877802/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] k9s<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

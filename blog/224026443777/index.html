@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] Lock: Mutex와 RWLock의 원리 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224026443777/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] Lock: Mutex와 RWLock의 원리">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224026443777/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-09-30T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224026443777/">[Concurrency] Lock: Mutex와 RWLock의 원리</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-09-30T00:00:00+00:00"><time datetime="2025-09-30T00:00:00+00:00">2025.09.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="463 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224026443777" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>보통 Mutex에는 2가지 구현체가 있다.</p>
+<p>일반적인 최적화된 일반 Mutex와, read의 비율이 높은 상황에 최적화된 RWLock(Read Write Lock)이다.<br />
+후자는 RWMutex라고도 부른다.</p>
+<p>read가 많을떄 RWLock이 더 빠르다는 것은 피상적으로 알지만, 그 구현 상세가 어떤 식인지는 대부분 잘 모를 것이다. 여기서는 Rust의 표준 구현을 예로 들어서 한번 간단히 풀어보겠다.</p>
+<p>Futex의 구현 패턴에 대해서 안다면 이해가 더 빠를 것이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224019441610">https://blog.naver.com/sssang97/224019441610</a></p>
+<br>
+<br>
+<br>
+<h2 id="ilban-mutexyi-guhyeon">일반 Mutex의 구현</h2>
+<p>기본 Mutex는 futex라고 하는 매커니즘을 통해 구현된다.</p>
+<p>경쟁이 적은 경우를 최적화하기 위해서 CAS 기반의 가벼운 User 레벨 Lock을 먼저 사용하고, 경쟁으로 인해 충돌이 발생하면 OS 수준에서 지원하는 Queue 기반의 스레드 스케줄링을 하는 것이다.</p>
+<p>그래서 구현을 까보면</p>
+<p><img src="/images/img_79d2bdf2b159c8d6.png" alt="" />
+처음에 CAS 날려서 Lock 안걸려있으면 바로 lock을 점유한다.<br />
+CAS 수준 점유에 실패하면, 그때부터 본격적인 lock 경쟁 작업을 시작한다.</p>
+<p>이렇게.</p>
+<p><img src="/images/img_76061923b768c488.png" alt="" />
+먼저 spin lock으로 User 기반의 가벼운 락을 잡고, spinlock으로도 점유가 불가능한 상황에서는 OS 기능인 futex를 호출해서 스레드를 대기열에 놓도록 구성을 한다.<br />
+futex_wait 함수를 호출하면, OS에서 Lock 점유가 가능할 때까지 스레드를 멈췄다가 실행해준다.<br />
+그러면 다시 동일하게 spinlock을 돌리는 것이다.</p>
+<br>
+<p><img src="/images/img_65d243d901388994.png" alt="" />
+스핀락은 이런 식으로 구현되어있다.<br />
+100번까지 재시도한다.</p>
+<p>스핀을 얼마나 돌지는 아마 언어 구현체들마다 다를 수 있을 것이다. Rust는 100번이다.</p>
+<br>
+<br>
+<br>
+<h2 id="rwlockyi-guhyeon">RWLock의 구현</h2>
+<p>이번에는 RWLock을 까보자.<br />
+RWLock의 기본적인 아이디어는 이렇다.</p>
+<ol>
+<li>
+<p>read는 다른 read를 차단하지 않는다.</p>
+</li>
+<li>
+<p>read는 다른 write를 차단한다.</p>
+</li>
+<li>
+<p>writer는 다른 write를 차단한다.</p>
+</li>
+<li>
+<p>writer는 read보다 선점 우선순위가 높다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>다시 말해서 동시 read가 많이 들어오는 경우에 최적화된 구현이라고 할 수 있다. write는 비교적 무겁다.</p>
+<p>이것도 futex의 구현 패턴을 따르는 것은 동일하나, 세부적인 구현은 보다 복잡한 편이다.</p>
+<p><img src="/images/img_6c741ed530c8cef7.png" alt="" /></p>
+<p>write부터 한번 보자.</p>
+<p><img src="/images/img_f0e5de22d3f7bfa1.png" alt="" />
+CAS 한번 날려서 경쟁 없으면 즉시 lock을 얻는건 똑같다.</p>
+<p>경쟁 구현부는 비교적 복잡한 편이다.</p>
+<p><img src="/images/img_9080fe9fb535877d.png" alt="" /></p>
+<p><img src="/images/img_534850c252ce47af.png" alt="" />
+여기서 조금 특이한 것은, 단순 0/1 플래그를 쓰는게 아니라 비트단위 마킹으로 WRITE LOCK 상태와 READ LOCK 상태를 구분한다는 것이다.</p>
+<p>이것도 마찬가지로 스핀락 먼저 시도하고, 금방 Lock을 얻는다면 futex syscall 없이 종료된다.<br />
+하지만 lock이 걸려있다면 futex syscall을 날려서 OS의 스케줄링을 얻는 형태다.</p>
+<p>또 특이한 것이 WRITERS_WAITING 비트 플래그로 최초 write 진입자가 먼저 선점 체크를 한다는 것이다. 그래서 최초 writer는 os syscall 없이 계속해서 스핀락을 건다.<br />
+그 이후에 들어오는 후속 writer는 일단 futex_wait으로 os systecall을 날려서 장기간 대기를 고려한다.</p>
+<p>spinlock은 비슷하게 최대 100번까지 돈다.</p>
+<p><img src="/images/img_fcbd059d8b098ecd.png" alt="" /></p>
+<p><img src="/images/img_dea322d401645780.png" alt="" /></p>
+<p>아무튼 이래서 RWLock의 write Lock이 Mutex의 일반 Lock보다는 리소스 비효율적인 것이다. writer가 빈번하게 진입한다면 스핀락으로 CPU를 계속 갈구는 놈이 항상 생기는 형태다.</p>
+<p>이번에는 read lock을 봐보자.</p>
+<p><img src="/images/img_c2c24dd3ad277f1e.png" alt="" /></p>
+<p><img src="/images/img_881ce5d996108383.png" alt="" />
+read lock은 lock 점유 조건이 느슨하다.<br />
+state가 0일 필요도 없고, read lock 상태라면 언제든 진입 가능하게 해뒀다.<br />
+대신 read lock을 점유중인 reader 개수를 state로 계속해서 더한다.</p>
+<p>경쟁 구현부도 대충 비슷하다.<br />
+write lock이 잡혀서 read lock을 잡을 수 없는 경우에 진입할텐데</p>
+<p><img src="/images/img_aabd82e8a78db41f.png" alt="" />
+이것도 마찬가지로 처음에는 spinlock으로 점유를 시도하다가, 안되면 futex_wait으로 OS 대기를 걸고, lock에 자리가 또 나면 spinlock으로 시도하는 그런 반복 로직이다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224028492955/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>내부망에서 TLS(HTTPS) 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224026498626/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] Internal: WAL의 구조<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

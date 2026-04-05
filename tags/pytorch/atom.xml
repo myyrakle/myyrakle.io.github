@@ -1,0 +1,572 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - Pytorch</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/pytorch/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-06-23T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/pytorch/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[Pytorch] TorchScript</title>
+        <published>2025-06-23T00:00:00+00:00</published>
+        <updated>2025-06-23T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223908136276/"/>
+        <id>https://myyrakle.github.io/blog/223908136276/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223908136276/">&lt;p&gt;Pytorch 기본 모델 형식은 태생적인 단점을 많이 가지고 있는 편이다.&lt;br &#x2F;&gt;
+파이썬 코드로 실행되고, 사용법이 간단하고, 학습이나 배포도 간단한 것이 장점이나. 최적의 성능을 내지 못한다는게 고질적인 단점이 있었다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 나온 것이 Torchscript라는 모델 파일 형식이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0c13418302a30e83.png&quot; alt=&quot;&quot; &#x2F;&gt;
+torch에서 제공하는 torchscript 기능 지원을 활용하면, 컴파일 과정을 거쳐서 python&amp;amp;pytorch 종속성을 제거하고, 최소한의 의미만을 담는 script를 만들 수 있다.&lt;br &#x2F;&gt;
+다만, 이 자체로는 완성된 바이너리가 아님에 유의한다. 바이트코드처럼 중간 표현 언어로 변환하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;실제로 torchscript를 돌리려면 이걸 다시 torch로 로드해서 실행하거나, TensorRT 같은 진짜 native 바이너리 형태로 컴파일해서 실행해야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;yeje-saempeul&quot;&gt;예제 샘플&lt;&#x2F;h2&gt;
+&lt;p&gt;먼저 예제 모델을 하나 준비해보겠다.&lt;br &#x2F;&gt;
+그냥 길이 2짜리 입력을 받아서 길이 3짜리를 반환하는 간단한 모델이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;import&lt;&#x2F;span&gt;&lt;span&gt; torch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch.nn as nn&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;class SimpleModel(nn.Module):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    def __init__(self):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        super().__init__()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        self.linear = nn.Linear(2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 3)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    def forward(self&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; x):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        return self.linear(x)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; import&lt;&#x2F;span&gt;&lt;span&gt; SimpleModel&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch.nn as nn&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch.optim as optim&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model = SimpleModel()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(model)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;x = torch.tensor([[1.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 1.0]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [2.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 2.0]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [3.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 3.0]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [4.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 4.0]])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;y = torch.tensor([[3.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 5.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 7.0]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [5.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 7.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 9.0]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [7.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 9.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 11.0]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [9.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 11.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 13.0]])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;criterion = nn.MSELoss()  # 평균제곱오차&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;optimizer = optim.SGD(model.parameters()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; lr=0.01)  # 확률적 경사하강법&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 10번 반복해서 학습 (epoch)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;for epoch in range(1000):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    optimizer.zero_grad()         # 기울기 초기화&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    outputs = model(x)            # 모델에 입력값 전달&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    loss = criterion(outputs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; y)  # 손실 계산&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    loss.backward()               # 역전파&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    optimizer.step()              # 파라미터 업데이트&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    if (epoch+1) % 100 == 0:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        print(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;Epoch [{epoch+1}&#x2F;1000], Loss: {loss.item():.4f}&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 결과 확인&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;학습된 가중치:&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; model.linear.weight.tolist())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;학습된 편향:&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; model.linear.bias.tolist())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 테스트 &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;기대한 출력&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; y.tolist())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;실제의 출력&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt;  model(torch.tensor([[1.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 1.0]])).tolist())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 3가지 방식으로 모델 저장&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;torch.save(model.state_dict()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;state_dict.pth&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;torch.save(model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;model_full.pth&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;checkpoint = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;#39;epoch&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;: epoch&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;#39;model_state_dict&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;: model.state_dict()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;#39;optimizer_state_dict&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;: optimizer.state_dict()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;#39;loss&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;: loss&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    # ... 기타 필요한 정보&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;torch.save(checkpoint&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;quot;checkpoint.pth&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a7178460e8acf64a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그래서 1.0, 1.0을 넣으면 3,5,7에 근사하는 값이 나오도록 세팅해뒀다.&lt;&#x2F;p&gt;
+&lt;p&gt;이걸 torchscript로 컴파일해보자.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;2gaji-keompail-bangbeob-trace-vs-script&quot;&gt;2가지 컴파일 방법: trace vs script&lt;&#x2F;h2&gt;
+&lt;p&gt;torchscript에는 2가지 컴파일 방법이 있다.&lt;br &#x2F;&gt;
+근데 이게 방법만 다른게 아니라 실제 결과물의 수준도 다를 수 있기 때문에 그 장단점과 특징을 잘 알고 선택해야 한다. 딱 뭐를 써야한다는 일반적인 지침은 존재하지 않는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;일단 script는 가장 정직하고 일반적인 형태의 컴파일 방법이다. 그냥 python 코드를 읽어서, 정적으로 컴파일하는 전형적인 방법론을 취한다.&lt;&#x2F;p&gt;
+&lt;p&gt;반면에 trace는 모델을 실제로 실행하면서 그 실행 흐름에 맞게 최적화된 코드를 만들어내는 방식을 취한다. 진짜 JIT 컴파일에 가까운 방법이라고 할 수 있겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;trace-keompail&quot;&gt;trace 컴파일&lt;&#x2F;h2&gt;
+&lt;p&gt;trace 컴파일은 그렇게 어렵진 않다.&lt;br &#x2F;&gt;
+실제 모델 실행에 필요한 입력값을 대충 하나 만들고, 밀어넣어서 trace 컴파일을 돌리면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;import&lt;&#x2F;span&gt;&lt;span&gt; trace&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;from&lt;&#x2F;span&gt;&lt;span&gt; model import SimpleModel&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model = SimpleModel()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model.load_state_dict(torch.load(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;state_dict.pth&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;))&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(model)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 추론 모드 전환&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model.eval()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# Tracing 방식 - 예제 입력으로 모델 실행 경로 추적&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;example_input = torch.tensor([[1.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 2.0]])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;traced_model = torch.jit.trace(model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; example_input)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;traced_model.save(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;traced_model.pt&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그러고 만들어지는 반환값 traced_model이 trace 모드로 컴파일된 모델 데이터다.&lt;br &#x2F;&gt;
+저걸 저장해서 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;실행할 때는 jit.load를 통해서 로드해서 사용할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; import&lt;&#x2F;span&gt;&lt;span&gt; SimpleModel&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;loaded_model = torch.jit.load(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;traced_model.pt&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(loaded_model)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(loaded_model(torch.tensor([[1.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 1.0]])).tolist())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_927f8be6d036069e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+경우에 따라 값이 약간 왜곡될 수도 있긴 한데, 이 경우에는 동일한 값이 나왔다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;script-keompail&quot;&gt;script 컴파일&lt;&#x2F;h2&gt;
+&lt;p&gt;script 컴파일의 경우에는 비교적 더 간단하다.&lt;br &#x2F;&gt;
+실제로 모델을 돌릴 필요도 없기 때문이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; import&lt;&#x2F;span&gt;&lt;span&gt; SimpleModel&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;loaded_model = torch.jit.load(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;scripted_model.pt&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(loaded_model)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(loaded_model(torch.tensor([[1.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 1.0]])).tolist())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7bc4c95dd203bedb.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이 경우에도 일단은 동등한 결과가 나왔다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;trace-vs-script&quot;&gt;trace vs script&lt;&#x2F;h2&gt;
+&lt;p&gt;그래서, 2가지 방법 중 무엇을 선택해야할까?&lt;br &#x2F;&gt;
+사실 이것도 경우에 따라 다르다는 말을 할 수밖에 없을 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;trace는 해당 계산 흐름에 맞춰서 최적화된 형태로 정적 빌드를 수행한다. 해당 예제 실행에 사용되지 않은 불필요한 그래프를 전부 제거한다.&lt;br &#x2F;&gt;
+그래서 실행 흐름이 한가지라면 무엇보다 빠르고 뛰어난 결과를 도출할 수 있다.&lt;br &#x2F;&gt;
+하지만 다양한 형태의 실행 흐름을 제공하게끔 만들기 어렵고, 입력 크기 또한 한가지로 제한된다는 단점이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;script는 코드를 정적으로 분석해서 최적화된 형태로 컴파일을 시도한다. 이건 특히, 모델 코드에 복잡한 조건문이나 반복문 같은 것이 있는 패턴에 대해서는 더욱 유효하게 동작한다.&lt;br &#x2F;&gt;
+예를 들면, 이런 식의 변칙적인 코드 말이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;import&lt;&#x2F;span&gt;&lt;span&gt; torch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch.nn as nn&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;class SampleModel(nn.Module):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    def __init__(self):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        super().__init__()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        self.linear = nn.Linear(2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 3)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    def forward(self&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; x):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        # 동적 제어 흐름 예시&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        if x.sum() &amp;gt; 0:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            return self.linear(x)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        else:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            return torch.zeros_like(x)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;하지만 script 코드의 정적 분석 수준은 낮다. 모든 python 신택스나 코드 패턴에 유효하게 동작하는 것이 아니기 때문이다. 최적화가 되는 한도 내에서 강박적으로 코드를 작성해야 한다는게 좀 치명적인 부분이다.&lt;br &#x2F;&gt;
+상속을 써도 안되고, lamdba를 써도 안되고, union도 안되고, 동적 타입도 안되고, 사실 뭐 되는게 없다.&lt;br &#x2F;&gt;
+코드 퀄리티와 script 컴파일 가능성을 동시에 가져가는게 거의 불가능하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;trace-with-script&quot;&gt;trace with script&lt;&#x2F;h2&gt;
+&lt;p&gt;양쪽 모두의 장점을 가져가고 싶다면, trace와 script를 동시에 섞어서 사용하는 것도 가능하다.&lt;br &#x2F;&gt;
+예를 들면, 이런 식이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;class&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; MyRNNLoop&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;torch&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;nn&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;Module&lt;&#x2F;span&gt;&lt;span&gt;):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;    def __init__&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;        super&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;MyRNNLoop&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;).&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;__init__&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;        self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;cell&lt;&#x2F;span&gt;&lt;span&gt; = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;torch&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;jit&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;trace&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;MyCell&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;scripted_gate&lt;&#x2F;span&gt;&lt;span&gt;), (&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;x&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;h&lt;&#x2F;span&gt;&lt;span&gt;))&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;    def forward&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;xs&lt;&#x2F;span&gt;&lt;span&gt;):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;        h&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;y&lt;&#x2F;span&gt;&lt;span&gt; = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;torch&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;zeros&lt;&#x2F;span&gt;&lt;span&gt;(3, 4), &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;torch&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;zeros&lt;&#x2F;span&gt;&lt;span&gt;(3, 4)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;        for i in range&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;xs&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;size&lt;&#x2F;span&gt;&lt;span&gt;(0)):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;            y&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;h&lt;&#x2F;span&gt;&lt;span&gt; = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;self&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;cell&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;xs&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;i&lt;&#x2F;span&gt;&lt;span&gt;], &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;h&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;        return y&lt;&#x2F;span&gt;&lt;span&gt;, &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;h&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;rnn_loop&lt;&#x2F;span&gt;&lt;span&gt; = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;torch&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;jit&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;script&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;MyRNNLoop&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;rnn_loop&lt;&#x2F;span&gt;&lt;span&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;code&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;세부 모델 동작들에 대해서는 trace로 컴파일을 하고, 분기 제어에 대해서는 script 컴파일을 하도록 하는 것이다.&lt;br &#x2F;&gt;
+이러면 컴파일을 할때 script가 trace된 스크립트를 인라인해서 적절히 처리한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;예제에 사용한 전체 코드베이스는 다음 링크에서 확인할 수 있다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;myyrakle&#x2F;ml_examples&#x2F;tree&#x2F;master&#x2F;pytorch&#x2F;torchscript-basic&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;myyrakle&#x2F;ml_examples&#x2F;tree&#x2F;master&#x2F;pytorch&#x2F;torchscript-basic&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;tutorials.pytorch.kr&#x2F;recipes&#x2F;torchscript_inference.html&quot;&gt;https:&#x2F;&#x2F;tutorials.pytorch.kr&#x2F;recipes&#x2F;torchscript_inference.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;happy-jihye.github.io&#x2F;dl&#x2F;torch-2&#x2F;&quot;&gt;https:&#x2F;&#x2F;happy-jihye.github.io&#x2F;dl&#x2F;torch-2&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;ppwwyyxx.com&#x2F;blog&#x2F;2022&#x2F;TorchScript-Tracing-vs-Scripting&#x2F;&quot;&gt;https:&#x2F;&#x2F;ppwwyyxx.com&#x2F;blog&#x2F;2022&#x2F;TorchScript-Tracing-vs-Scripting&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.pytorch.org&#x2F;docs&#x2F;stable&#x2F;jit.html&quot;&gt;https:&#x2F;&#x2F;docs.pytorch.org&#x2F;docs&#x2F;stable&#x2F;jit.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.pytorch.org&#x2F;docs&#x2F;stable&#x2F;jit_language_reference_v2.html&quot;&gt;https:&#x2F;&#x2F;docs.pytorch.org&#x2F;docs&#x2F;stable&#x2F;jit_language_reference_v2.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Pytorch] 소개</title>
+        <published>2025-06-20T00:00:00+00:00</published>
+        <updated>2025-06-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223905265541/"/>
+        <id>https://myyrakle.github.io/blog/223905265541/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223905265541/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0b015945b0bde2ae.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Pytorch는 메타에서 2016년에 공개한 오픈소스 ML 프레임워크다.&lt;br &#x2F;&gt;
+Tensorflow, JAX와 더불어서 가장 대중적인 ML 환경 중 하나이며, 연구부터 실제 모델 배포에 이르기까지 널리 사용되는 환경이다.&lt;&#x2F;p&gt;
+&lt;p&gt;대부분의 ML 환경이 그렇듯이 cuda 기반이며, 코어는 C++로 만들어져있고 인터페이스만 Python이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;vs-tensorflow&quot;&gt;vs Tensorflow&lt;&#x2F;h2&gt;
+&lt;p&gt;pytorch의 가장 큰 대적자는 아무래도 tensorflow였다.&lt;br &#x2F;&gt;
+후발주자라서 처음에는 밀렸지만, 이제는 pytorch 사용 비율이 tensorflow를 추월한 모양새다.&lt;&#x2F;p&gt;
+&lt;p&gt;pytorch가 tensorflow에 비해서 가지는 가장 큰 장점 중 하나는, 사용이 쉽고 간편하다는 것이었다.&lt;br &#x2F;&gt;
+tensorflow는 복잡하고 난해한 사용법으로 악명이 높았다. keras 등의 프론트엔드를 쓰면 나아지긴 하는데, 뭔가 애매한 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;난이도 뿐만 아니라, 환경도 전반적으로 pytorch에 유리한 환경이 되었다.&lt;br &#x2F;&gt;
+ML 엔지니어들은 대체로 모델을 자체적으로 개발하기보다는 논문을 참고해서 연구 결과를 재현해보며 원하는 결과를 얻곤 하는데, 근래에 나오는 대부분의 딥러닝 연구들이 pytorch를 기반으로 나오는 것도 사용 비율에 큰 영향을 줬다고 할수 있겠다.&lt;br &#x2F;&gt;
+새로 나오는 딥러닝 논문의 80%~90% 정도는 pytorch 기반인 것으로 알려져있다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 임베디드를 비롯한 특정 영역에서는 여전히 tensorflow가 강세를 보이는 것으로 알고 있다.&lt;br &#x2F;&gt;
+그런데 Tensorflow를 만든 구글조차도 JAX로 이동하려는 모습을 보여주고 있기 때문에, 미래는 좀 어둡다고 할 수 있겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;ko.wikipedia.org&#x2F;wiki&#x2F;PyTorch&quot;&gt;https:&#x2F;&#x2F;ko.wikipedia.org&#x2F;wiki&#x2F;PyTorch&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;MLQuestions&#x2F;comments&#x2F;112sege&#x2F;pytorch_vs_tensorflow&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;MLQuestions&#x2F;comments&#x2F;112sege&#x2F;pytorch_vs_tensorflow&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Pytorch] 모델 만들어보기</title>
+        <published>2025-06-20T00:00:00+00:00</published>
+        <updated>2025-06-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223905291701/"/>
+        <id>https://myyrakle.github.io/blog/223905291701/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223905291701/">&lt;p&gt;모델을 간단하게나마 말아보면서 그 구조를 파악해보겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;model-keulraeseu-jeongyi&quot;&gt;모델 클래스 정의&lt;&#x2F;h2&gt;
+&lt;p&gt;대부분의 모델은 nn.Module을 상속하는 클래스를 정의하는 것으로 시작한다.&lt;br &#x2F;&gt;
+nn.Module는 신경망(Neural Network)에 대한 기본 기능 구조를 제공하는 클래스다.&lt;&#x2F;p&gt;
+&lt;p&gt;한번 하나 정의해보자&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;import&lt;&#x2F;span&gt;&lt;span&gt; torch.nn as nn&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;class SimpleModel(nn.Module):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    def __init__(self):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        super().__init__()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        self.linear = nn.Linear(2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; 3)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    def forward(self&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; x):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        return self.linear(x)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model = SimpleModel()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(model)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;자. 여기서 nn.Linear(4, 8) 이 부분이 레이어를 정의하는 부분이다.&lt;br &#x2F;&gt;
+여기서 4가 입력에 대한 값이고, 8이 출력에 대한 값이다.&lt;br &#x2F;&gt;
+다시 말해 입력으로는 길이 4짜리 텐서(float array), 출력으로는 길이 8짜리 텐서를 반환하는 것이다. 여기서는 간결함을 위해 짧은 값을 정의했지만, 실제 사례에서는 훨씬 길 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;forward는 실제로 모델에 입력이 들어올때 어떻게 동작할지를 정의한다.&lt;br &#x2F;&gt;
+이 경우에는 linear의 기본 동작을 타도록 포워딩했다.&lt;&#x2F;p&gt;
+&lt;p&gt;아무튼 저대로 실행해보면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_665494dc6efef87c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+모델 정보가 나온다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;hagseub-dolryeobogi&quot;&gt;학습 돌려보기&lt;&#x2F;h2&gt;
+&lt;p&gt;입력&#x2F;출력 쌍을 4개 정도만 정의해서 학습을 시켜보겠다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;x&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; torch&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;tensor&lt;&#x2F;span&gt;&lt;span&gt;([[&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1.0&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;2.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 2.0&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;3.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 3.0&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;4.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 4.0&lt;&#x2F;span&gt;&lt;span&gt;]])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;y&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; torch&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;tensor&lt;&#x2F;span&gt;&lt;span&gt;([[&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;3.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 5.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 7.0&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;5.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 7.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 9.0&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;7.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 9.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 11.0&lt;&#x2F;span&gt;&lt;span&gt;]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; [&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;9.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 11.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 13.0&lt;&#x2F;span&gt;&lt;span&gt;]])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;x가 입력, y가 출력이다.&lt;br &#x2F;&gt;
+이 2차원 배열을 tensor라고 부르고, 안에 들어있는 작은 배열들을 row나 sample이라고 부른다.&lt;br &#x2F;&gt;
+위에서 정의한 입력과 출력에 대한 크기 정의는 이 row에 대한 것이었다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 입력 텐서의 길이와 출력 텐서의 길이는 같아야 한다.&lt;br &#x2F;&gt;
+x[0]와 y[0]이 각각 한 쌍의 입출력 쌍이 되는 것이기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 저 입&#x2F;출력 값을 집어넣고 돌려보자.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;criterion&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; nn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;MSELoss&lt;&#x2F;span&gt;&lt;span&gt;()  # 평균제곱오차&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;optimizer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; optim&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;SGD&lt;&#x2F;span&gt;&lt;span&gt;(model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;parameters&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; lr&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.01&lt;&#x2F;span&gt;&lt;span&gt;)  # 확률적 경사하강법&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 10번 반복해서&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; 학습&lt;&#x2F;span&gt;&lt;span&gt; (epoch)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;for epoch&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; in&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; range&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1000&lt;&#x2F;span&gt;&lt;span&gt;):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    optimizer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;zero_grad&lt;&#x2F;span&gt;&lt;span&gt;()         # 기울기 초기화&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    outputs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; model&lt;&#x2F;span&gt;&lt;span&gt;(x)            # 모델에 입력값 전달&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    loss&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; criterion&lt;&#x2F;span&gt;&lt;span&gt;(outputs&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; y)  # 손실 계산&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    loss&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;backward&lt;&#x2F;span&gt;&lt;span&gt;()               # 역전파&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    optimizer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;step&lt;&#x2F;span&gt;&lt;span&gt;()              # 파라미터 업데이트&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;    if&lt;&#x2F;span&gt;&lt;span&gt; (epoch&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;+&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; %&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; ==&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;        print&lt;&#x2F;span&gt;&lt;span&gt;(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;Epoch [{epoch+1}&#x2F;1000], Loss: {loss.item():.4f}&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 결과 확인&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;학습된 가중치:&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;linear&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;weight&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;tolist&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;학습된 편향:&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;linear&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;bias&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;tolist&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;조금 뭐가 이것저것 복잡하긴 한데, 얼개만 훑어보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;분명히 값 세트 하나만을 넣어서 돌리는데도 뭔가 거창하다. 무슨 오차 범위에 대한 대응을 하는데다, 루프를 1000번이나 돌리고 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이건 ML 매커니즘 자체의 근본적인 한계에서 기인하는 처리 방식이다.&lt;br &#x2F;&gt;
+일반적으로 입출력 값을 넣어서 학습을 시키더라도, 항상 손실이 발생하기 때문이다. 그래서 여러번 집어넣어서 돌려야 손실을 최소화할 수 있고, 이 여러번 돌리는 횟수를 epoch라고 부른다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7eb698f7e13a1e73.png&quot; alt=&quot;&quot; &#x2F;&gt;
+실제로 돌리면 돌릴수록 손실(Loss)이 줄어드는 것을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;학습을 돌리고 나면, 모델을 찔러서 그 결과를 확인해볼 수 있다.&lt;br &#x2F;&gt;
+학습했던 데이터를 그대로 또 밀어넣어서 뭐가 나오는지 보자&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4bbba832fe125c18.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d22952757b129938.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 비슷하긴 한데 뭔가 다른 값이 나온다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_51b653a1c9452574.png&quot; alt=&quot;&quot; &#x2F;&gt;
+게다가 동일한 횟수로 학습을 돌려도, 돌릴때마다 다른 값이 나온다.&lt;br &#x2F;&gt;
+학습 과정 자체는 결정적으로 이루어지지 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 학습 횟수를 줄여서 손실량이 늘어나면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_15fbb392adad1afd.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a0df79afee68947c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그만큼 출력값의 정밀도는 확실히 낮아진다. 전보다 동떨어진 값이 떨어진 것을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;model-pail-wanseonghagi&quot;&gt;모델 파일 완성하기&lt;&#x2F;h2&gt;
+&lt;p&gt;학습이 끝났다면, 이제 바로 모델 파일을 생성할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d99388c4f6a2c76d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이 방법은 state_dict 방식의 모델이라고 하는데, 이거 말고도 몇가지 더 있으나 별도 포스트에서 다루겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_406983c9d7705559.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이렇게 파일이 생성된다.&lt;br &#x2F;&gt;
+이 경우에는 뭣도 없어서 크기가 굉장히 작은데, 보통은 거의 N~NN기가급으로 나온다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 이걸 그대로 가져다가 쓸 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_718874268394f1b7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5e10e3f0a0bdf1f2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+로드해보면, 모델 정보와 함께 모델이 초기화될 것이고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_884f333f633277e8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fb35636d80ce9055.png&quot; alt=&quot;&quot; &#x2F;&gt;
+바로 입력을 때려넣어서 출력값을 받아올 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;일반적인 흐름은 이렇다. 중간에 이런저런 변주나 잡기술들이 들어갈 수 있지만, 이 근간에서 벗어나지 않는다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Pytorch] 모델의 저장</title>
+        <published>2025-06-20T00:00:00+00:00</published>
+        <updated>2025-06-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223905301417/"/>
+        <id>https://myyrakle.github.io/blog/223905301417/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223905301417/">&lt;p&gt;파이토치에서 모델을 저장하는 방식에 대해 다뤄본다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pickle-pomaes&quot;&gt;pickle 포맷&lt;&#x2F;h2&gt;
+&lt;p&gt;파이토치 모델은 pickle이라는 python용 바이너리 직렬화 포맷을 통해 저장된다.&lt;br &#x2F;&gt;
+대단한 목적이 있어서는 아니고, 파이썬 코드를 포함해서 이런저런 모델 메타데이터 정보들을 효율적으로 압축해서 저장하기 위한 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;torch.save는 pickle로 파일을 압축해서 저장하고, torch.load는 pickle 파일을 읽어서 압축해제하고 메모리에 로드한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;state-dict-jeojang&quot;&gt;state_dict 저장&lt;&#x2F;h2&gt;
+&lt;p&gt;가장 흔하게 사용하는 방법 중 하나다.&lt;br &#x2F;&gt;
+이 방식은 모델의 파라미터만 저장한다. 그러니까, 모델 자체의 타입 정보 등은 저장하지 않는다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3c8ee6c718f4f603.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 사용할 때도 모델의 타입정보를 가져다가 로드해야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_404abb562ebcc701.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;파일 크기가 작다는 장점이 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jeonce-jeojang&quot;&gt;전체 저장&lt;&#x2F;h2&gt;
+&lt;p&gt;그냥 통째로 모든 정보를 저장할 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d826a3bd3fe8a3b0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 모델 타입정보를 알 필요는 없고, 그냥 그대로 로드해서 쓸 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d1fff55e653d591a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이건 모델 클래스 코드를 함께 전달하지 않아도 된다는 장점이 있으나, 그만큼 모델 크기가 좀 커진다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;cekeupointeu-jeojang&quot;&gt;체크포인트 저장&lt;&#x2F;h2&gt;
+&lt;p&gt;이건 최종 배포가 아닌 학습 과정에 주로 쓰이는 저장 방식이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_70d1afdb134f1fc8.png&quot; alt=&quot;&quot; &#x2F;&gt;
+막 그렇게 대단한 것은 아니고, 학습 과정과 관련된 컨텍스트 정보를 딕셔너리로 구겨넣어서 저장하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 load할때 그대로 꺼내와서 쓸 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c49c3dae30f93953.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b04f9635513200de.png&quot; alt=&quot;&quot; &#x2F;&gt;
+모델 동작 자체는 잘 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;빠른 피드백이나, 학습 중간 과정 진행함에 있어서는 가장 유리한 방식이다.&lt;br &#x2F;&gt;
+이게 저장 방식 중에 모델 크기가 가장 크다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;tutorials.pytorch.kr&#x2F;beginner&#x2F;saving_loading_models.html&quot;&gt;https:&#x2F;&#x2F;tutorials.pytorch.kr&#x2F;beginner&#x2F;saving_loading_models.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;docs.python.org&#x2F;3&#x2F;library&#x2F;pickle.html&quot;&gt;https:&#x2F;&#x2F;docs.python.org&#x2F;3&#x2F;library&#x2F;pickle.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Pytorch] 모델 서빙하기</title>
+        <published>2025-06-13T00:00:00+00:00</published>
+        <updated>2025-06-13T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223898037638/"/>
+        <id>https://myyrakle.github.io/blog/223898037638/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223898037638/">&lt;p&gt;만들어진 모델 파일을 가져다가 사용해보는 방법을 다뤄본다.&lt;br &#x2F;&gt;
+학습 과정 같은 것은 다루지 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기서 사용해볼 모델은 resnet-18이라고 하는, 이미지 분류 모델이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;huggingface.co&#x2F;microsoft&#x2F;resnet-18&quot;&gt;https:&#x2F;&#x2F;huggingface.co&#x2F;microsoft&#x2F;resnet-18&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+이미지를 받으면 그게 어떤 형태의 이미지인지 분석해서 텍스트 목록으로 알려주는 기능을 갖고 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;예시로 사용한 테스트코드는 깃헙을 참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;myyrakle&#x2F;ml_examples&#x2F;tree&#x2F;master&#x2F;pytorch&#x2F;start-with-resnet-18&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;myyrakle&#x2F;ml_examples&#x2F;tree&#x2F;master&#x2F;pytorch&#x2F;start-with-resnet-18&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jongsogseong-seolci-uv&quot;&gt;종속성 설치 (uv)&lt;&#x2F;h2&gt;
+&lt;p&gt;보통 이 정도는 기본으로 깔고 간다고 생각하면 된다.&lt;br &#x2F;&gt;
+pillow는 이미지 처리 모듈, torch가 pytorch 모듈, transformer가 모델을 로드해서 쏘기 위한 모듈이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;uv add pillow torch transformers&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_27e5218c657ff06d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gibon-seting&quot;&gt;기본 세팅&lt;&#x2F;h2&gt;
+&lt;p&gt;먼저 모델부터 로딩해보자.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from transformers&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; import&lt;&#x2F;span&gt;&lt;span&gt; AutoImageProcessor&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; AutoModelForImageClassification&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;from&lt;&#x2F;span&gt;&lt;span&gt; PIL import Image&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 모델 로딩&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;image_processor = AutoImageProcessor.from_pretrained(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;microsoft&#x2F;resnet-18&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model = AutoModelForImageClassification.from_pretrained(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;microsoft&#x2F;resnet-18&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# ID과 레이블 값 매핑 조회&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(model.config.id2label)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f50c167e3a3080bc.png&quot; alt=&quot;&quot; &#x2F;&gt;
+기본적으로 이런 모델들은, 출력의 형태가 정해져있다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 모델 자체에 class id와 label name의 매핑이 존재하고, 모델 추론의 결과로는 class id가 반환되어서 그걸로 이 config에서 값을 찾아서 사용하는 식이 되는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;이제 추론을 돌려보자.&lt;br &#x2F;&gt;
+먼저 이미지를 하나 준비하고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_be4e14534d34bbdd.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이번에는 추론 코드까지 작성해보겠다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from transformers&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; import&lt;&#x2F;span&gt;&lt;span&gt; AutoImageProcessor&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; AutoModelForImageClassification&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import torch&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;from&lt;&#x2F;span&gt;&lt;span&gt; PIL import Image&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 모델 로딩&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;image_processor = AutoImageProcessor.from_pretrained(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;microsoft&#x2F;resnet-18&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model = AutoModelForImageClassification.from_pretrained(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;microsoft&#x2F;resnet-18&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 이미지 넣어서 입력 생성&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;image = Image.open(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;cat.jpg&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;inputs = image_processor(image&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; return_tensors=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;pt&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(model.config.id2label)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# gradient 계산 비활성화한 채로 모델 추론 실행&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;with torch.no_grad(): &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    logits = model(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F38BA8;&quot;&gt;**&lt;&#x2F;span&gt;&lt;span&gt;inputs).logits&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 모델 결과값 출력&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;predicted_label = logits.argmax(-1).item() # 가장 높은 점수를 가진 클래스의 인덱스&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;Predicted label: {predicted_label}&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;print(model.config.id2label[predicted_label])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;logits의 결과값으로 추론된 class 인덱스들이 반환되고, 그걸로 id 매핑을 뒤져서 값을 가져왔다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8cd7f557d8b1b3ef.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그러면 tabby, tabby cat이라는 값이 추론된 것을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;혹은, 상위 N개를 가져와서 처리하는 식으로 할 수도 있다.&lt;br &#x2F;&gt;
+애초에 이런 추론 결과는 정확하지 않고 그냥 점수가 높은 것을 가져오는 식으로 동작하기 때문이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;# 상위 k개 클래스 보기&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;k&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 5&lt;&#x2F;span&gt;&lt;span&gt;  # 상위 5개&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;top_k&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; torch&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;topk&lt;&#x2F;span&gt;&lt;span&gt;(logits&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; k)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;print&lt;&#x2F;span&gt;&lt;span&gt;(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F5C2E7;&quot;&gt;\n&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;상위 {k}개 예측:&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;for i&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; in&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; range&lt;&#x2F;span&gt;&lt;span&gt;(k):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    idx&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; top_k&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;indices[&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;][i]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;item&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    score&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; top_k&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;values[&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;][i]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;item&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    label&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;config&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id2label[idx]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;    print&lt;&#x2F;span&gt;&lt;span&gt;(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;{i+1}. {label}: {score:.4f}&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ebccca8ba1931f80.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그러면 이런 식으로 응답이 나온다. score가 추론된 점수다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;model-pail&quot;&gt;모델 파일&lt;&#x2F;h2&gt;
+&lt;p&gt;위에서는 모델 파일을 명시적으로 다운받지 않고, 그냥 레포지토리 경로로 로드했었다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;image_processor&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; AutoImageProcessor&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;from_pretrained&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;microsoft&#x2F;resnet-18&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;model&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; AutoModelForImageClassification&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;from_pretrained&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;microsoft&#x2F;resnet-18&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;이런 식으로 치면 transformers 모듈은 huggingface 레포지토리에서 모델을 찾아서 자동으로 다운받는다.&lt;br &#x2F;&gt;
+처음 시작하기에는 간편하지만, 모델을 huggingface에 올리지 않을 수도 있고, 아무튼 로컬에 모델을 직접 다운받아서 쓰고 싶을 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;모델 자체는 huggingface cli를 통해 설치할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;pip install huggingface&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;hub&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;huggingface&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;cli download microsoft&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;resnet&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;18&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;local&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;dir&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; .&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;resnet&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;18&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0ae8072d406eeef9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ef9e8f7a1e2c24f4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 디렉터리 기반으로 이렇게 이것저것 다운이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a1d30cefa7d35728.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c34b707b9843e3e7.png&quot; alt=&quot;&quot; &#x2F;&gt;
+안에 뭐가 들어있는지는 모델마다 다르다.&lt;br &#x2F;&gt;
+하지만 대체로 config.json이 모델 구조를 정의하는 파일, preprocessor_config.json이 전처리 설정파일.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 이 경우에는 model.safetensors가 프레임워크 독립적인 모델 파일이다. 그냥 기본 옵션으로 로드할 경우에는 model.safetensors만 있어도 된다.&lt;br &#x2F;&gt;
+참고로 tf_model.h5가 텐서플로 모델이고, pytorch_model.bin은 파이토치 모델(.pt)이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 이제 저 디렉터리를 기반으로 로컬에 존재하는 모델을 로드해서 쓸 수 있고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e69226ace6938b76.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c2679dc142169d0a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+마찬가지로 잘 동작할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;use_safetensor=False 옵션을 넣으면 강제로 pytorch_model.bin을 사용하도록 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0f525a92f9a58269.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저 pytorch_model.bin이 일반적으로 말하는 .pt 파일이다.&lt;&#x2F;p&gt;
+&lt;p&gt;safetensor를 만든 huggingface 측에서는 일반적인 모델 pickle 형식보다 safetensor를 쓰기를 권장한다. 훨씬 보안에 안전하고 로딩 등이 빠르다는 이유에서다.&lt;br &#x2F;&gt;
+이 포맷들에 대해서는 별도 포스트에서 따로 다뤄보겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;wikidocs.net&#x2F;201325&quot;&gt;https:&#x2F;&#x2F;wikidocs.net&#x2F;201325&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

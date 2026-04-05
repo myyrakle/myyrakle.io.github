@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] Mutex와 futex | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224019441610/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] Mutex와 futex">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224019441610/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-09-24T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224019441610/">[Concurrency] Mutex와 futex</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-09-24T00:00:00+00:00"><time datetime="2025-09-24T00:00:00+00:00">2025.09.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="494 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224019441610" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223131650074">https://blog.naver.com/sssang97/223131650074</a></p>
+<p>futex는 Mutex의 대표적인 구현 패턴이다.<br />
+기존의 느리고 비효율적인 Mutex 구현을 대체하기 위해 나왔다.</p>
+<p>현재 사용되는 대부분의 Mutex 구현체는 전부 futex 기반으로 만들어져있다.</p>
+<p><img src="/images/img_d831536a9cc65011.jpg" alt="" />
+이건 Rust의 표준 Mutex</p>
+<br>
+<br>
+<br>
+<h2 id="gijonyi-mutex-guhyeon">기존의 Mutex 구현</h2>
+<p>futex가 나오기 전의 Mutex 구현은 효율적이라고 말하기 어려웠다.</p>
+<p>스레드간 통신을 IPC 기반으로 프로세스 간 통신을 날리기도 했고, lock/unlock을 할때마다 syscall을 무지성으로 날려댔다. 아니면 spinlock처럼 대기 중에 CPU 리소스를 과도하게 갉아먹기도 했다.</p>
+<p>그래서 과거에는 Mutex를 쓰면 스레드가 늘어날수록 극심하게 성능 저하가 발생했었다. 요즘 구현과 비교하면 수십배, 혹은 수백배까지도 느렸다.</p>
+<br>
+<br>
+<br>
+<h2 id="geuraeseo-futexga-mueosinga">그래서 futex가 무엇인가?</h2>
+<p>futex는 상기한 비효율성을 개선하기 위해 나왔다.</p>
+<p>단, 유의할 점은 이게 os syscall로만 완결되는 기능은 아니란 것이다.<br />
+OS 수준에서도 futex 함수를 제공하긴 하는데, 라이브러리 수준에서도 함께 맞춰서 처리를 해줘야 한다.</p>
+<p>커널스페이스와 유저스페이스를 적절히 오가면서 커널 호출을 줄이는 하이브리드 방법론이기 때문이다.</p>
+<p>물론 대부분의 성숙한 언어들은 기본 Mutex 자체가 거기에 맞춰서 구현을 해뒀다. 내가 확인한 바로 Java, Rust, Go는 표준 Mutex가 확실하게 futex 구현을 사용한다.</p>
+<p><strong>계층 분리: user + kernel</strong><br />
+아무튼 futex를 대표하는 핵심 원리는 lock과 wait/wake 구조를 분리하는 것이다.<br />
+lock을 유저스페이스에서 관리하고, wait/wake를 OS 커널 수준에서 관리한다.<br />
+user 수준 lock을 선제적으로 사용하다가, 어쩔 수 없을 때만 os 수준 wait/wake를 사용하는 식으로 구성된다.</p>
+<p><strong>1. user 수준 lock</strong><br />
+futex의 라이브러리 수준 구현에서는 대부분 내부적으로 추가 플래그를 두고 compare and swap 같은 atomic operation을 돌려서 비교적 가벼운 유저스페이스 Lock을 구현한다.<br />
+이를 통해 lock/unlock을 할때 경쟁중인 스레드가 없다면 커널 호출 없이 유저스페이스 Lock만으로 완료할 수 있도록 처리한다. 당연히 커널 호출이 없으니 경쟁이 적은 경우에는 훨씬 빨라진다.<br />
+하지만 경쟁이 심하다면 이 방법은 스핀락처럼 리소스를 과다하게 소모한다. 이런 경우에는 결국 2번의 접근법이 필요하다.</p>
+<p><strong>2. 커널 수준 wait/wake - 대기열 기반의 스레드 절전</strong><br />
+futex에서 중요한 점 중 하나가 "대기 스레드"에 대한 리소스 절약이다. 당연히 lock을 얻지 못해서 대기 중인 스레드의 경우에는, 굳이 리소스를 낭비하게 할 필요가 없다.<br />
+이 경우에는 스레드 자체를 "대기열"에 넣어두고, 다른 스레드에서 unlock을 하는 시점에 일어나서(wake) 활성화가 되게 하면 되는 것이다. 이게 futex syscall이 지원하는 영역이다.<br />
+이건 경쟁이 적은 경우에는 비효율적이고, 경쟁이 심해서 lock을 쉽게 얻을 수 없는 경우에만 효율적이다. 그래서 일반적으로 user 수준 Lock에서 심한 경쟁이 탐지된 경우에만 사용되곤 한다.</p>
+<p>다음은 Rust 표준 뮤텍스의 lock 구현례다.</p>
+<p><img src="/images/img_d22546f45b90d042.jpg" alt="" />
+atomic op으로 먼저 잠겨있는지 최대 2번까지 체크하고, 그래도 충돌이 발생했다면 "futex_wait"으로 커널 호출을 하는 것이다.</p>
+<p>그래서 futex는 단독으로 기깔나게 최적화를 잘 한 방법론이라고 할 것은 아니다. 경쟁이 심한 경우와 경쟁이 심하지 않은 경우를 종합해서 유연하게 처리하는 2단계 방법론인 셈이다.</p>
+<br>
+<br>
+<br>
+<h2 id="futexyi-yeogsa">futex의 역사</h2>
+<p>2002년쯤에 리눅스 커널에 futex라는 이름으로 처음 들어갔다. 이때부터 리눅스에서는 사용이 가능해졌다.</p>
+<p>Windows에서는 WaitOnAddress라는 이름으로 2012년부터 지원됐다.<br />
+MacOS는 2016년부터 지원한다.</p>
+<p>사실 의미적으로 가장 적확한 이름은 futex가 아니라 windows가 작명한 WaitOnAddress다.<br />
+futex syscall 자체가 단독으로 하는 역할은 대기열 관리하고 깨워주는게 전부이기 때문이다...</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://h4x0r.org/futex/">https://h4x0r.org/futex/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/45764378/how-are-threads-processes-parked-and-woken-in-linux-prior-to-futex">https://stackoverflow.com/questions/45764378/how-are-threads-processes-parked-and-woken-in-linux-prior-to-futex</a><br />
+<a rel="external" href="http://www.wowotech.net/kernel_synchronization/futex.html">http://www.wowotech.net/kernel_synchronization/futex.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224021477990/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Ubuntu] zram 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224019446505/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>지옥같은 yaml 문서.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] 비관적 동시성과 낙관적 동시성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223126307890/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] 비관적 동시성과 낙관적 동시성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223126307890/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-06-12T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223126307890/">[Concurrency] 비관적 동시성과 낙관적 동시성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-06-12T00:00:00+00:00"><time datetime="2023-06-12T00:00:00+00:00">2023.06.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="350 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223126307890" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>비관적(Pessimistic) 동시성과 낙관적(Optimistic) 동시성은 동시성의 엄격한 수준을 정의하는 주요 개념이다.</p>
+<p>DB 하나로 굴러가는 간단한 서버를 짠다 해도, 이정도는 알아둬야 동시성 문제로 발생하는 버그들을 방지할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="bigwanjeog-dongsiseong-pessimistic-concurrency">비관적 동시성(Pessimistic Concurrency)</h2>
+<p>비관적 동시성은 말 그대로 상황을 비관적으로 본다는 가정하에 설립되는 구조다.</p>
+<p>여러개의 스레드가 동시에 한 자원을 건드릴 수 있다고 가정하고, 공유 자원에 대해 엄격한 Lock을 통해 제약을 건다.<br />
+공유 자원은 무조건 하나의 스레드만 접근할 수 있고, 나머지는 대기토록 하는 것이다.</p>
+<p>데이터의 무결성과 신뢰성을 지킬 수 있다는 점에서는 좋으나, 성능상으로 비효율이 많다는 단점이 있다.</p>
+<p>보통 프로그램에서 동시성과 동기화를 적용한다고 하면, 특별한 이유가 없거든 Mutex 등을 통해 비관적인 동시성을 적용하게 된다.</p>
+<p><strong>RDB에서</strong><br />
+SQL을 사용할때 비관적 동시성을 적용하려면,<br />
+수정하려는 행을 조회할때, 아래와 같은 쿼리로 조회 시점에서 Lock을 걸어버리는 방법이 있다.<br />
+<strong>select * from foo</strong>** for update;**</p>
+<p>혹은 트랜잭션을 생성해서 필요사항에 맞게 isolation level을 잘 정의해도 된다.</p>
+<p>참고<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/222910699714">https://m.blog.naver.com/sssang97/222910699714</a></p>
+<br>
+<br>
+<br>
+<h2 id="naggwanjeog-dongsiseong-optimistic-concurrency">낙관적 동시성 (Optimistic Concurrency)</h2>
+<p>낙관적 동시성은 그에 비해 굉장히 느슨한 접근법을 취하는 관점이다.</p>
+<p>한번에 하나의 스레드만 공유 자원에 접근할 것이라고 가정하고, 비관적 동시성과 다르게 읽기 시점에서는 Lock을 사용하지 않는다.<br />
+그리고 동시에 쓰기가 발생했을 경우는 오류로 간주하고 오류처리로 해결한다.</p>
+<p>때문에 성능면에서는 훨씬 나아진다는게 장점이나... 역시 얻는게 있으면 잃는 것도 있다. 손으로 직접 처리해주고 검증해줘야 할게 좀 많이 생긴다.</p>
+<p>프로그램에서 직접 낙관적 동시성을 구현할 경우에는, 공유 자원을 atomic 리소스로 정의해서 사용하는 것이 보통이다.<br />
+그래서 값의 변경시에도 Compare And Swap 같은 lock-free 기법 등을 사용한다.</p>
+<p>참고<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224054767242">https://blog.naver.com/sssang97/224054767242</a></p>
+<br>
+<p><strong>RDB에서</strong><br />
+SQL에서 낙관적 동시성을 적용할 때는 값을 변경할때 낙관적 동시성에 대한 위반 테스트를 하는 것이 안전하다.</p>
+<p>구현법이 정해져있지는 않지만 보통 이러한 접근법을 취한다.</p>
+<ol>
+<li>테이블에 전용 타임스탬프열을 추가한다. 편의상 opt_chk라고 부르겠다.</li>
+<li>수정할 데이터를 읽어온다. 당연히 opt_chk도 함께 가져온다.</li>
+<li>update 쿼리로 데이터를 변경할때, SET절로 opt_chk을 현재 시간으로 변경하고, WHERE에는 읽어왔던 opt_chk으로 동등 비교를 추가한다.</li>
+<li>그래서 만약 다른 스레드에서 값을 먼저 바꿔서 opt_chk가 바뀌었다면, 현재 쿼리는 실패한다. (정확히는, 아무것도 변경되지 않는다.)</li>
+<li>따라서 update 쿼리에서 변경된 row가 0인 경우는 update 오류다. 이를 기반으로 예외처리를 한다.</li>
+</ol>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://learn.microsoft.com/ko-kr/dotnet/framework/data/adonet/optimistic-concurrency">https://learn.microsoft.com/ko-kr/dotnet/framework/data/adonet/optimistic-concurrency</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223126295247/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Python] dataclass 데코레이터<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223124061290/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Concurrency] 액터(Actor) 모델<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

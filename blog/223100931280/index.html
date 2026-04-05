@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Pod: 사이드카 패턴 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223100931280/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Pod: 사이드카 패턴">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223100931280/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-13T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223100931280/">[k8s] Pod: 사이드카 패턴</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-13T00:00:00+00:00"><time datetime="2023-05-13T00:00:00+00:00">2023.05.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="445 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223100931280" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223024811152">https://blog.naver.com/sssang97/223024811152</a></p>
+<p>쿠버네티스에서 Pod는 하나의 여러종류의 컨테이너를 적재할 수 있다.<br />
+단일 pod에 단일 컨테이너를 두는게 일반적인 사용사례이긴 한데, 경우에 따라서 멀티컨테이너를 사용하는게 유리할 때도 있다.</p>
+<p>같은 Pod에 들어있는 컨테이너끼리는 같은 리소스를 공유한다.<br />
+EmptyDir 타입 볼륨을 통해 스토리지를 공유할 수 있으며, 같은 내부 IP를 공유한다. 그래서 localhost로도 서로 통신이 가능하다.</p>
+<p>멀티컨테이너를 사용하는 대표적인 사용사례 중 하나가 사이드카(Sidecar)를 구현하는 것이다.<br />
+메인 컨테이너의 보조적인 역할로서, 프록시나 로그 시스템을 버스 컨테이너를 부착하는 것이다.</p>
+<p>그에 대한 사용법을 간단히 다뤄보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-peurogsi-saideuka">예제: 프록시 사이드카</h2>
+<p>사이드카 패턴을 적용하는 가장 대표적인 사례가, nginx 등을 이용한 프록시 및 앰버서더를 중간에 두는 것이다.<br />
+이를 통해 메인 애플리케이션과 프록시 시스템을 별도로 관리한다.<br />
+보통은 프록시에 잡다한 기능을 추가하기 위해 넣는거라서, 프록싱 외에도 로깅이나 인증 기능 등을 붙여서 쓸 일이 많을 것이다.</p>
+<p>프록시 중에서도 메인앱의 인풋/아웃풋을 전부 독점해서 프록싱하는 형태를 앰버서더라고 부르기도 한다.</p>
+<p>테스트를 위해 서버용 이미지와 프록시용 이미지를 하나씩 말아봤다.</p>
+<p>우선 메인서버는 nodejs 기반으로 3000 포트에 서버를 시작하게 구성해놨다. 이미지 이름은 myyrakle/node-server-for-sidecar고, 소스코드는 여기에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/infrastructures/tree/master/Dockerfiles/examples/node-server-for-sidecar">https://github.com/myyrakle/infrastructures/tree/master/Dockerfiles/examples/node-server-for-sidecar</a></p>
+<p>프록시는 nginx를 말아넣었고, 로컬호스트 3000 포트를 그대로 포워딩하도록 했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>error_log</span><span style="color: #94E2D5;"> /</span><span>dev</span><span style="color: #94E2D5;">/</span><span>stdout info</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>events</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  worker_connections</span><span style="color: #FAB387;">  4096</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>http</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  include    mime</span><span style="color: #94E2D5;">.</span><span>types</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>  access_log</span><span style="color: #94E2D5;"> /</span><span>dev</span><span style="color: #94E2D5;">/</span><span>stdout</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    server</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            listen</span><span style="color: #FAB387;"> 80</span><span style="color: #9399B2;"> ;</span></span>
+<span class="giallo-l"><span>            listen [::]:</span><span style="color: #FAB387;">80</span><span style="color: #9399B2;"> ;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            server_name _</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            location</span><span style="color: #94E2D5;"> /</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                proxy_pass http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//localhost:3000;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>동일 pod에서는 localhost로 바로 접근이 가능하다는 점을 이용한 심플한 구현이다.</p>
+<p>그리고 저걸 동시에 띄우는 yaml 구성이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Pod</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> sidecar</span></span>
+<span class="giallo-l"><span>  labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #9399B2;">:</span><span> sidecar</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> sidecar</span><span style="color: #94E2D5;">-</span><span>proxy</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>sidecar</span><span style="color: #94E2D5;">-</span><span>nginx</span></span>
+<span class="giallo-l"><span>    imagePullPolicy</span><span style="color: #9399B2;">:</span><span> Always</span></span>
+<span class="giallo-l"><span>    ports</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> containerPort</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 80</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> main</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>node</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;">-</span><span>for</span><span style="color: #94E2D5;">-</span><span>sidecar</span></span>
+<span class="giallo-l"><span>    imagePullPolicy</span><span style="color: #9399B2;">:</span><span> Always</span></span></code></pre>
+<p>별로 복잡할 것은 없다.</p>
+<p>저걸 올리고</p>
+<p><img src="/images/img_022fd4ee63f29a5f.png" alt="" /></p>
+<p>서비스를 개방하면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl expose pod sidecar</span><span style="color: #94E2D5;"> --</span><span>type</span><span style="color: #94E2D5;">=</span><span>LoadBalancer</span><span style="color: #94E2D5;"> --</span><span>name</span><span style="color: #94E2D5;">=</span><span>sidecar</span><span style="color: #94E2D5;">-</span><span>lb</span><span style="color: #94E2D5;"> --</span><span>port</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">80</span></span></code></pre>
+<p><img src="/images/img_449932cb7b75448a.png" alt="" /></p>
+<p><img src="/images/img_4f839ff8ba369966.png" alt="" /></p>
+<p>동작을 확인할 수 있을 것이다.</p>
+<p><img src="/images/img_5a4c49a059f4bfe3.png" alt="" /></p>
+<p>그럼 사이드카 프록시 -&gt; 메인 앱 컨테이너 순으로 호출이 이루어질 것이다.</p>
+<p><img src="/images/img_99a20aa97501380f.png" alt="" />
+nginx 로그도 잘 찍히고 잘 도는 것을 확인할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-roging-saideuka">예제: 로깅 사이드카</h2>
+<p>또 하나의 대표적인 사용례는 볼륨을 이용한 부수적인 log 처리 작업이다.</p>
+<p>같은 pod의 컨테이너들끼리는 emptydir volume을 이용해서 스토리지 공유를 쉽게 할 수 있는데,<br />
+이를 통해서 앱에서 로그를 뱉으면 사이드카에서 로그를 가공하거나 다른데로 쏘는 식의 구현을 하는 것이다.</p>
+<p>아래는 그에 대한 간단한 예제다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Pod</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> log</span><span style="color: #94E2D5;">-</span><span>sidecar</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> main</span><span style="color: #94E2D5;">-</span><span>app</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> busybox</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">1.28</span></span>
+<span class="giallo-l"><span>    args</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    - /</span><span>bin</span><span style="color: #94E2D5;">/</span><span>sh</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    - -</span><span>c</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    - &gt;</span></span>
+<span class="giallo-l"><span>      i</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      while</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      do</span></span>
+<span class="giallo-l"><span>        echo</span><span style="color: #A6E3A1;"> &quot;$(date) INFO $i&quot;</span><span style="color: #94E2D5;"> &gt;&gt; /</span><span style="color: #CBA6F7;">var</span><span>/log/1.log</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        i</span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;">$</span><span>((i</span><span style="color: #94E2D5;">+</span><span style="color: #FAB387;">1</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        sleep</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>      done      </span></span>
+<span class="giallo-l"><span>    volumeMounts</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> name</span><span style="color: #9399B2;">:</span><span> varlog</span></span>
+<span class="giallo-l"><span>      mountPath</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/log</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> sidecar</span></span>
+<span class="giallo-l"><span>    image</span><span style="color: #9399B2;">:</span><span> busybox</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;">1.28</span></span>
+<span class="giallo-l"><span>    args</span><span style="color: #9399B2;">:</span><span> [</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>sh</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> -</span><span>c</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;tail -n+1 -F /var/log/1.log&#39;</span><span>]</span></span>
+<span class="giallo-l"><span>    volumeMounts</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> name</span><span style="color: #9399B2;">:</span><span> varlog</span></span>
+<span class="giallo-l"><span>      mountPath</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span style="color: #CBA6F7;">var</span><span>/log</span></span>
+<span class="giallo-l"><span>  volumes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> name</span><span style="color: #9399B2;">:</span><span> varlog</span></span>
+<span class="giallo-l"><span>    emptyDir</span><span style="color: #9399B2;">: {}</span></span></code></pre>
+<p>우선 emptyDir 볼륨을 통해 /var/log 경로를 공유하게 설정했다.<br />
+그리고 메인 앱 컨테이너는 쉘코드로 루프돌면서 공유된 경로의 로그파일에 쓰게 하고, 사이드카에서는 그 파일을 읽어서 표준 출력에 쏴주도록 했다.</p>
+<p>예제의 단순성을 위해서 여기서는 tail로 표준에 긁어주기만 했지만, 프로덕션 앱에 응용할때는 사이드카에서 중앙화된 로그서버에 쏴주면서 쌓인 로그를 적절히 삭제해주는 기능까지 포함하게 될 것이다.</p>
+<p>아무튼 저대로 실행을 해보면</p>
+<p><img src="/images/img_5ba0570dfc141cb1.png" alt="" />
+파드가 뜰 것이고</p>
+<p>사이드카 컨테이너는</p>
+<p><img src="/images/img_e2a1e782300570bc.png" alt="" />
+로그를 잘 읽어줄 것이다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://seongjin.me/kubernetes-multi-container-pod-design-patterns/">https://seongjin.me/kubernetes-multi-container-pod-design-patterns/</a><br />
+<a rel="external" href="https://kubernetes.io/docs/concepts/workloads/pods/">https://kubernetes.io/docs/concepts/workloads/pods/</a><br />
+<a rel="external" href="https://kubernetes.io/docs/concepts/storage/volumes/#emptydir-configuration-example">https://kubernetes.io/docs/concepts/storage/volumes/#emptydir-configuration-example</a><br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/cluster-administration/logging/">https://kubernetes.io/ko/docs/concepts/cluster-administration/logging/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223100877802/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] k9s<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223100966012/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] label<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

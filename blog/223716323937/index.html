@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Athena: 파티션 전략 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223716323937/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Athena: 파티션 전략">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223716323937/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-01-06T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223716323937/">[AWS] Athena: 파티션 전략</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-01-06T00:00:00+00:00"><time datetime="2025-01-06T00:00:00+00:00">2025.01.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="665 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223716323937" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Athena는 기본적으로 S3 디렉터리를 기반으로 테이블 단위를 생성하고, 해당 디렉터리와 하위 디렉터리를 모두 재귀적으로 읽어서 처리하는 방식을 취한다.</p>
+<p>하지만 데이터 규모가 정말 방대하고, 항상 모든 부분을 조회할 필요가 없다면 폴더 단위로 파티션을 나누고 부분적으로 쿼리를 돌리는 것도 좋은 선택이 된다.<br />
+여기서는 파티션을 설정하고 사용하는 방법을 간단히 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-seting">기본 세팅</h2>
+<p>먼저 폴더 단위로 데이터가 분리된 csv 데이터셋을 준비한다.<br />
+<strong>첨부파일</strong>testset.zip<a rel="external" href="https://download.blog.naver.com/open/49dc55e5f1a9ad715cbcd9e3d3324c3b94c63edeed/EFsQaLdLxLnO9Ns2E-QRigSVEg-Y9_d1dloEeT8PkAUrH4u9W34l5Pe8Cu8khC9TwxSdS17vkUYs5KJH16aURWQQz3B6pw/testset.zip">파일 다운로드</a>
+<img src="/images/img_c985eb274aacb330.png" alt="" /></p>
+<p><img src="/images/img_a653a31f5ccb25be.png" alt="" />
+내 경우에는 적당히 연도-월 단위로 2중 디렉터리를 구성했다.</p>
+<br>
+<p><img src="/images/img_7c920062d58009ac.png" alt="" /></p>
+<p><img src="/images/img_0bf068773a3164b5.png" alt="" />
+그리고 올렸다.</p>
+<p>테이블 생성은 기본 옵션으로 했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE EXTERNAL TABLE IF NOT EXISTS</span><span style="color: #A6E3A1;"> `default`</span><span style="color: #94E2D5;">.</span><span style="color: #A6E3A1;">`transactions`</span><span> (</span></span>
+<span class="giallo-l"><span>  transaction_id INTEGER</span><span style="color: #9399B2;">,</span><span>  </span></span>
+<span class="giallo-l"><span>  time </span><span style="color: #89B4FA;font-style: italic;">VARCHAR</span><span>(</span><span style="color: #FAB387;">20</span><span>)</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>  buyer_id INTEGER</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>  item_name</span><span style="color: #89B4FA;font-style: italic;"> VARCHAR</span><span>(</span><span style="color: #FAB387;">100</span><span>)</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>  transaction_amount INTEGER</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ROW FORMAT SERDE</span><span style="color: #A6E3A1;"> &#39;org.apache.hadoop.hive.serde2.OpenCSVSerde&#39;</span><span> </span></span>
+<span class="giallo-l"><span>WITH</span><span style="color: #89B4FA;font-style: italic;"> SERDEPROPERTIES</span><span> (</span><span style="color: #A6E3A1;">&quot;separatorChar&quot;</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;,&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;escapeChar&quot;</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;</span><span style="color: #F5C2E7;">\\</span><span style="color: #A6E3A1;">&quot;</span><span>) </span></span>
+<span class="giallo-l"><span>LOCATION</span><span style="color: #A6E3A1;"> &#39;s3://myy-athena-test/&#39;</span><span style="color: #94E2D5;"> --</span><span> 읽어올 csv 파일이 존재하는 디렉터리</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">TBLPROPERTIES</span><span> (</span><span style="color: #A6E3A1;">&quot;skip.header.line.count&quot;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;1&quot;</span><span>)</span><span style="color: #94E2D5;"> --</span><span> 첫번째 row는 생략</span></span></code></pre>
+<p><img src="/images/img_5470adeb396e6b16.png" alt="" />
+만들고</p>
+<br>
+<p><img src="/images/img_8cab563ab56348a9.png" alt="" />
+조회하면, 잘 동작한다.</p>
+<br>
+<p><img src="/images/img_cdc615a05b13146f.png" alt="" />
+우리가 파티션을 통해 얻고자 하는 것은, 상황에 따라서 부분 데이터만 스캔해서 조회를 하는 것이다.<br />
+성능도 성능이고, 아테나는 스캔한 데이터 크기 기준으로 요금을 부과하기 때문이다.</p>
+<p>아테나는 기본적으로 디렉터리 풀스캔이라서, 범위를 좁혀서 쿼리를 날린다 해도</p>
+<p><img src="/images/img_22a7af8c7230daa8.png" alt="" /></p>
+<p><img src="/images/img_6a3f00f42f12ce8a.png" alt="" /></p>
+<p><img src="/images/img_3fc8f0c39c921c47.png" alt="" /></p>
+<p>스캔 데이터는 동일해서 비용도 거의 동일하게 나온다.</p>
+<br>
+<p>이제 파티션을 적용해보자.<br />
+Athena 파티션에는 수동으로 파티션을 나누는 방법과, Partition Projection을 기반으로 자동으로 파티션을 나누는 방법이 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="sudong-patisyeon-sayonghaneunbeob">수동 파티션 사용하는법</h2>
+<p>수동 파티션을 적용하려면, 우선 파티션의 기준이 될 각 디렉터리들이 키=값 쌍으로 구성이 되어야 한다.</p>
+<p><img src="/images/img_7c7ac2f087e33a07.png" alt="" />
+예를 들면 이런 식이다.</p>
+<br>
+<p><img src="/images/img_e18ec08d7d99934d.png" alt="" /></p>
+<p><img src="/images/img_95e0526eb6c335ff.png" alt="" /></p>
+<p><img src="/images/img_51d2278f98f5cc71.png" alt="" />
+적당히 이렇게 올리고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>PARTITIONED</span><span style="color: #89B4FA;font-style: italic;"> BY</span><span> (year string</span><span style="color: #9399B2;">,</span><span> month string)</span></span></code></pre>
+<p><img src="/images/img_64ee922f862cd347.png" alt="" />
+테이블 생성시에 partition 옵션을 넣어주면 된다.</p>
+<br>
+<p><img src="/images/img_d7c266d4891f7493.png" alt="" />
+그럼 파티션 모드로 테이블이 생성될 것인데,</p>
+<br>
+<p><img src="/images/img_662500414849a006.png" alt="" />
+문제는, 파티션 테이블은 데이터 동기화가 실시간으로 되지는 않는다는 것이다.</p>
+<p>파티션을 수동으로 트리거해야 한다.<br />
+다음 명령어는 해당 경로 아래에 존재하는 모든 경로를 읽어서 파티션을 만든다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>MSCK REPAIR TABLE default</span><span style="color: #94E2D5;">.</span><span>transactions</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_756f5def27231335.png" alt="" />
+이렇게 자동으로 매핑을 해주고</p>
+<br>
+<p><img src="/images/img_cf2776c9337f64fa.png" alt="" />
+이제는 조회가 될 것이다.</p>
+<br>
+<p><img src="/images/img_aadcd3f03702bbe8.png" alt="" />
+그리고 파티션에 사용한 필드는 암시적으로, 실제 데이터의 필드로 취급되어서 SELECT나 필터 등에 사용할 수 있다.</p>
+<br>
+<p><img src="/images/img_04673863b6d74db2.png" alt="" />
+그리고 파티션 필드를 기준으로 필터를 시도하면</p>
+<br>
+<p><img src="/images/img_3f6432eaf05037a8.png" alt="" />
+실제로 스캔도 그만큼만 한다. 스캔 크기가 줄어든 것을 볼 수 있다.</p>
+<p>근데 이 기능의 불편한 점은, 파티션이 지속적으로 추가될 경우에 대해서는 대응을 하기가 불편하다는 것이다.</p>
+<p><img src="/images/img_6a4fb51756b6788b.png" alt="" />
+이렇게 그냥 하나 추가하면</p>
+<br>
+<p><img src="/images/img_96bcefa153f300f6.png" alt="" /></p>
+<p><img src="/images/img_06fc6e16e5506e85.png" alt="" />
+조회가 안된다. 스캔도 하지 않았다.</p>
+<p>이걸 다시 반영하려면 파티션을 매핑해줘야 하는데, 위에서 한 MSCK REPAIR는 모든 범위를 풀스캔하는 것이라서 지속적으로 사용하기엔 비효율적이고, 처음에만 사용하는 용도라고 봐야 한다.</p>
+<p>지금 추가한 폴더만 파티션에 매핑하고 싶다면, 이렇게 하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>transactions ADD </span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">PARTITION</span><span> (year</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">2025</span><span style="color: #9399B2;">,</span><span> month</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">202502</span><span>) LOCATION</span><span style="color: #A6E3A1;"> &#39;s3://myy-athena-test/year=2025/month=202502&#39;</span></span></code></pre>
+<p><img src="/images/img_ad3690280177478b.png" alt="" />
+추가하면</p>
+<br>
+<p><img src="/images/img_d56efe8320eb465c.png" alt="" />
+이제 동작은 잘 할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jadong-patisyeon-jeogyonghaneunbeob-partition-projection">자동 파티션 적용하는법 - Partition Projection</h2>
+<p>athena에서 제공하는 partition projection이란 기능을 활용하면, 지속적으로 추가되는 파티션 세트에 대해서도 자동으로 매핑이 되게 구성할 수 있다.<br />
+그 대신 제약이 좀 추가된다.</p>
+<p>Key-Value 형식의 디렉터리명은 사용할 수 없고, 다시 이런 식으로</p>
+<p><img src="/images/img_ae53fb7f35c202f0.png" alt="" />
+숫자값을 넣어주는 형태로 바꿔줘야 한다.</p>
+<p>파티션 프로젝션- 폴더명에 지원되는 형식은 숫자, 날짜, 사전 정의된 enum 정도에 불과하다. 문자열 같은 자유로운 값은 넣을 수 없다.</p>
+<p>그리고 테이블을 생성할때 프로젝션 옵션을 적절히 정의하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">TBLPROPERTIES</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&quot;skip.header.line.count&quot;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;1&quot;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 첫번째 row는 생략</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&quot;projection.enabled&quot;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;true&quot;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 프로젝션 파티셔닝 사용</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;projection.month.digits&#39;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;6&#39;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 월을 YYYYMM 6글자 형태로 사용</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;projection.month.type&#39;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;integer&#39;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;projection.month.range&#39;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;197000,300000&#39;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span style="color: #FAB387;"> 197000</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">300000</span><span> 범위값만 사용</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;projection.year.digits&#39;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 연도를 YYYY 4글자로 사용</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;projection.year.type&#39;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;integer&#39;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&#39;projection.year.range&#39;</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&#39;1970,3000&#39;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span style="color: #FAB387;"> 1970</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">3000</span><span> 범위값만 사용</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&quot;storage.location.template&quot;</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;s3://myy-athena-test/${year}/${month}&quot;</span><span style="color: #94E2D5;"> --</span><span> 경로 지정</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_2ab1fb7758352dd7.png" alt="" />
+athena projection에서는 숫자값이든 날짜값이든 항상 범위가 사전 정의되어야 한다.<br />
+적절히 넣어주고 테이블을 생성하면</p>
+<br>
+<p><img src="/images/img_834f6128eccc9786.png" alt="" />
+따로 손댈것도 없이 파티션이 적용되고, 파티션에 따른 스캔 분할도 잘 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/athena/latest/ug/partition-projection-supported-types.html">https://docs.aws.amazon.com/ko_kr/athena/latest/ug/partition-projection-supported-types.html</a><br />
+<a rel="external" href="https://inpa.tistory.com/entry/AWS-%F0%9F%93%9A-Athena-%EC%84%B1%EB%8A%A5-%ED%96%A5%EC%83%81-TIP-%EB%8D%B0%EC%9D%B4%ED%84%B0-%EC%95%95%EC%B6%95-%ED%8C%8C%ED%8B%B0%EC%85%94%EB%8B%9D">https://inpa.tistory.com/entry/AWS-%F0%9F%93%9A-Athena-%EC%84%B1%EB%8A%A5-%ED%96%A5%EC%83%81-TIP-%EB%8D%B0%EC%9D%B4%ED%84%B0-%EC%95%95%EC%B6%95-%ED%8C%8C%ED%8B%B0%EC%85%94%EB%8B%9D</a><br />
+<a rel="external" href="https://aws.amazon.com/blogs/database/export-and-analyze-amazon-dynamodb-data-in-an-amazon-s3-data-lake-in-apache-parquet-format/">https://aws.amazon.com/blogs/database/export-and-analyze-amazon-dynamodb-data-in-an-amazon-s3-data-lake-in-apache-parquet-format/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223715792786/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Glue<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223715002065/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] loco.rs<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

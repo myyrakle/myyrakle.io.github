@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Qdrant] 분산 DB 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223984676160/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Qdrant] 분산 DB 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223984676160/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-08-27T00:00:00+00:00">
+    <meta property="article:tag" content="qdrant">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223984676160/">[Qdrant] 분산 DB 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-08-27T00:00:00+00:00"><time datetime="2025-08-27T00:00:00+00:00">2025.08.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="435 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/qdrant/">qdrant</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223984676160" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Qdrant는 자체적으로 Raft 기반의 분산시스템을 제공한다.<br />
+이를 통해 멀티노드, 멀티샤드 기반의 수평 처리량 확장, 고가용성 보장 등을 가져갈 수 있다.</p>
+<p>고가용성이 가장 중요하다면 권장되는 사용 형태는, 최소 3 노드 클러스터에 레플리카는 2개 이상으로 두는 것이다. 이 경우에는 노드 하나가 죽어버려고 중단 없이 사용할 수 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="dockerro-guseonghaebogi-docker-compose">Docker로 구성해보기 (Docker compose)</h2>
+<p>docker compose를 통해서 클러스터 구성을 한번 만들어보자.<br />
+일단, master 역할을 할 첫번째 DB 노드가 필요하다.<br />
+이후에 바뀔 수는 있으나, 처음 시작하는게 첫번째 마스터가 된다.</p>
+<p><img src="/images/img_4d34075b8500737a.png" alt="" />
+7333 포트로 열고, CLUSTER 옵션 켜고, 실행할때 플래그도 넣어줘야 한다.<br />
+uri 플래그로 자기 자신에게 도달할 수 있는 경로를 명시해준다.</p>
+<p>그럼</p>
+<p><img src="/images/img_6a708e0625b9a3d8.png" alt="" />
+클러스터 구성이 활성화된 것을 볼 수 있다.<br />
+이렇게 첫번째로 구성한 것이 자동으로 Leader(master) 노드가 된다.</p>
+<p>그리고 현재는 피어가 하나만 있는 것을 볼 수 있다. 저기에 하나씩 붙여나가는 것이다.</p>
+<p>2번째 노드를 띄워보자.</p>
+<p><img src="/images/img_6d03739fa7016e73.png" alt="" />
+설정이 크게 다를 것은 없으나, --bootstrap 플래그를 통해서 연결할 중심 노드를 지정해줘야 한다.<br />
+그리고 uri 플래그를 통해 자기 자신의 진입점을 명시해주는 것도 마찬가지로 필요하다.</p>
+<br>
+<p><img src="/images/img_213f2cb631f7c274.png" alt="" />
+실행해보면</p>
+<br>
+<p><img src="/images/img_f537b0f53d49126b.png" alt="" />
+이제 메인 노드의 피어 목록에 뜨는 것을 볼 수 있고</p>
+<br>
+<p><img src="/images/img_87a665961459f456.png" alt="" />
+방금 추가한 2번째 노드는 Follower(slave)로 참여한 것을 볼 수 있다.<br />
+이것도 leader 노드와 마찬가지로 직접 read/write를 처리할 수 있다.</p>
+<p>이후로 노드를 더 추가하더라도, 방법은 달라지지 않는다.</p>
+<p><img src="/images/img_613359817df6b0c7.png" alt="" /></p>
+<p><img src="/images/img_01dca1d1d2ecdd2e.png" alt="" />
+부트스트랩 넣고, uri 넣어서 병렬적으로 계속 이어붙이면 되는 것이다.</p>
+<br>
+<p><img src="/images/img_345dfe5aeff10d0c.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="jadong-leader-seoncul">자동 Leader 선출</h2>
+<p>그럼 이제 노드 사망에 따른 회복이 잘 되는지 보자.<br />
+Follower가 죽는 것도 그렇지만, 사실 중요한건 Leader가 죽는 최악의 사태다.</p>
+<p>Leader를 한번 죽여보면</p>
+<p><img src="/images/img_558f247dd02af41a.png" alt="" /></p>
+<br>
+<p><img src="/images/img_0b159ad44eb4c222.png" alt="" />
+나머지 2개의 노드가 실패했다고 난리치다가</p>
+<br>
+<p><img src="/images/img_8eec055bbcbc640f.png" alt="" />
+자기들 중에서 새로운 후보를 Leader로 선출한다.</p>
+<br>
+<p><img src="/images/img_f9020b2cec1feaa3.png" alt="" />
+만약 기존 Leader 노드가 다시 날아나더라도, Leader의 지위를 되찾진 못한다.</p>
+<p>이렇게 상황에 따라 Leader가 바뀔 수 있기 때문에, 단일 엔드포인트로 사용해서는 안된다.</p>
+<p>올바르게 구성된 클러스터라면 이 여러개의 노드를 단일 엔드포인트로 접근할 수 있는 환경을 만들어둬야 한다.<br />
+대부분의 managed cluster 환경들이 그렇기도 하고.</p>
+<br>
+<p>테스트에 사용한 docker compose 구성은 github에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/docker-compose/blob/master/qdrant-cluster/docker-compose.yml">https://github.com/myyrakle/docker-compose/blob/master/qdrant-cluster/docker-compose.yml</a></p>
+<br>
+<br>
+<br>
+<h2 id="syadeuwa-replica">샤드와 Replica</h2>
+<p>qdrant도 elasticsearch 같은 멀티노드 DB들과 동등하게, 큰 데이터를 여러 노드에 쪼개서 저장하는 샤드(partition), 동일 데이터를 여러 노드에 복제해서 백업하는 레플리카(replica)를 모두 지원한다.</p>
+<p>샤드를 다루는 방법은 이후 포스트에서 다뤄본다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://qdrant.tech/documentation/guides/distributed_deployment">https://qdrant.tech/documentation/guides/distributed_deployment</a></p>
+<p><a rel="external" href="https://qdrant.tech/documentation/guides/configuration/">https://qdrant.tech/documentation/guides/configuration/</a><br />
+<a rel="external" href="https://medium.com/@vardhanam.daga/distributed-deployment-of-qdrant-cluster-with-sharding-replicas-e7923d483ebc">https://medium.com/@vardhanam.daga/distributed-deployment-of-qdrant-cluster-with-sharding-replicas-e7923d483ebc</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223985985991/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Qdrant] 샤드 - 레플리카<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223983361531/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Qdrant] prefetch: Score boosting<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

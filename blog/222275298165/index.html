@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>JWT를 이용한 로그인 구현 (with Rust) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222275298165/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="JWT를 이용한 로그인 구현 (with Rust)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222275298165/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-03-14T00:00:00+00:00">
+    <meta property="article:tag" content="네트워크&#x2F;웹">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222275298165/">JWT를 이용한 로그인 구현 (with Rust)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-03-14T00:00:00+00:00"><time datetime="2021-03-14T00:00:00+00:00">2021.03.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="440 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/neteuweokeu-web/">네트워크&#x2F;웹</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222275298165" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<h2 id="deuleogamyeo">들어가며</h2>
+<p>이 포스트에서는 보안 기법 중 하나인 JWT을 이용해 로그인과 로그아웃을 구현하는 방법을 간략하게 다뤄본다.<br />
+예제 코드는 Rust를 사용했으나, 내용이 언어에 종속되지는 않을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jwtyi-jangjeomgwa-danjeom">JWT의 장점과 단점</h2>
+<p>이전에 JWT에 대해 정리했던 포스트다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/221972616615">https://blog.naver.com/sssang97/221972616615</a></p>
+<p>JWT가 내미는 가장 큰 장점은 바로 상태가 없다는(Stateless) 것이다.<br />
+한번 만들어서 던져주기만 하고, 서버에서 계속 유지하고 관리할 필요가 없으니 부하도 줄이고 시스템을 단순하게 만들 수 있다는 것이다.</p>
+<p>하지만 이 무상태성이 되려 단점이 되기도 한다.<br />
+한번 던져주고 나면 관리를 할 수 없기 때문이다!</p>
+<p>그래서 순수한 토큰 하나만으로는 로그인에 대한 관리를 하기가 어려운 부분이 많다.</p>
+<p>첫째로, 완전한 로그아웃이 불가능하다.<br />
+JWT는 토큰 생성시에 만료시간을 미리 정해두는데, 이걸 도중에 간섭해서 바꿀 방법이 없기 때문이다. 발급할때 지정한 만료시간이 로그아웃을 하든말든 계속 유지된다.</p>
+<p>둘째로, 로그인 유지 처리가 애매하다.<br />
+토큰은 무조건 만료시간을 정해놓고 만들어줘야 한다.<br />
+그런데 막 년단위로 만료를 줄 수도 없는 노릇이고, 만료시간을 짧게 잡으면 토큰이 금방 죽어버리니 다시 로그인을 해야 한다. 이것 때문에 아이디와 패스워드를 저장하고 있을 수도 없는 노릇 아닌가?</p>
+<p>이 단점들을 보완하기 위해 주로 사용하는 패턴이, 액세스 토큰과 리프레시 토큰 2개를 사용하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ripeuresi-tokeungwa-aegseseu-tokeun">리프레시 토큰과 액세스 토큰</h2>
+<p>액세스 토큰은 말 그대로 접근을 위한 토큰이다. 만료시간을 짧게 잡고 리프레시 토큰을 통해 만료될때마다 재발급을 받도록 한다.<br />
+따로 무슨 처리를 하진 않기에 액세스 토큰은 완전하게 stateless하다.</p>
+<p>리프레시 토큰은 말 그대로 갱신용 토큰이다.<br />
+액세스토큰이 만료됐을 경우에 이것을 통해 액세스 토큰을 다시 발급받는다.<br />
+그리고 이 토큰은 서버에서 관리를 할 필요가 있다. 그래야 완전한 로그아웃 처리가 가능하기 때문이다.</p>
+<p>RDB나 In-Memory DB를 통해서 리프레시 토큰을 생성할때마다 값을 넣어두고, 로그아웃시에 리프레시 토큰을 사용 불가능하도록 체크해야 한다.</p>
+<p>프로세스는 다음과 같다.</p>
+<ol>
+<li>최초 로그인 시-&gt; 리프레시 토큰과 액세스 토큰 발급 (리프레시 토큰은 DB에 저장)</li>
+<li>로그인 유지(액세스 토큰 만료) -&gt; 리프레시 토큰을 서버에 전달해 액세스 토큰을 재발급</li>
+<li>로그아웃 -&gt; 리프레시 토큰을 서버에 전달해 해당 토큰이 DB에서 사용불가하게 체크</li>
+</ol>
+<p>그렇게 복잡하진 않다.<br />
+다만 프론트 측에서 리프레시 토큰을 보관하는 것이 조금 조심스럽고 민감할 수 있다는 점이 있다.</p>
+<p>일단 서버 측에서 로그인은 다음과 같이 구현할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Deserialize</span><span style="color: #9399B2;">,</span><span> Serialize</span><span style="color: #9399B2;">,</span><span> Debug)]</span></span>
+<span class="giallo-l"><span>pub struct LoginParam</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub email</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub password</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Deserialize</span><span style="color: #9399B2;">,</span><span> Serialize</span><span style="color: #9399B2;">,</span><span> Debug</span><span style="color: #9399B2;">,</span><span> Clone)]</span></span>
+<span class="giallo-l"><span>pub struct LoginResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub success</span><span style="color: #9399B2;">:</span><span> bool</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub login_failed</span><span style="color: #9399B2;">:</span><span> bool</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub access_token</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub refresh_token</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub message</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 로그인</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">post</span><span>(</span><span style="color: #A6E3A1;">&quot;/auth/login&quot;</span><span>)]</span></span>
+<span class="giallo-l"><span>pub async fn</span><span style="color: #89B4FA;font-style: italic;"> login</span><span>(</span></span>
+<span class="giallo-l"><span>    web::</span><span style="color: #89B4FA;font-style: italic;">Json</span><span>(body): web::Json</span><span style="color: #94E2D5;">&lt;</span><span>LoginParam</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    connection: Data</span><span style="color: #94E2D5;">&lt;</span><span>Mutex</span><span style="color: #94E2D5;">&lt;</span><span>PgConnection</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> impl Responder</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> connection</span><span style="color: #94E2D5;"> =</span><span> match connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">_</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="font-style: italic;">            log</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">error!(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #A6E3A1;font-style: italic;">database connection lock error</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            let</span><span style="font-style: italic;"> response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> ServerErrorResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            return</span><span style="font-style: italic;"> HttpResponse</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">build</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">StatusCode</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">INTERNAL_SERVER_ERROR</span><span style="color: #9399B2;">)</span><span style="color: #F9E2AF;font-style: italic;">.json(response)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">connection</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #F9E2AF;font-style: italic;"> connection</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> connection</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">PgConnection</span><span style="color: #94E2D5;"> =</span><span> Borrow::</span><span style="color: #89B4FA;font-style: italic;">borrow</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>connection)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> LoginParam { email</span><span style="color: #9399B2;">,</span><span> password</span><span style="color: #9399B2;"> }</span><span style="color: #94E2D5;"> =</span><span> body</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> query</span><span style="color: #94E2D5;"> =</span><span> tb_user::dsl::tb_user</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">filter</span><span>(tb_user::dsl::email</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>email))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">filter</span><span>(tb_user::dsl::use_yn</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq</span><span>(</span><span style="color: #FAB387;">true</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> user_result</span><span style="color: #94E2D5;"> =</span><span> query</span><span style="color: #94E2D5;">.</span><span>load::</span><span style="color: #94E2D5;">&lt;</span><span style="color: #F5C2E7;">SelectUser</span><span style="color: #94E2D5;">&gt;</span><span>(connection);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    match user_result </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span>(users)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> response</span><span style="color: #94E2D5;"> =</span><span> if users</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">is_empty</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                LoginResponse </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>                    success</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    login_failed</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    access_token</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    refresh_token</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                    message</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;login failed&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span><span> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                let user</span><span style="color: #94E2D5;"> = &amp;</span><span>users[</span><span style="color: #FAB387;">0</span><span>];</span></span>
+<span class="giallo-l"><span>                let salt</span><span style="color: #94E2D5;"> = &amp;</span><span>user</span><span style="color: #94E2D5;">.</span><span>salt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                let password</span><span style="color: #94E2D5;"> =</span><span> lib::</span><span style="color: #89B4FA;font-style: italic;">hash</span><span>(password</span><span style="color: #94E2D5;"> +</span><span> salt);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                if password</span><span style="color: #94E2D5;"> ==</span><span> user</span><span style="color: #94E2D5;">.</span><span>password</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                    // 리프레시 토큰 생성 및 DB에 삽입</span></span>
+<span class="giallo-l"><span>                    let refresh_token</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span>                        lib</span><span style="color: #94E2D5;">:</span><span>:jwt::</span><span style="color: #89B4FA;font-style: italic;">create_refresh_token</span><span>(user</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #9399B2;">,</span><span> user</span><span style="color: #94E2D5;">.</span><span>user_type</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                    let insert_value</span><span style="color: #94E2D5;"> =</span><span> InsertRefreshToken</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                        token_value</span><span style="color: #94E2D5;">:</span><span> refresh_token</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        user_id</span><span style="color: #94E2D5;">:</span><span> user</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span><span>;</span></span>
+<span class="giallo-l"><span>                    let execute_result</span><span style="color: #94E2D5;"> =</span><span> diesel::</span><span style="color: #89B4FA;font-style: italic;">insert_into</span><span>(tb_refresh_token::table)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        .</span><span style="color: #89B4FA;font-style: italic;">values</span><span>(insert_value)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                        .</span><span style="color: #89B4FA;font-style: italic;">execute</span><span>(connection);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                    if execute_result</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">is_err</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                        log</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">error</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;refresh token insert query error&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>                        let response</span><span style="color: #94E2D5;"> =</span><span> ServerErrorResponse::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>();</span></span>
+<span class="giallo-l"><span>                        return HttpResponse::</span><span style="color: #89B4FA;font-style: italic;">build</span><span>(StatusCode::INTERNAL_SERVER_ERROR)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                            .</span><span style="color: #89B4FA;font-style: italic;">json</span><span>(response);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                    // 액세스 토큰 생성</span></span>
+<span class="giallo-l"><span>                    let access_token</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span>                        lib::jwt::</span><span style="color: #89B4FA;font-style: italic;">create_access_token</span><span>(user</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #9399B2;">,</span><span> user</span><span style="color: #94E2D5;">.</span><span>user_type</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>                    LoginResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                        success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        login_failed</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        access_token</span><span style="color: #94E2D5;">:</span><span> access_token</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        refresh_token</span><span style="color: #94E2D5;">:</span><span> refresh_token</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        message</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;success&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span><span> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                    log</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">info</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;로그인 실패: 패스워드 불일치&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>                    LoginResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                        success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        login_failed</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        access_token</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        refresh_token</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                        message</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;login failed&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            HttpResponse</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">build</span><span>(StatusCode::OK)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span>(response)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Err</span><span>(error)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            log</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">error</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;login select query error: {}&quot;</span><span style="color: #9399B2;">,</span><span> error)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> response</span><span style="color: #94E2D5;"> =</span><span> LoginResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                login_failed</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                access_token</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                refresh_token</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                message</span><span style="color: #94E2D5;">:</span><span> error</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            HttpResponse</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">build</span><span>(StatusCode::INTERNAL_SERVER_ERROR)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span>(response)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>달리 특별한 것은 없다. 아이디와 패스워드가 완전히 일치할 경우,<br />
+JWT로 리프레시 토큰과 액세스 토큰을 따로 생성해 프론트한테 반환해주고, 리프레시 토큰은 DB에 저장했다.</p>
+<p>로그아웃은 다음과 같이 구현했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Deserialize</span><span style="color: #9399B2;">,</span><span> Serialize</span><span style="color: #9399B2;">,</span><span> Debug)]</span></span>
+<span class="giallo-l"><span>pub struct LogoutParam</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub refresh_token</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Deserialize</span><span style="color: #9399B2;">,</span><span> Serialize</span><span style="color: #9399B2;">,</span><span> Debug</span><span style="color: #9399B2;">,</span><span> Clone)]</span></span>
+<span class="giallo-l"><span>pub struct LogoutResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub success</span><span style="color: #9399B2;">:</span><span> bool</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub message</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 로그아웃</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #94E2D5;">delete</span><span>(</span><span style="color: #A6E3A1;">&quot;/auth/logout&quot;</span><span>)]</span></span>
+<span class="giallo-l"><span>pub async fn</span><span style="color: #89B4FA;font-style: italic;"> logout</span><span>(</span></span>
+<span class="giallo-l"><span>    web::</span><span style="color: #89B4FA;font-style: italic;">Json</span><span>(body): web::Json</span><span style="color: #94E2D5;">&lt;</span><span>LogoutParam</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    connection: Data</span><span style="color: #94E2D5;">&lt;</span><span>Mutex</span><span style="color: #94E2D5;">&lt;</span><span>PgConnection</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> impl Responder</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> connection</span><span style="color: #94E2D5;"> =</span><span> match connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">_</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="font-style: italic;">            log</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">error!(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #A6E3A1;font-style: italic;">database connection lock error</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            let</span><span style="font-style: italic;"> response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> ServerErrorResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            return</span><span style="font-style: italic;"> HttpResponse</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">build</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">StatusCode</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">INTERNAL_SERVER_ERROR</span><span style="color: #9399B2;">)</span><span style="color: #F9E2AF;font-style: italic;">.json(response)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">connection</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #F9E2AF;font-style: italic;"> connection</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> connection</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">PgConnection</span><span style="color: #94E2D5;"> =</span><span> Borrow::</span><span style="color: #89B4FA;font-style: italic;">borrow</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>connection)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> token</span><span style="color: #94E2D5;"> =</span><span> tb_refresh_token::dsl::tb_refresh_token</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">filter</span><span>(tb_refresh_token::dsl::token_value</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>body</span><span style="color: #94E2D5;">.</span><span>refresh_token))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">filter</span><span>(tb_refresh_token::dsl::dead_yn</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq</span><span>(</span><span style="color: #FAB387;">false</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 리프레시 토큰 삭제처리</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> result</span><span style="color: #94E2D5;"> =</span><span> connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">transaction</span><span>(</span><span style="color: #94E2D5;">||</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        diesel</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">update</span><span>(token)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">set</span><span>(tb_refresh_token::dsl::dead_yn</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq_all</span><span>(</span><span style="color: #FAB387;">true</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">execute</span><span>(connection)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"><span>        diesel</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">update</span><span>(token)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">set</span><span>(tb_refresh_token::dsl::dead_utc</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq_all</span><span>(epoch_timestamp::Epoch::</span><span style="color: #89B4FA;font-style: italic;">now</span><span>()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> i64</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">execute</span><span>(connection)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    match result</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span>(_)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> response</span><span style="color: #94E2D5;"> =</span><span> LogoutResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                message</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;logout success&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            HttpResponse</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">build</span><span>(StatusCode::OK)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span>(response)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Err</span><span>(error)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            log</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">error</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;logout error: {}&quot;</span><span style="color: #9399B2;">,</span><span> error)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> response</span><span style="color: #94E2D5;"> =</span><span> LogoutResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                message</span><span style="color: #94E2D5;">:</span><span> error</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_string</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            HttpResponse</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">build</span><span>(StatusCode::INTERNAL_SERVER_ERROR)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span>(response)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이것도 코드가 길긴 하지만 특별한건 없다.<br />
+토큰 관리 테이블 token에 접근해서 전달받은 리프레시 토큰을 사용불가 처리한다.</p>
+<p>그리고 로그인 유지를 위한 리프레시는 다음과 같이 구현했다.<br />
+그냥 유효한 리프레시 토큰이기만 하면 그대로 액세스 토큰을 만들어서 던져주면 끝이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Deserialize</span><span style="color: #9399B2;">,</span><span> Serialize</span><span style="color: #9399B2;">,</span><span> Debug)]</span></span>
+<span class="giallo-l"><span>pub struct RefreshParam</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub refresh_token</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Deserialize</span><span style="color: #9399B2;">,</span><span> Serialize</span><span style="color: #9399B2;">,</span><span> Debug</span><span style="color: #9399B2;">,</span><span> Clone)]</span></span>
+<span class="giallo-l"><span>pub struct RefreshResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub success</span><span style="color: #9399B2;">:</span><span> bool</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub expired</span><span style="color: #9399B2;">:</span><span> bool</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub access_token</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub message</span><span style="color: #9399B2;">:</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 액세스 토큰 갱신</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">put</span><span>(</span><span style="color: #A6E3A1;">&quot;/auth/refresh&quot;</span><span>)]</span></span>
+<span class="giallo-l"><span>pub async fn</span><span style="color: #89B4FA;font-style: italic;"> refresh</span><span>(</span></span>
+<span class="giallo-l"><span>    web::</span><span style="color: #89B4FA;font-style: italic;">Json</span><span>(body): web::Json</span><span style="color: #94E2D5;">&lt;</span><span>RefreshParam</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    connection: Data</span><span style="color: #94E2D5;">&lt;</span><span>Mutex</span><span style="color: #94E2D5;">&lt;</span><span>PgConnection</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #94E2D5;"> -&gt;</span><span> impl Responder</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> connection</span><span style="color: #94E2D5;"> =</span><span> match connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Err</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">_</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="font-style: italic;">            log</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">error!(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #A6E3A1;font-style: italic;">database connection lock error</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            let</span><span style="font-style: italic;"> response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> ServerErrorResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            return</span><span style="font-style: italic;"> HttpResponse</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">build</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">StatusCode</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">INTERNAL_SERVER_ERROR</span><span style="color: #9399B2;">)</span><span style="color: #F9E2AF;font-style: italic;">.json(response)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">connection</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #F9E2AF;font-style: italic;"> connection</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> connection</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">PgConnection</span><span style="color: #94E2D5;"> =</span><span> Borrow::</span><span style="color: #89B4FA;font-style: italic;">borrow</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>connection)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    use diesel</span><span style="color: #9399B2;">:</span><span>:dsl</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>exists</span><span style="color: #9399B2;">,</span><span> select</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> query</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> select</span><span>(</span><span style="color: #89B4FA;font-style: italic;">exists</span><span>(</span></span>
+<span class="giallo-l"><span>        tb_refresh_token::dsl::tb_refresh_token</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">filter</span><span>(tb_refresh_token::dsl::token_value</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>body</span><span style="color: #94E2D5;">.</span><span>refresh_token))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">filter</span><span>(tb_refresh_token::dsl::dead_yn</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq</span><span>(</span><span style="color: #FAB387;">false</span><span>))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    ))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> result</span><span style="color: #94E2D5;"> =</span><span> query</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get_result</span><span>(connection)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    match result</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        Ok</span><span>(exists)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            if</span><span> exists</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> decoded_result</span><span style="color: #94E2D5;"> =</span><span> jwt::</span><span style="color: #89B4FA;font-style: italic;">verify</span><span>(body</span><span style="color: #94E2D5;">.</span><span>refresh_token)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> response</span><span style="color: #94E2D5;"> =</span><span> match decoded_result</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                    Some</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">user_id</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                        let</span><span style="font-style: italic;"> query</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> tb_user</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="font-style: italic;">dsl</span><span style="color: #F9E2AF;font-style: italic;">::tb_user</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">filter</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">tb_user</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="font-style: italic;">dsl</span><span style="color: #F9E2AF;font-style: italic;">::id</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">eq</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="color: #94E2D5;">&amp;</span><span style="font-style: italic;">user_id</span><span style="color: #F9E2AF;font-style: italic;">))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                        let</span><span style="font-style: italic;"> result</span><span style="color: #94E2D5;"> =</span><span style="color: #F9E2AF;font-style: italic;"> query</span><span style="color: #94E2D5;">.</span><span style="font-style: italic;">load</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #94E2D5;">&lt;</span><span style="color: #F5C2E7;">SelectUser</span><span style="color: #94E2D5;">&gt;</span><span style="color: #F9E2AF;font-style: italic;">(connection);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                        match result </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                            Ok</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">select_user</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                                let</span><span style="font-style: italic;"> response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> if</span><span style="color: #F9E2AF;font-style: italic;"> select_user</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">is_empty</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                    RefreshResponse </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        success</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;font-style: italic;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        expired</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;font-style: italic;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        access_token</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        message</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;</span><span style="color: #A6E3A1;font-style: italic;">user not exists</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                                }</span><span style="font-style: italic;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                    let </span><span style="font-style: italic;">user_type</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> select_user</span><span style="color: #F9E2AF;font-style: italic;">[</span><span style="color: #FAB387;font-style: italic;">0</span><span style="color: #F9E2AF;font-style: italic;">]</span><span style="color: #94E2D5;">.</span><span style="color: #F9E2AF;font-style: italic;">user_type</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span style="color: #F9E2AF;font-style: italic;">();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                                    // 액세스 토큰 생성</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                    let </span><span style="font-style: italic;">access_token</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        lib</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;">:</span><span style="font-style: italic;">jwt</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #89B4FA;font-style: italic;">create_access_token</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">user_id</span><span style="color: #9399B2;">,</span><span style="font-style: italic;"> user_type</span><span style="color: #F9E2AF;font-style: italic;">);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="font-style: italic;">                                    RefreshResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;font-style: italic;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        expired</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;font-style: italic;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        access_token</span><span style="color: #94E2D5;">:</span><span style="font-style: italic;"> access_token</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                        message</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;</span><span style="color: #A6E3A1;font-style: italic;">refresh success</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                                };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                HttpResponse</span><span style="color: #9399B2;">:</span><span style="color: #F9E2AF;font-style: italic;">:</span><span style="color: #89B4FA;font-style: italic;">build</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">StatusCode</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="font-style: italic;">OK</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">response</span><span style="color: #F9E2AF;font-style: italic;">)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                            }</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">                            Err</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">error</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                log</span><span style="color: #9399B2;">:</span><span style="color: #F9E2AF;font-style: italic;">:</span><span style="color: #89B4FA;font-style: italic;">error</span><span style="color: #94E2D5;">!</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #A6E3A1;font-style: italic;">database error: {:?}</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">,</span><span style="font-style: italic;"> error</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                                let</span><span style="font-style: italic;"> response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> ServerErrorResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                                HttpResponse</span><span style="color: #9399B2;">:</span><span style="color: #F9E2AF;font-style: italic;">:</span><span style="color: #89B4FA;font-style: italic;">build</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">StatusCode</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="font-style: italic;">OK</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">response</span><span style="color: #F9E2AF;font-style: italic;">)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                    }</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                    None =&gt; </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="font-style: italic;">                        let response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> RefreshResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                            success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;font-style: italic;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                            expired</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;font-style: italic;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                            access_token</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                            message</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;</span><span style="color: #A6E3A1;font-style: italic;">logout failed</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span><span style="color: #F9E2AF;font-style: italic;">;</span></span>
+<span class="giallo-l"><span style="font-style: italic;">                        HttpResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #89B4FA;font-style: italic;">build</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">StatusCode</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="font-style: italic;">OK</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">response</span><span style="color: #F9E2AF;font-style: italic;">)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                response</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            } else </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="font-style: italic;">                let response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> RefreshResponse</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                    success</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;font-style: italic;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                    expired</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;font-style: italic;"> true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                    access_token</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">                    message</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;</span><span style="color: #A6E3A1;font-style: italic;">logout failed</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">to_owned</span><span style="color: #F9E2AF;font-style: italic;">()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span><span style="color: #F9E2AF;font-style: italic;">;</span></span>
+<span class="giallo-l"><span style="font-style: italic;">                HttpResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #89B4FA;font-style: italic;">build</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">StatusCode</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="font-style: italic;">OK</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">response</span><span style="color: #F9E2AF;font-style: italic;">)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">        }</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">        Err(error) =&gt; </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="font-style: italic;">            log</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #89B4FA;font-style: italic;">error</span><span style="color: #94E2D5;">!</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #A6E3A1;font-style: italic;">database error: {:?}</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">,</span><span style="font-style: italic;"> error</span><span style="color: #F9E2AF;font-style: italic;">);</span></span>
+<span class="giallo-l"><span style="font-style: italic;">            let response</span><span style="color: #94E2D5;"> =</span><span style="font-style: italic;"> ServerErrorResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #F9E2AF;font-style: italic;">();</span></span>
+<span class="giallo-l"><span style="font-style: italic;">            return HttpResponse</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="color: #89B4FA;font-style: italic;">build</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">StatusCode</span><span style="color: #F9E2AF;font-style: italic;">::</span><span style="font-style: italic;">INTERNAL_SERVER_ERROR</span><span style="color: #F9E2AF;font-style: italic;">)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span style="color: #F9E2AF;font-style: italic;">(</span><span style="font-style: italic;">response</span><span style="color: #F9E2AF;font-style: italic;">);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">    }</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">}</span></span></code></pre>
+<p>이것도 코드가 길지만 그리 어려울 것은 없다.</p>
+<p>그리고 내 경우에는 그냥 RDB인 Postgresql을 사용해서 토큰을 관리했는데, 좀더 성능에 신경을 쓴다면 Redis 등의 In-Memory DB를 사용하는 것이 좋을 것이다.</p>
+<p>대충 이런식으로 사용하면 된다.</p>
+<br>
+<p>아래는 예시 코드의 원본 레포지토리 링크다.<br />
+<a rel="external" href="https://github.com/myyrakle/rustywiki-server/blob/master/src/routes/auth.rs">https://github.com/myyrakle/rustywiki-server/blob/master/src/routes/auth.rs</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222276383751/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 모듈 사용 팁<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222275500902/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 러스트노미콘: Borrow 분할 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

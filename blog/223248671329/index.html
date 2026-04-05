@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] 쓰기 지연 문제 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223248671329/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] 쓰기 지연 문제">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223248671329/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-10-28T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223248671329/">[MongoDB] 쓰기 지연 문제</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-28T00:00:00+00:00"><time datetime="2023-10-28T00:00:00+00:00">2023.10.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="329 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223248671329" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>MongoDB를 클러스터 모드로 쓸 때에는, 다른 분산시스템들과 마찬가지로 복제 지연이 발생한다.<br />
+필연적인 문제다.</p>
+<p>MongoDB 클러스터는 일반적인 Single Master - Multi Slave의 구조를 가진다.<br />
+쓰기가 발생하면 master가 쓰기를 받아서 나머지 노드에 데이터를 동기화한다.</p>
+<p><img src="/images/img_bfa223e4e558871f.png" alt="" />
+그런데 당연히 이런 동기화에는 반드시 지연 시간이 존재하고, 이 지연은 네트워크나 기타 상황에 따라 마이크로초에서 밀리초, 혹은 초 단위까지도 걸릴 수 있다.</p>
+<p>그래서 그냥 이렇게 코드를 짜면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>store</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">CreateSomeData</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    ID</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;1234&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;font-style: italic;"> // 삽입 성공</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>store</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">FindByID</span><span>(</span><span style="color: #A6E3A1;">&quot;1234&quot;</span><span>)</span><span style="color: #9399B2;font-style: italic;"> // 하지만 조회되지 않음..</span></span></code></pre>
+<p>이런 어이없는 상황이 벌어질 수가 있다.<br />
+일반적으로 정상적인 언어들에서 각 코드 인스트럭션은 아무리 느려도 나노초 단위로 실행되기 때문에, 쓰고 나서 바로 읽더라도 그 쓰기가 반영되지 않은 노드에서 데이터를 읽어올 수 있는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="sseugi-goryeo-write-concern">쓰기 고려(Write Concern)</h2>
+<p>이런 현상에 대응하는 방법 중 하나는 Write Concern을 사용하는 것이다.<br />
+이건 쓰기 작업의 완료 기준을 정하는 설정이다.</p>
+<p>아래 커맨드를 날리면 Write Concern 설정을 조회할 수 있는데</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">adminCommand</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">   {</span></span>
+<span class="giallo-l"><span>     getDefaultRWConcern</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;"> ,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">   }</span></span>
+<span class="giallo-l"><span>)</span></span></code></pre>
+<p><img src="/images/img_c2f6d5d691f9d50f.png" alt="" />
+어지간해서 기본 설정은 majority다.<br />
+저건 노드 중 과반수에 복제가 완료되면 쓰기 작업이 "끝났다"고 판단하겠다는 것이다.</p>
+<p>그래서 노드가 3개인 일반적인 상황에서는, 노드 2개에만 데이터가 동기화돼도 쓰기가 끝났다고 판단해서 오퍼레이션을 끝낸다. 문제는 노드 1개에 동기화되지 않은 찰나의 순간에 코드가 그 노드에서 읽기를 수행할 수 있는 것이다.</p>
+<p>완벽하게 쓰기가 완료되게끔 기다리게 하려면, writeConcern 설정을 노드 최대 개수와 맞춰야 한다.</p>
+<p>아래와 같이 디폴트 설정을 덮어씌울 수도 있고,</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">adminCommand</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;setDefaultRWConcern&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;defaultWriteConcern&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span> w</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;"> },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span></span></code></pre>
+<p>커넥션을 생성할때, 혹은 command를 날릴때 지정해서 날릴 수도 있다.<br />
+그러면 해당 개수만큼 복제가 완료될때서야 write operation이 끝났다고 판정하기 때문에, 쓰기 후-바로 읽는 작업에서의 부작용은 제거할 수 있다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@euholee/mongodb-read-preference-%EC%84%A4%EC%A0%95">https://velog.io/@euholee/mongodb-read-preference-%EC%84%A4%EC%A0%95</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/reference/write-concern/#std-label-wc-w">https://www.mongodb.com/docs/manual/reference/write-concern/#std-label-wc-w</a><br />
+<a rel="external" href="https://dlaudtjr03.tistory.com/17">https://dlaudtjr03.tistory.com/17</a><br />
+<a rel="external" href="https://bluese05.tistory.com/74">https://bluese05.tistory.com/74</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/core/causal-consistency-read-write-concerns/">https://www.mongodb.com/docs/manual/core/causal-consistency-read-write-concerns/</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/core/read-isolation-consistency-recency/#std-label-sessions">https://www.mongodb.com/docs/manual/core/read-isolation-consistency-recency/#std-label-sessions</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223252045090/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Docker] 도커의 원리와 구조: 이미지 까보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223247750820/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>이슈노트 #8: 의문의 동시성 버그<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

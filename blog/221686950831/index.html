@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>사이트 간 요청 위조(CSRF) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221686950831/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="사이트 간 요청 위조(CSRF)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221686950831/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-10-24T00:00:00+00:00">
+    <meta property="article:tag" content="보안">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221686950831/">사이트 간 요청 위조(CSRF)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-10-24T00:00:00+00:00"><time datetime="2019-10-24T00:00:00+00:00">2019.10.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="346 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/boan/">보안</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221686950831" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>사이트 간 요청 위조(Cross-site request forgery, <strong>CSRF</strong>, <strong>XSRF</strong>)는 웹의 취약점을 노린 공격 수법중 하나다.</p>
+<p>이건 웹사이트가 인증된 사용자를 신뢰한다는 점을 악용한다. 순진한 사용자가 공격코드가 삽입된 페이지를 열게끔 유도해서 뒤통수를 때리도록 하는 것이다.</p>
+<p>사이트를 이용해서 사용자를 공격하는 XSS과는 반대이다.</p>
+<p>서버를 건드리는 것이기 때문에 사용자에겐 직접 해를 줄 수는 없고, 보통 사용자의 권한으로 광고성 게시물 같은걸 올릴때나 활용된다고 한다.</p>
+<p>CSRF가 이뤄지기 위해서는 아래의 두 조건이 필요하다.<br />
+1.사용자가 공격할 사이트에 로그인되어있을것<br />
+2.사용자가 해커가 만든 피싱 사이트에 접속</p>
+<p>1번이 충족된 상태에서 2번이 실행되는 동시에 바로 공격이 시작되는 것이다.</p>
+<br>
+<p><strong>해결책1 - Referrer 검증</strong><br />
+서버에서 request의 referrer를 확인해서 도메인이 일치하는지 확인하는 방법이다.</p>
+<p>referrer란 http에서 현재 요청된 페이지의 이전 링크를 저장하는 것이다.</p>
+<p>생각해보면, 게시글을 등록하는 등의 행위는 당연히 동일한 도메인의 특정 페이지에서 이어지는 것이 논리적으로 당연하다.</p>
+<p>따라서 뜬금없는 도메인에서 해당 요청을 수행했다면 CSRF 등의 공격이라 간주하고 차단할 수 있다는 것이다.</p>
+<p>이것만 잘 처리해놔도 CSRF 공격을 원천차단할 수 있다. 동일 도메인 내에서 꼼꼼히 다 막아준다면.</p>
+<br>
+<p><strong>해결책2 - 보안 토큰</strong>(CSRF 토큰)<br />
+사용자의 세션에 난수값을 대충 저장해두고, 업로드 등의 요청을 할때마다 그 난수값을 반드시 보내도록 하는 것이다.</p>
+<p>난수값이 일치하지 않는다면 유효한 요청이 아닌 것이다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://ko.m.wikipedia.org/wiki/%EC%82%AC%EC%9D%B4%ED%8A%B8_%EA%B0%84_%EC%9A%94%EC%B2%AD_%EC%9C%84%EC%A1%B0">https://ko.m.wikipedia.org/wiki/%EC%82%AC%EC%9D%B4%ED%8A%B8_%EA%B0%84_%EC%9A%94%EC%B2%AD_%EC%9C%84%EC%A1%B0</a><br />
+<a rel="external" href="https://itstory.tk/entry/CSRF-%EA%B3%B5%EA%B2%A9%EC%9D%B4%EB%9E%80-%EA%B7%B8%EB%A6%AC%EA%B3%A0-CSRF-%EB%B0%A9%EC%96%B4-%EB%B0%A9%EB%B2%95">https://itstory.tk/entry/CSRF-%EA%B3%B5%EA%B2%A9%EC%9D%B4%EB%9E%80-%EA%B7%B8%EB%A6%AC%EA%B3%A0-CSRF-%EB%B0%A9%EC%96%B4-%EB%B0%A9%EB%B2%95</a><br />
+<a rel="external" href="https://developer.mozilla.org/ko/docs/Web/HTTP/Headers/Referer">https://developer.mozilla.org/ko/docs/Web/HTTP/Headers/Referer</a><br />
+<a rel="external" href="https://sj602.github.io/2018/07/14/what-is-CSRF/">https://sj602.github.io/2018/07/14/what-is-CSRF/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221686895709/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>서버 취약점 Top 10<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221686289023/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Kotlin] 코루틴 가이드.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

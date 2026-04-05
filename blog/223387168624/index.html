@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Javascript] Object의 구조 (V8) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223387168624/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Javascript] Object의 구조 (V8)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223387168624/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-18T00:00:00+00:00">
+    <meta property="article:tag" content="Javascript">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223387168624/">[Javascript] Object의 구조 (V8)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-18T00:00:00+00:00"><time datetime="2024-03-18T00:00:00+00:00">2024.03.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="513 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/javascript/">Javascript</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223387168624" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Javascript에서 Object는 거의 모든 것의 근간이 되는 타입이다.<br />
+모든 객체들이 Object로 핸들링되고, Key-Value 데이터를 다룰 때도 Object를 쓴다.</p>
+<p>그런데 Object는 대체 무슨 구조로 이루어진 녀석일까? 보장하는 성능이나 사용법은 HashMap과 비슷한데, 신기하게도 Hashtable에 따르는 제약이나 관리포인트가 따로 존재하지 않는 것처럼 보인다.</p>
+<p>일단 짚고 넘어가야 할 부분은, Object의 구현은 브라우저 엔진마다 다르다는 것이다.<br />
+JS 명세는 최소한의 동작 형태만 보장할 뿐이고, 내부 알고리즘은 알아서 하라는 주의이기 때문이다. "해시테이블처럼" 동작하기만 하면 된다.</p>
+<p>언어 디자인이 개떡같다보니 뒷단에서 최적화한다고 고생이 많다.</p>
+<br>
+<br>
+<br>
+<h2 id="v8-gyeyeolyi-gyeongu">V8 계열의 경우</h2>
+<p>크롬, 엣지, Node.js 같은 V8 엔진에서 Object은 상태에 따라 변환되는 내부 구조를 지닌다.<br />
+Object이 해시테이블이 아니라는 소문이 퍼져있는데, 사실 경우에 따라 해시테이블을 사용하는게 맞긴 하다.</p>
+<p>일단 Object는 상황에 따라 2가지의 변신모드를 가진다.</p>
+<ol>
+<li>Fast 모드: 구조체처럼 최적화됨</li>
+<li>Dictionary 모드: 해시맵으로 동작 (느림)</li>
+</ol>
+<p>처음에 키와 값이 거의 고정된 형태로 생성되면 V8 엔진은 이걸 거의 C의 구조체 값처럼 처리한다. 이 타입을 Hidden class라고 부른다.<br />
+이 상태를 Fast 모드라 하고, 이때는 매우 빠르다.</p>
+<p><img src="/images/img_dfb47f2a0916a699.png" alt="" />
+새로운 키가 추가되면 다시 새로운 Hidden class를 생성해서 대응한다.</p>
+<p>하지만 fast 모드에서 감당하기 어려운 동작 패턴이 시작되면 Dictionary 모드로 변한다. 그리고 해시테이블처럼 동작한다.<br />
+딕셔너리 모드는 fast 모드보다 느리고 최적화도 잘 망가지기 때문에 가급적 사용하지 않으려고 한다. 보통 요소를 삭제하거나 하는 구조화가 어려운 형태의 액션을 수행하면 딕셔너리 모드로 전환이 된다. 키-값쌍이 과도하게 많을 때도 그런다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">var</span><span> user</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;connor&#39;</span><span style="color: #9399B2;">,</span><span> sex</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;male&#39;</span><span style="color: #9399B2;"> };</span><span> </span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// fast mode로 객체가 생성됨 </span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">delete</span><span> user</span><span style="color: #94E2D5;">.</span><span>sex</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// dictionary mode로 객체가 변경됨</span></span></code></pre>
+<p>조금만 더 자세하게 살펴보자</p>
+<p><img src="/images/img_aa4a8af01e69fb64.png" alt="" />
+일단 Object 자체에는 hiddenClass, properties, elements의 3개 필드로 구성이 된다.</p>
+<ol>
+<li>hiddenClass가 아까 말했던 fast 모드에서의 구조체 형태를 정의하는 것이라고 했었다.</li>
+<li>properties는 일반적인 Object 데이터일때 키-값 쌍을 저장하는 영역이고,</li>
+<li>elements는 배열일때의 값을 저장하는 영역이다. 그래서 배열은 사실 Object다. 배열의 동작법에 대해서는 따로 정리를 해보겠다. 꽤 복잡한 편이다.<br />
+<br />
+예를 들어 다음과 같이 빈 Object에서 시작해서 필드를 추가한다면, 다음과 같이 HiddenClass를 계속해서 즉시 갱신한다.</li>
+</ol>
+<p><img src="/images/img_220fec3ea855f906.png" alt="" />
+사실 다 인터프리팅 언어라서 가능한 짓이다.<br />
+여기서 재미있는 부분은, HiddenClasses는 값에 귀속된 것이 아니라 전역에서 트리구조로 관리되는 타입 정보라는 것이다.</p>
+<p><img src="/images/img_c1526c9ea431c1ab.png" alt="" /></p>
+<p>그래서 다음과 같이 같은 요소, 같은 순서를 가지는 객체가 2개 이상 존재한다면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> foo</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    a</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>    b</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> bar</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    a</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>    b</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 4444</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>저 foo와 bar는 같은 HiddenClass를 공유한다.</p>
+<p>그리고 HiddenClass로 관리하기 어려울 정도로 키 목록이 굉장히 많아지거나 복잡해지면 dictionary 모드로 전환된다. dictionary 모드는 명백하게 해시테이블로 동작하는게 맞다.</p>
+<p><img src="/images/img_a5d224c1fa380a5a.png" alt="" />
+<a rel="external" href="https://source.chromium.org/chromium/chromium/src/+/main:v8/src/objects/hash-table-inl.h;l=39?q=ComputeCapacity&amp;ss=chromium">https://source.chromium.org/chromium/chromium/src/+/main:v8/src/objects/hash-table-inl.h;l=39?q=ComputeCapacity&amp;ss=chromium</a><br />
+실제 v8 코드 보면 나온다.<br />
+그래서 dictionary 모드일 때는 일반적인 해시테이블처럼 사이즈가 커질때마다 2배의 growing을 거치는 등, 부하 포인트가 좀 존재한다.<br />
+해시충돌이나 재할당을 최소화하기 위해 50%의 여유공간을 두는 방식을 사용한다고 한다.<br />
+dictionary에 대한 직접적인 capacity 설정이 제공되지 않는건 아쉬운 부분이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://v8.dev/blog/elements-kinds">https://v8.dev/blog/elements-kinds</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/50011721/if-v8-rehashes-when-an-object-grows">https://stackoverflow.com/questions/50011721/if-v8-rehashes-when-an-object-grows</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/50044338/how-v8-stores-fast-objects">https://stackoverflow.com/questions/50044338/how-v8-stores-fast-objects</a><br />
+<a rel="external" href="https://v8.dev/blog/fast-properties?m=1">https://v8.dev/blog/fast-properties?m=1</a><br />
+<a rel="external" href="https://mrale.ph/blog/2015/01/11/whats-up-with-monomorphism.html">https://mrale.ph/blog/2015/01/11/whats-up-with-monomorphism.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223386613432/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] ObjectID<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223387270739/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Javascript] Array의 구조 (V8)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

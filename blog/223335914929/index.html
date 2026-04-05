@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] mockall로 테스트 모킹하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223335914929/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] mockall로 테스트 모킹하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223335914929/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-01-28T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223335914929/">[Rust] mockall로 테스트 모킹하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-01-28T00:00:00+00:00"><time datetime="2024-01-28T00:00:00+00:00">2024.01.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="335 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223335914929" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>mockall은 인터페이스(trait) 기반의 mock 타입을 자동 생성해주는 보조 라이브러리다.<br />
+이게 그나마 좀 사이즈가 있고 많이 쓰는 것 같다.</p>
+<p>동작 원리 자체는 복잡할게 없다. 그냥 트레잇에 대해서 mocking용 타입을 자동 생성해주는 정도다.</p>
+<br>
+<br>
+<br>
+<h2 id="seolci">설치</h2>
+<p>설치 방법은 간단하다. 디펜던시 하나만 add로 추가해주면 된다.</p>
+<p><img src="/images/img_b95efd874c56a7df.png" alt="" /></p>
+<p><img src="/images/img_80fff06db46f8184.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>mockall을 사용하려면, 먼저 모킹할 대상 기능을 먼저 인터페이스 단위로 추상화를 해야 한다.<br />
+인터페이스를 기반으로 generation을 하는 기능이기 때문이다.</p>
+<p>그래서 만약 uuid를 생성하는 기능에 대해서 모킹을 하고 싶다면, 이런식으로 trait을 정의해줘야 한다.</p>
+<p><img src="/images/img_6538857362f2ca84.png" alt="" />
+그리고 실제 비즈니스 로직에서는 트레잇을 기반으로만 동작하게 해야 한다.<br />
+그래야 모킹을 활용한 테스트가 가능해진다.</p>
+<br>
+<p><img src="/images/img_dba6e5b307d23420.png" alt="" />
+모킹을 생성하는 방법은 어렵지 않다.<br />
+이렇게 매크로만 붙여주면 타입을 자동으로 생성해준다.<br />
+자동으로 생성되는 타입은 트레잇 이름 앞에 Mock이 붙는다.</p>
+<br>
+<p><img src="/images/img_7bebda47844343d2.png" alt="" />
+모킹 타입은 이런식으로 생성해서</p>
+<br>
+<p><img src="/images/img_fa9df25613199c35.png" alt="" />
+이렇게 갖다쓸 수 있다.</p>
+<br>
+<p><img src="/images/img_696d51f40ecc26dc.png" alt="" />
+그리고 모킹 객체로 메서드를 호출하면, 사전에 정의한 expectation에 정의한 리턴값을 반환해준다.</p>
+<p>만약, expection에 맞지 않는 호출이 발생하면 mockall은 바로 패닉을 던진다.</p>
+<p><img src="/images/img_577dc8f8673af7c6.png" alt="" />
+한번만 호출할 수 있게 해놨는데 두번 호출해서다.</p>
+<br>
+<p><img src="/images/img_962d3f34c51fea68.png" alt="" />
+한 모킹 객체에 대해서 expectation은 원하는 만큼 잔뜩 뽑아낼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="paramiteo-match">파라미터 Match</h2>
+<p>파라미터를 받는 것은 조금 복잡하게 느껴질 수도 있다.</p>
+<p><img src="/images/img_512d5be58bc0fe94.png" alt="" />
+with절에 전용 predicate 함수들을 사용해서 파라미터를 match해줘야 한다.<br />
+저러면 파라미터가 1, 2인 것에 대해서만 올바르게 동작하고</p>
+<br>
+<p><img src="/images/img_17e9f18979c9d493.png" alt="" />
+맞지 않다면 에러를 던질 것이다.<br />
+여기서 좀 아쉬운 점은 근사한 expectation에 대해서 diff를 보여주지는 않는다는 점이다. 케이스가 방대해지면 그런게 좀 있어야 찾기가 쉬운데 말이다.</p>
+<br>
+<p><img src="/images/img_0d6f87bcdc0d6f58.png" alt="" />
+만약 항상 일치하는 match를 넣고 싶다면, always를 쓰면 된다.<br />
+저러면 뭐가 들어와도 일치하는 걸로 친다.</p>
+<br>
+<p><img src="/images/img_58a489d9c175c94b.png" alt="" />
+predicate 함수 목록은 이정도 있다.<br />
+<a rel="external" href="https://docs.rs/mockall/latest/mockall/predicate/index.html">https://docs.rs/mockall/latest/mockall/predicate/index.html</a></p>
+<p>predicate 함수를 쓰기 번잡하고 꺼려진다면, 그냥 predicate 클로저를 직접 넣어서 처리하는 방법도 있다.</p>
+<p><img src="/images/img_2cc49650d66ead38.png" alt="" />
+이런 식이다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://blog.logrocket.com/mocking-rust-mockall-alternatives/">https://blog.logrocket.com/mocking-rust-mockall-alternatives/</a><br />
+<a rel="external" href="https://docs.rs/mockall/latest/mockall/">https://docs.rs/mockall/latest/mockall/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223335821019/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Common RISP v0.1.1<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223335939774/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] CDK (with Python)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Elasticsearch] 캐시 구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223664141145/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Elasticsearch] 캐시 구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223664141145/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-11-17T00:00:00+00:00">
+    <meta property="article:tag" content="Elasticsearch">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223664141145/">[Elasticsearch] 캐시 구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-17T00:00:00+00:00"><time datetime="2024-11-17T00:00:00+00:00">2024.11.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="738 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/elasticsearch/">Elasticsearch</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223664141145" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Elasticsearch는 고성능 검색 및 필터링 기능을 제공하는 DB 시스템이다.</p>
+<p>개떡같이 쿼리를 넣어도 찰떡같이 빠르게 결과를 내뱉어주니 마법처럼 보일 수도 있지만, 이 고성능 동작의 상당 부분은 캐싱 전략에서 나온다.</p>
+<p>여기서는 Elasticsearch가 캐싱 전략을 사용해서 성능을 최적화하는 법. 그리고 사용자 입장에서 캐싱을 잘 할 수 있게 하는 방법을 간단히 정리해보겠다.</p>
+<p>인덱스 구조에 대해서도 얼마간 알고 가면 좋다.<br />
+관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223640540316">https://blog.naver.com/sssang97/223640540316</a></p>
+<br>
+<br>
+<br>
+<h2 id="1-os-peiji-kaesi">1. OS 페이지 캐시</h2>
+<p>대부분의 DB가 그렇듯, Elasticsearch도 디스크에서 파일을 읽는 것이 가장 큰 병목 지점 중 하나다.</p>
+<p>그래서 Elasticsearch는 페이지 캐시를 사용해서 반복적인 읽기 패턴을 최적화한다.<br />
+파일을 처음 읽을 때는 당연히 디스크에서 가져오지만, 두번째 읽기부터는 디스크에 접근하지 않고 메모리에 올려놨던 데이터를 바로 가져올 수 있게 하는 것이다.</p>
+<p><img src="/images/img_a7d8037cef1458f5.png" alt="" />
+페이지 캐시의 원본 데이터가 변경되면 해당 메모리의 데이터는 "dirty" 마크가 붙고 해제된다.</p>
+<p>특히나 Elasticsearch, 그러니까 Lucene의 최소 저장 단위인 세그먼트가 "불변"형이란 것도 이러한 최적화 구조와 궁합이 매우 잘 맞는 편이다.<br />
+세그먼트는 데이터가 바뀔 일이 없으니 캐시를 만료시키고 갱신하는 동작의 구현에 유리하다.</p>
+<br>
+<br>
+<h4 id="geuraeseo">그래서</h4>
+<p>그래서 Elasticsearch는 페이지 캐시에 많은 부분을 의존하고, 페이지 캐시를 위한 가용 메모리를 넉넉하게 잡아줘야 한다. 메모리를 괴물같이 많이 잡아먹는 이유도 여기에 있다...</p>
+<p>공식 문서에서는 "서버 메모리의 절반 이상을" 페이지 캐시에 사용할 수 있게끔 여유있게 설정하는 것을 권장한다.</p>
+<br>
+<br>
+<br>
+<h2 id="2-shard-request-kaesi">2. Shard Request 캐시</h2>
+<p>이건 사용 사례가 조금 복잡한 편이다.</p>
+<p>정확히 말하면 집계로 인해서 나온 최종 결과만을 캐시하는게 아니라, 각 인덱스별로 나온 중간 결괏값 자체를 캐싱해서 일부 인덱스만 변경된 경우에도 부분적으로 캐시를 활용할 수 있도록 한다는 것이다.</p>
+<p>그렇게 일반적인 사용사례는 아니다.<br />
+한번 키바나로 메트릭이나 로그 데이터를 조회한다고 가정해보자.</p>
+<p>그럼 시간대별로 인덱스를 만들고 append하는 구조가 된다.</p>
+<p><img src="/images/img_943ba25586e15be0.png" alt="" />
+처음에 이 상태로는 당연히 거의 캐싱이 잘 될 것이다.</p>
+<p>그런데 만약 시간이 좀 지나서, 옛날 데이터가 좀 지워지고, 끝에 데이터가 추가된다면 어떨 것 같은가?</p>
+<p><img src="/images/img_0a72486266101e0f.png" alt="" />
+왼쪽이 과거고 오른쪽이 미래다.</p>
+<p>이러면 최종적인 결과가 달라지므로 일반적인 형태로만 캐시를 적용하면 캐시가 금방 날라갈 것이다.</p>
+<p>여기서의 아이디어는, 각 인덱스의 값을 별도로 캐싱할 수 있도록 한다는 것이다.</p>
+<p>그러니까, 저기서 logs-000002, logs-000003, logs-000004는 변경된 것이 없으니까 캐시해놓고 그대로 재활용하고, logs-000001, logs-000005만 캐시 없이 신규로 가져와서 집계를 수행하는 것이다.</p>
+<p>이 캐시는 기본적으로 메모리의 최대 1% 정도를 점유한다.</p>
+<br>
+<br>
+<br>
+<h2 id="3-query-kaesi">3. Query 캐시</h2>
+<p>Elasticsearch는 사용자가 날린 쿼리에 대해서도 적극적인 캐싱을 수행한다.<br />
+최적화를 하고자 한다면 알아야 할 부분이다.</p>
+<br>
+<br>
+<h4 id="bitset-kaesi">bitset 캐시</h4>
+<p>Bitset은 [0,0,1,0,1,1...] 같은 순수한 비트 시퀀스를 말한다.<br />
+예를 들어, {gt:5000} 같은 필터식으로 쿼리를 날린다면, 해당 조건에 부합하는 데이터에만 1을 기록하고, 부합하지 않으면 0을 기록하는 것이다.</p>
+<p>컬럼에 비트 기반으로 저장하기 때문에 비교적 크기가 작게 저장된다.</p>
+<br>
+<br>
+<h4 id="yuyeonhan-kaesi-gujo">유연한 캐시 구조</h4>
+<p>Elasticsearch의 캐시는 query와 result가 1:1로 매핑되는 단순한 구조가 아니다.<br />
+"서로 다른 쿼리 간에도" 같은 bitset 캐시를 공유할 수 있다.</p>
+<p>예를 들면 이런 것이다.</p>
+<p>다음과 같은 쿼리가 2개 있다고 가정해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;query&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;bool&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;must&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;match&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                        &quot;message&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;hello&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span>            ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;filter&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;range&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                        &quot;created_at&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                            &quot;gte&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2021-02-01&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                            &quot;lt&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2021-03-01&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span>            ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;query&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;bool&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;must&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;match&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                        &quot;message&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;world&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span>            ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;filter&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;range&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                        &quot;created_at&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                            &quot;gte&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2021-02-01&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                            &quot;lt&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;2021-03-01&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span>            ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>둘은 최종적으로 가리키는 데이터가 완전히 다를 것이다.</p>
+<p>첫번째는 2021-02-01 &lt;= created_at &lt; 2021-03-01 이면서 message가 "hello"인 데이터를 탐색한다.<br />
+두번째는 2021-02-01 &lt;= created_at &lt; 2021-03-01 이면서 message가 "world"인 데이터를 탐색한다.</p>
+<p>요청이나 응답이 아마 완전히 다를 것이나, 그럼에도 created_at에 대한 필터링 조건은 동일하다.</p>
+<p><img src="/images/img_2809b7be21f97f24.png" alt="" /></p>
+<p>Elasticsearch의 bitset 캐시는 이런 다양한 상황에 대응할 수 있을 정도로 유연하다. 저 created_at bitset만 사용해서 최초 로드한 다음에 message 필터를 수행할 수도 있고, bitset끼리 OR 압축을 해서 빠르게 디스크 액세스를 하는 방법도 가지고 있다.</p>
+<br>
+<br>
+<h4 id="booleul-sayonghara">bool을 사용하라</h4>
+<p>elastcisearch는 필터에 대해서 and나 or, not절 등을 직접적으로 걸 수 있는 논리식을 지원한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;filter&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;or&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;and&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                        &quot;range&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                            &quot;end&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                                &quot;gte&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 201407292300</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                        &quot;term&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                            &quot;condtion1&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span>                ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span>        ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이런 식으로 말이다.</p>
+<p>하지만 이런 형태는 Elasticsearch의 캐시를 타지 못한다.<br />
+캐시를 통한 최적화를 원한다면 반드시 모든 조건절이 bool 절 안에 포함되도록 해야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;query&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;bool&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;should&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                    &quot;bool&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                        &quot;must&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                            {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                                &quot;range&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                                    &quot;end&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                                        &quot;gte&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 201407292300</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                            },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                            {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                                &quot;term&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                                    &quot;condtion1&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                            }</span></span>
+<span class="giallo-l"><span>                        ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span>            ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그래야 상술했던 bitset 기반의 query 캐시를 탈 수 있다.</p>
+<br>
+<br>
+<h4 id="kweori-kaesi-obsyeon">쿼리 캐시 옵션</h4>
+<p>쿼리 캐시 관련 설정에는 2가지 옵션이 있다.</p>
+<p><strong>- indices.queries.cache.size</strong><br />
+쿼리 캐시의 최대 크기를 제어하는 옵션이다.<br />
+기본값은 JVM 힙 크기의 10%다.</p>
+<p><strong>- indices.queries.cache.count</strong><br />
+이건 공식 문서에는 존재하지 않는데, 실제로 존재는 하는 전문가용? 옵션이다.<br />
+쿼리 캐시의 최대 총 개수를 뜻한다. 기본값은 10000이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.elastic.co/kr/blog/elasticsearch-caching-deep-dive-boosting-query-speed-one-cache-at-a-time">https://www.elastic.co/kr/blog/elasticsearch-caching-deep-dive-boosting-query-speed-one-cache-at-a-time</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/24893919/elasticsearch-performance-in-case-of-complex-filters-and-lot-of-records">https://stackoverflow.com/questions/24893919/elasticsearch-performance-in-case-of-complex-filters-and-lot-of-records</a><br />
+<a rel="external" href="https://www.elastic.co/guide/en/elasticsearch/reference/7.11/tune-for-search-speed.html#_give_memory_to_the_filesystem_cache_2">https://www.elastic.co/guide/en/elasticsearch/reference/7.11/tune-for-search-speed.html#_give_memory_to_the_filesystem_cache_2</a><br />
+<a rel="external" href="https://github.com/elastic/elasticsearch/issues/19799">https://github.com/elastic/elasticsearch/issues/19799</a><br />
+<a rel="external" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/query-cache.html">https://www.elastic.co/guide/en/elasticsearch/reference/current/query-cache.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223663752105/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[SQLite] 인덱스 구조 설명.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223664275708/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>DNS 관련 썰.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

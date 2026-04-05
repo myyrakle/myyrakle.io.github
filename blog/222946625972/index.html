@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] CodePipeline: EC2에 CodeDeploy 연동 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222946625972/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] CodePipeline: EC2에 CodeDeploy 연동">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222946625972/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-12-05T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222946625972/">[AWS] CodePipeline: EC2에 CodeDeploy 연동</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-12-05T00:00:00+00:00"><time datetime="2022-12-05T00:00:00+00:00">2022.12.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="500 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222946625972" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>외부 네트워크 접속 없이 특정 리소스를 바라보며 처리를 하는 consumer를 만들게 됐다.<br />
+이 케이스는 인스턴스가 무조건 하나만 있어야 하고, 다운타임이 조금은 있어도 상관이 없다.</p>
+<p>그래서 서버처럼 블루-그린 배포도 없이 레거시하게 stop and start 배포를 구성해봤다.</p>
+<p>언어는 nodejs를 쓰고, pm2로 단일 프로세스를 관리하도록 할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ec2-seting">EC2 세팅</h2>
+<p>기본 런타임을 깔아주고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>o</span><span style="color: #94E2D5;">-</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">. ~/.</span><span>nvm</span><span style="color: #94E2D5;">/</span><span>nvm</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>nvm install</span><span style="color: #FAB387;"> 16</span></span>
+<span class="giallo-l"><span>npm i</span><span style="color: #94E2D5;"> -</span><span>g pm2</span></span></code></pre>
+<p>pm2가 잘 도는지 본다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pm2 start npm</span><span style="color: #94E2D5;"> --</span><span>name</span><span style="color: #A6E3A1;"> &quot;consumer&quot;</span><span style="color: #94E2D5;"> --</span><span> start</span></span></code></pre>
+<p><img src="/images/img_8386a2a2a59ab33a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="code-deploy-agent-seolci">Code Deploy agent 설치</h2>
+<p>EC2에서 code deploy의 동작을 인지하고 상호작용을 하려면, 그런걸 처리하는 데몬이 깔려있어야 한다.<br />
+그게 code deploy agent다. 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo yum update</span></span>
+<span class="giallo-l"><span>sudo yum install ruby</span></span>
+<span class="giallo-l"><span>sudo yum install wget</span></span>
+<span class="giallo-l"><span>cd</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>ec2</span><span style="color: #94E2D5;">-</span><span>user</span></span>
+<span class="giallo-l"><span>wget https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//bucket-name.s3.region-identifier.amazonaws.com/latest/install</span></span>
+<span class="giallo-l"><span>chmod</span><span style="color: #94E2D5;"> +</span><span>x</span><span style="color: #94E2D5;"> ./</span><span>install</span></span>
+<span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> ./</span><span>install auto</span></span>
+<span class="giallo-l"><span>sudo service codedeploy</span><span style="color: #94E2D5;">-</span><span>agent status</span></span></code></pre>
+<p><img src="/images/img_24596f64bb7699d6.png" alt="" />
+그래서 이렇게 실행되면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="ec2e-yeoghal-buyeo">EC2에 역할 부여</h2>
+<p>Code Deploy에서 EC2에 꽂을 수 있게 하려면 EC2에도 특정한 권한을 넣어줘야 한다.</p>
+<p><img src="/images/img_afea3bceb12da8b0.png" alt="" />
+난 미리 만들어둔걸 썼는데</p>
+<br>
+<p><img src="/images/img_ab28adfe1f8df9b7.png" alt="" />
+Code Deploy Role이 있어야 하고</p>
+<br>
+<p><img src="/images/img_dc59475985efba0b.png" alt="" />
+신뢰관계는 이래 주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="code-pipeline-saengseong">Code Pipeline 생성</h2>
+<p>이제 CI/CD 구성 시작이다.</p>
+<p><img src="/images/img_d4bea78912d8c2e7.png" alt="" />
+이름 먼저 짓고</p>
+<br>
+<p><img src="/images/img_8c9b6db7665e4438.png" alt="" />
+소스를 어디서 받아올지를 정한다.</p>
+<p>Codebuild도 만들어주자</p>
+<p><img src="/images/img_4146254b08d301c4.png" alt="" />
+이건 따로 만든다음에 연결해줘야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="code-build-saengseong">Code build 생성</h2>
+<p>배포 환경들은 대충 기본적인 구성으로만 줬고</p>
+<p><img src="/images/img_a47aaf92b07b1bea.png" alt="" /></p>
+<p>buildspec만 잘 달아줬다.</p>
+<p><img src="/images/img_a6c49f0504f33691.png" alt="" /></p>
+<p>buildspec에서는 환경변수만 다운받고 바로 export하도록 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>version</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0.2</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>phases</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  pre_build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    commands</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> echo foo</span></span>
+<span class="giallo-l"><span>  build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    commands</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> echo Build started on</span><span style="color: #A6E3A1;"> `date`</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> echo Building the Docker image</span><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> aws s3 cp s3</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//.../prod/.env .env</span></span>
+<span class="giallo-l"><span>  post_build</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    commands</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> echo Build completed on</span><span style="color: #A6E3A1;"> `date`</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> echo success</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>artifacts</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  files</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span style="color: #A6E3A1;"> &#39;**/*&#39;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span style="color: #A6E3A1;"> &#39;*&#39;</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="code-deploy-saengseong">Code Deploy 생성</h2>
+<p>다음은 가장 중요한 CodeDeploy다.</p>
+<p><img src="/images/img_6724015966ab36a1.png" alt="" />
+이것도 CodeDeploy 콘솔 가서 만들어준 다음에 연결해줘야 한다.</p>
+<p>앱 먼저 만들어주고</p>
+<p><img src="/images/img_8059439efa5a9839.png" alt="" /></p>
+<p>거기다 배포 그룹을 추가해준다.</p>
+<p><img src="/images/img_93af5dfd7dccb4a0.png" alt="" />
+역할은 대충 CodeDeploy 권한 다 달아놓은 역할 만들어서 붙여주면 되고,<br />
+여기서는 굳이 블루/그린 배포가 필요하지는 않으니 배포 타입은 현재 위치로 해준다.</p>
+<p>환경 구성 탭에서는 어떤 EC2에 꽂을지를 정한다.<br />
+이름으로 해서 매칭시키면 된다.</p>
+<p><img src="/images/img_effb9434b7c66e28.png" alt="" /></p>
+<p>code deploy agent를 깔지 말지를 물어보는 부분이다.<br />
+아까 위의 커맨드로 깔았다면 "안 함"으로 해도 된다.</p>
+<p><img src="/images/img_9b16b4577a926658.png" alt="" /></p>
+<p>배포는 한번에 배포하고</p>
+<p><img src="/images/img_5923c1621da0b752.png" alt="" />
+로드밸런서는 끈다. 필요없다.</p>
+<p>이렇게 해놓고 완료 버튼 누르면 끝인데...</p>
+<p><img src="/images/img_099e55d0b5c05a0d.png" alt="" />
+잠깐만 기다려보라.<br />
+하나 더 세팅해야 할게 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="appspec-seting">appspec 세팅</h2>
+<p>buildspec이 빌드에 대한 설정파일이라면, appspec은 배포에 대한 설정파일이다.<br />
+이건 무조건 루트경로에 있어야 한다.</p>
+<p>이런식으로 작성할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>version</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0.0</span></span>
+<span class="giallo-l"><span>os</span><span style="color: #9399B2;">:</span><span> linux</span></span>
+<span class="giallo-l"><span>files</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> source</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span></span>
+<span class="giallo-l"><span>    destination</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>ec2</span><span style="color: #94E2D5;">-</span><span>user</span><span style="color: #94E2D5;">/</span><span>app</span></span>
+<span class="giallo-l"><span>    overwrite</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>hooks</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  ApplicationStop</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> location</span><span style="color: #9399B2;">:</span><span> scripts</span><span style="color: #94E2D5;">/</span><span>stop</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>      runas</span><span style="color: #9399B2;">:</span><span> ec2</span><span style="color: #94E2D5;">-</span><span>user</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> location</span><span style="color: #9399B2;">:</span><span> scripts</span><span style="color: #94E2D5;">/</span><span>clear</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>      runas</span><span style="color: #9399B2;">:</span><span> root</span></span>
+<span class="giallo-l"><span>  Install</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> location</span><span style="color: #9399B2;">:</span><span> scripts</span><span style="color: #94E2D5;">/</span><span>install</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>      runas</span><span style="color: #9399B2;">:</span><span> root</span></span>
+<span class="giallo-l"><span>  ApplicationStart</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> location</span><span style="color: #9399B2;">:</span><span> scripts</span><span style="color: #94E2D5;">/</span><span>restart</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"><span>      runas</span><span style="color: #9399B2;">:</span><span> ec2</span><span style="color: #94E2D5;">-</span><span>user</span></span></code></pre>
+<p>files는 codebuild에서 받아온 파일들을 어떻게 EC2에 집어넣을지에 대한 부분이다. 난 /home/ec2-user/app라는 경로에 복붙하도록 했다.</p>
+<p>그리고, hooks는 각 이벤트에 맞춰서 어떤 동작을 실행할지 지정하는 부분이다. 쉘코드를 프로젝트에 작성해둔 다음에, 그 경로를 넣어주면 된다.<br />
+개인적으로 난 이게 좀 많이 귀찮고 짜증났다.</p>
+<p>세팅하기전에 싹 날리고, install해서 pm2 restart를 때리도록 했다.</p>
+<p><img src="/images/img_4a8481745a62efdc.png" alt="" />
+이게 node 관련해서 환경변수가 꼬일때가 많아서 절대경로를 다 때려박았다.</p>
+<br>
+<br>
+<br>
+<h2 id="ggeut">끝</h2>
+<p>appspec.yml을 루트에다 잘 저장해놨다면, 이제 Code Pipeline을 만들어주자.</p>
+<p>그럼 이런식으로 만들어질 것이다.</p>
+<p><img src="/images/img_ba17e8659b01e6e8.png" alt="" /></p>
+<p>그럼 이런식으로 이벤트 단위로 배포가 될 것이고</p>
+<p><img src="/images/img_7faa539e33b1d0d7.png" alt="" />
+EC2에서도 반영이 되는 것을 확인할 수 있을 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/codedeploy-agent-operations-install-linux.html">https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/codedeploy-agent-operations-install-linux.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/reference-appspec-file.html#appspec-reference-server">https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/reference-appspec-file.html#appspec-reference-server</a><br />
+<a rel="external" href="https://yoo11052.tistory.com/113">https://yoo11052.tistory.com/113</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/39520571/codedeploy-pm2-command-not-found">https://stackoverflow.com/questions/39520571/codedeploy-pm2-command-not-found</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222948296539/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] IAM: 역할과 정책<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222939920456/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Python] match 문<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] Clickhouse Cloud로 시작해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222940538255/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] Clickhouse Cloud로 시작해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222940538255/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-11-28T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222940538255/">[Clickhouse] Clickhouse Cloud로 시작해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-11-28T00:00:00+00:00"><time datetime="2022-11-28T00:00:00+00:00">2022.11.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="436 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222940538255" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_34062b11b2d3e546.jpg" alt="" />
+클릭하우스는 OLAP 전용 데이터베이스 시스템 서비스다.  2016년에 나왔다.<br />
+오픈소스라서 직접 깔아다 쓸 수도 있고, 오픈소스그룹에서 관리하는 managed 서비스를 쓸 수도 있다.<br />
+여기서는 서비스를 쓰겠다.</p>
+<p>보통의 상용 RDB들은 OLTP에 최적화되어있어서, 복잡한 OLAP 쿼리들은 느릴 뿐더러 메인서비스에 과부하까지 줄 수가 있다. 그래서 여러가지 OLAP를 수행할 필요가 있을 때는 데이터만 복사해서 좀더 전문적인 DB에 넣고 돌리곤 하는데, 이게 딱 그걸 위한 서비스다.<br />
+row-base인 일반 RDB와 다르게 column-base의 구조를 갖고 있고, MergeTree라는 구조로 인덱스를 관리한다.</p>
+<p>페타바이급의 데이터도 1초 안에 처리하는데 성공했다고 한다..</p>
+<p>같은 포지션의 다른 메이저 서비스로는, GCP BigQuery, AWS RedShift 등이 있다.<br />
+벤치마크 좀 찾아보니까 빅클라우드 기술들에도 꿇리지 않는 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>서버리스 시스템이라서 딱 쓰는만큼만 비용을 뜯어간다.<br />
+비용은 리전마다 다르고, 스토리지와 컴퓨팅 2가지 방식으로 뜯는다.</p>
+<p><img src="/images/img_68bdfc7f95993729.png" alt="" />
+여기서 볼 수 있다.<br />
+<a rel="external" href="https://clickhouse.com/pricing#resource-billing">https://clickhouse.com/pricing#resource-billing</a></p>
+<p>추정치를 제공해주기로는, 최소한 달에 300달러 정도는 생각해줘야 하지 싶다.</p>
+<p><img src="/images/img_be7605d7e9a3a9b2.png" alt="" />
+<a rel="external" href="https://clickhouse.com/docs/en/manage/billing/">https://clickhouse.com/docs/en/manage/billing/</a></p>
+<p>처음 가입하면 2주동안 쓸 수 있는 테스트용 크레딧을 300달러쯤 준다.</p>
+<br>
+<br>
+<br>
+<h2 id="sijaghaebogi">시작해보기</h2>
+<p>가입하면 어느 리전에 깔 것인지를 먼저 물어볼 것이다.</p>
+<p><img src="/images/img_935e6bea66750e78.png" alt="" />
+AWS외에도 GCP와 Azure 아이콘도 있는데, 저 둘은 지원예정이고 지금은 안된다. AWS만 가능하다.</p>
+<br>
+<p><img src="/images/img_1032c3691b68c27f.png" alt="" />
+게다가 리전도 좀 부족하다...<br />
+한국에서는 싱가포르가 그나마 빠르지 않을까 싶다.</p>
+<br>
+<p><img src="/images/img_b34f18b172a3fc64.png" alt="" />
+아이피 접근 어떻게 할것인지를 묻는데, 나는 그냥 anywhere로 다 열겠다.</p>
+<br>
+<p><img src="/images/img_2625e51274dc0840.png" alt="" />
+그럼 비밀번호 한번 알려주고</p>
+<p>대시보드에 들어가질 것이다.</p>
+<p><img src="/images/img_f960b8f664302936.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="konsol-jeobsoghagi">콘솔 접속하기</h2>
+<p>클릭하우스는 전용 클라이언트를 제공하는데, 그냥 웹콘솔을 쓸 수도 있다.<br />
+들어갈 인스턴스에 connect 누르고</p>
+<p><img src="/images/img_bfb11eba51d4539e.png" alt="" /></p>
+<p>밑에 connect to SQL console을 누른다.</p>
+<p><img src="/images/img_a7184e897af1fc4c.png" alt="" /></p>
+<p>그럼 이런식으로 창이 뜰 것인데,</p>
+<p><img src="/images/img_616f31c6a9279f55.png" alt="" />
+우상단에 패스워드 쳐주고</p>
+<p>쿼리를 작성해준다음에</p>
+<p><img src="/images/img_ebdb923899cfd4d5.png" alt="" />
+Run 버튼을 누르면 결과를 확인할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="sintaegseu">신택스</h2>
+<p>clickhouse는 친숙한 SQL 스타일의 쿼리 신택스를 제공한다.<br />
+타입같은게 좀 다르긴 한데, 크게 다르지는 않다.</p>
+<p>DB 만들고</p>
+<p><img src="/images/img_7689744b68e40bf4.png" alt="" /></p>
+<p>테이블 만들고</p>
+<p><img src="/images/img_72e2f3aa4c2ed14a.png" alt="" /></p>
+<p>삽입하고</p>
+<p><img src="/images/img_4eaf0a439cfbd934.png" alt="" /></p>
+<p>조회하면서 쓰면 된다.</p>
+<p><img src="/images/img_7f776d5166b77bb3.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="bigdeiteo-darweobogi">빅데이터 다뤄보기</h2>
+<p>clickhouse 튜토리얼 가이드에서 제공하는 데이터를 활용해서 간단한 성능테스트를 좀 해보겠다.</p>
+<p>우선 테이블 하나 만들고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE trips</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `trip_id`</span><span> UInt32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `vendor_id`</span><span style="color: #89B4FA;font-style: italic;"> Enum8</span><span>(</span><span style="color: #A6E3A1;">&#39;1&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;3&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;4&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;CMT&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;VTS&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 6</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;DDS&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 7</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02512&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02598&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 11</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02617&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 12</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02682&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 13</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02764&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 14</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 15</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_date`</span><span> Date</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_datetime`</span><span> DateTime</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_date`</span><span> Date</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_datetime`</span><span> DateTime</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `store_and_fwd_flag`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `rate_code_id`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_longitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_latitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_longitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_latitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `passenger_count`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `trip_distance`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `fare_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `extra`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `mta_tax`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `tip_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `tolls_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `ehail_fee`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `improvement_surcharge`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `total_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `payment_type`</span><span style="color: #89B4FA;font-style: italic;"> Enum8</span><span>(</span><span style="color: #A6E3A1;">&#39;UNK&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;CSH&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;CRE&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;NOC&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;DIS&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 4</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `trip_type`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">25</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">25</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `cab_type`</span><span style="color: #89B4FA;font-style: italic;"> Enum8</span><span>(</span><span style="color: #A6E3A1;">&#39;yellow&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;green&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;uber&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_nyct2010_gid`</span><span> Int8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ctlabel`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_borocode`</span><span> Int8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_boroct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_cdeligibil`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ntacode`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ntaname`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_puma`</span><span> UInt16</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_nyct2010_gid`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ctlabel`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_borocode`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_boroct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_cdeligibil`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ntacode`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ntaname`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_puma`</span><span> UInt16</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> toYYYYMM</span><span>(pickup_date)</span></span>
+<span class="giallo-l"><span>ORDER BY pickup_datetime</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_a1ce6e9b396b4757.png" alt="" /></p>
+<p>샘플데이터를 때려박아준다.<br />
+클릭하우스는 S3 기반의 데이터를 읽어서 넣어주는 기능을 제공한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSERT INTO trips</span></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #94E2D5;"> *</span><span> FROM</span><span style="color: #89B4FA;font-style: italic;"> s3</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &#39;https://datasets-documentation.s3.eu-west-3.amazonaws.com/nyc-taxi/trips_{1..2}.gz&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &#39;TabSeparatedWithNames&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `trip_id` UInt32,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `vendor_id`</span><span style="color: #89B4FA;font-style: italic;"> Enum8</span><span>(</span><span style="color: #A6E3A1;">&#39;1&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;3&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;4&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;CMT&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;VTS&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 6</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;DDS&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 7</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02512&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02598&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 11</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02617&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 12</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02682&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 13</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;B02764&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 14</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 15</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_date`</span><span> Date</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_datetime`</span><span> DateTime</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_date`</span><span> Date</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_datetime`</span><span> DateTime</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `store_and_fwd_flag`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `rate_code_id`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_longitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_latitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_longitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_latitude`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `passenger_count`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `trip_distance`</span><span> Float64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `fare_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `extra`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `mta_tax`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `tip_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `tolls_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `ehail_fee`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `improvement_surcharge`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `total_amount`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `payment_type`</span><span style="color: #89B4FA;font-style: italic;"> Enum8</span><span>(</span><span style="color: #A6E3A1;">&#39;UNK&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;CSH&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;CRE&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;NOC&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;DIS&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 4</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `trip_type`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">25</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">25</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `cab_type`</span><span style="color: #89B4FA;font-style: italic;"> Enum8</span><span>(</span><span style="color: #A6E3A1;">&#39;yellow&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;green&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;uber&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 3</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_nyct2010_gid`</span><span> Int8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ctlabel`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_borocode`</span><span> Int8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_boroct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_cdeligibil`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ntacode`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_ntaname`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `pickup_puma`</span><span> UInt16</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_nyct2010_gid`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ctlabel`</span><span> Float32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_borocode`</span><span> UInt8</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_boroct2010`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_cdeligibil`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ntacode`</span><span style="color: #89B4FA;font-style: italic;"> FixedString</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_ntaname`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `dropoff_puma`</span><span> UInt16</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">&quot;) SETTINGS input_format_try_infer_datetimes = 0</span></span></code></pre>
+<p>이러면 샘플데이터를 잘 넣어줄 텐데, 150MB짜리라서 조금 걸릴 수도 있다.</p>
+<p>다 들어갔다면 조회가 가능할 것이다. 삽입은 느리지만 조회는 매우 빠르다.</p>
+<p><img src="/images/img_e93f5dd4aef573a7.png" alt="" /></p>
+<p>400만개 정도가 들어있는데도</p>
+<p><img src="/images/img_31e58d610838b1b9.png" alt="" /></p>
+<p>이런 일반적으로 느린 쿼리도 1초 미만에 수행이 되고</p>
+<p><img src="/images/img_428eb165405fec7b.png" alt="" /></p>
+<p>이런 헤비한 쿼리도 매우 빠르게 실행한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>    pickup_ntaname</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    toHour</span><span>(pickup_datetime)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> pickup_hour</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    SUM</span><span>(</span><span style="color: #FAB387;">1</span><span>) AS pickups</span></span>
+<span class="giallo-l"><span>FROM trips</span></span>
+<span class="giallo-l"><span>WHERE pickup_ntaname</span><span style="color: #94E2D5;"> !=</span><span style="color: #A6E3A1;"> &#39;&#39;</span></span>
+<span class="giallo-l"><span>GROUP BY pickup_ntaname</span><span style="color: #9399B2;">,</span><span> pickup_hour</span></span>
+<span class="giallo-l"><span>ORDER BY pickup_ntaname</span><span style="color: #9399B2;">,</span><span> pickup_hour</span></span></code></pre>
+<p><img src="/images/img_95a40bd741582f42.png" alt="" />
+깊게 써보진 않았지만 잘 만들긴 잘 만든 것 같다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/en/sql-reference/statements/select/">https://clickhouse.com/docs/en/sql-reference/statements/select/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222939920456/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Python] match 문<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222939603415/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] vacuum<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

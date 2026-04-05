@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] CodeDeploy: Lambda 롤링 배포 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222521439183/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] CodeDeploy: Lambda 롤링 배포">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222521439183/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-09-30T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222521439183/">[AWS] CodeDeploy: Lambda 롤링 배포</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-09-30T00:00:00+00:00"><time datetime="2021-09-30T00:00:00+00:00">2021.09.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="733 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222521439183" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>람다는 여러모로 정말 편리한 서비스 중 하나다.<br />
+전반적인 관리비용이 거의 없다는 것도 그렇지만, 배포도 정말 편하긴 하다.<br />
+그냥 아래처럼 소스만 압축해서 올리면 끝이니 말이다.</p>
+<p><img src="/images/img_55a89be7abe56653.png" alt="" />
+게다가 이에 따른 새 버전 전환도 상당히 빠르고, 소스가 바뀐다고 서비스가 중간에 끊기지도 않는다.</p>
+<p>하지만 이렇게 그냥 무작정 올리고 마는 것은 좀.. 아쉬운 점이 있다.<br />
+만에 하나라도 새로 올리는 소스에 문제가 있다면 어떻게 하나? 배포시에 잘 동작하는지 한번더 최종 점검을 해야 하지 않나?</p>
+<p>그래서 필요한 것이 [롤링 배포]라는 것이다.<br />
+롤링 배포는 새 버전을 올리더라도 새 버전이 잘 동작할때까지 기다리고, 잘 동작하는게 확인되면 버전을 교체하되, 동작하지 않는다면 배포를 취소하는 기법이다.</p>
+<p>Code Deploy를 통해 이를 적용해보도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="ramda-beojeon-saengseong">람다 버전 생성</h2>
+<p>람다는 별다른 설정을 하지 않는다면 LATEST 하나의 버전만 존재하나, 롤링 배포를 처리하려면 버전을 제대로 명시할 필요가 있다.</p>
+<p>버전이 없는 상태라면 버전 탭에 들어가서 버전을 2개 만들어주자.</p>
+<p><img src="/images/img_3654e112049c70ed.png" alt="" /></p>
+<p><img src="/images/img_9fbc8a94a4780086.png" alt="" />
+우리는 여기서 버전 1이 기존의 소스. 버전 2가 새로 배포할 버전의 소스라고 가정하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="ramda-byeolcing-saengseong">람다 별칭 생성</h2>
+<p>롤링 배포를 제대로 적용하려면 람다에 별칭을 추가해야 한다.<br />
+새로운 버전의 람다가 계속 올라오더라도 최종 엔드포인트는 하나여야 하지 않겠는가? 그걸 잡아주는 것이 별칭이다.</p>
+<p>저기 별칭 탭에 보면 별칭 생성 버튼이 있다.</p>
+<p><img src="/images/img_82c0a49c4deed1c1.png" alt="" /></p>
+<p>이름은 적당히 잘 지어준다.<br />
+여기서는 1 버전의 별칭으로 만들 것이다.</p>
+<p><img src="/images/img_2f67f860f241ae53.png" alt="" /></p>
+<p><img src="/images/img_77fc5b54fea548e6.png" alt="" />
+그리고 이 별칭을 통해 최종 배포를 하면 되는 것이다.</p>
+<p>API GateWay로 Api 열어주고 쓰면 되는데, 주의할 점은 이럴때 그냥 함수명을 적는게 아니라 별칭의 ARN을 넣어줘야 한다는 것이다.</p>
+<p><img src="/images/img_f9e7fb58c46ad57f.png" alt="" />
+이렇게 말이다.</p>
+<br>
+<br>
+<br>
+<h2 id="code-deploy-aeb-saengseong">Code Deploy 앱 생성</h2>
+<p>Code Deploy에 들어가서 애플리케이션 생성을 선택, 플랫폼을 람다로 하고 생성한다.</p>
+<br>
+<p><img src="/images/img_c0db9ad537f136c1.png" alt="" /></p>
+<p>그럼 이렇게 배포 관리 페이지가 생겨날 것이다.</p>
+<p><img src="/images/img_4a15679cab2f6a34.png" alt="" />
+그럼 이제 배포 그룹을 생성해서</p>
+<br>
+<p><img src="/images/img_06bbbab8f4233d67.png" alt="" />
+저기에 서비스 역할을 만들어서 arn을 넣어주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="seobiseu-yeoghal-saengseong">서비스 역할 생성</h2>
+<p>배포그룹에 사용할 역할은 다음과 같이 생성할 수 있다.<br />
+사용 사례에서 저걸 골라서</p>
+<br>
+<p><img src="/images/img_cf2d9d8b5eefd3a1.png" alt="" /></p>
+<p>정책을 다음과 같이 2개 연결해주고</p>
+<p><img src="/images/img_66bb3b4f6bfd1d29.png" alt="" /></p>
+<p>신뢰관계에 codedeploy 도메인을 넣어주면 된다.</p>
+<p><img src="/images/img_af13ce02196567cc.png" alt="" /></p>
+<p>그럼 이렇게 생성이 잘 될 것이다.</p>
+<p><img src="/images/img_236e7108b582d602.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="rolbaeg-seoljeong">롤백 설정</h2>
+<p>만약 새로만든 람다 버전에 문제가 발생한다면 롤백을 시켜야 하지 않겠는가.<br />
+밑에 고급에서 롤백 비활성화를 해제하고 롤백을 설정해주자.</p>
+<p><img src="/images/img_ba0656b68cd07faf.png" alt="" /></p>
+<p>이렇게 해서 CodeDeploy 앱을 만들어주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="beokis-saengseong">버킷 생성</h2>
+<p>이게 다가 아니다.<br />
+배포할때마다 버전을 어떻게 올릴지 그런걸 정의해야 하는데, 이걸 appspec 파일이라고 한다.</p>
+<p>그걸 저장해놓을 S3 버킷을 만들어주자.</p>
+<p><img src="/images/img_ffc078d4121c29f2.png" alt="" /></p>
+<p>그리고 다음과 같은 형식으로 배포 설정파일을 써서 넣어주면 된다.</p>
+<p><img src="/images/img_c8c6c3c45d447cfb.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>version</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0.0</span></span>
+<span class="giallo-l"><span>Resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> myLambdaFunction</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      Type</span><span style="color: #9399B2;">:</span><span> AWS</span><span style="color: #9399B2;">:</span><span>:Lambda</span><span style="color: #9399B2;">:</span><span>:Function</span></span>
+<span class="giallo-l"><span>      Properties</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        Name</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;express_test&quot;</span></span>
+<span class="giallo-l"><span>        Alias</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;rolling&quot;</span></span>
+<span class="giallo-l"><span>        CurrentVersion</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;7&quot;</span></span>
+<span class="giallo-l"><span>        TargetVersion</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;8&quot;</span></span>
+<span class="giallo-l"><span>Hooks</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> BeforeAllowTraffic</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;code-deploy-check&quot;</span></span></code></pre>
+<p>여기서 Name은 말 그대로 함수명, Alias는 아까 만든 별칭.<br />
+Current는 현재 배포되어있는 버전. TargetVersion은 배포할 버전이다.</p>
+<p>그리고 BeforeAllowTraffic는 트래픽을 옮기기 전에 트리거를 걸어주는 것이다.<br />
+값으로 들어가는건 함수명이다.<br />
+저기서 소스의 정상작동에 대한 검증을 하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="health-checkyong-hug-hamsu">Health Check용 훅 함수</h2>
+<p>훅 함수는 대략 다음과 같은 구조로 작성하면 된다.</p>
+<p><img src="/images/img_816720a0812fe277.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #A6E3A1;">&#39;use strict&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> aws</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> codedeploy</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">CodeDeploy</span><span>(</span><span style="color: #9399B2;">{</span><span>apiVersion</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;2014-10-06&#39;</span><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> context</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> callback</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //Read the DeploymentId from the event payload.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    var</span><span> deploymentId</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">.</span><span>DeploymentId</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //Read the LifecycleEventHookExecutionId from the event payload</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    var</span><span> lifecycleEventHookExecutionId</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">.</span><span>LifecycleEventHookExecutionId</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    /*</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    ... 여기서 검증.</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    */</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // Prepare the validation test results with the deploymentId and</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // the lifecycleEventHookExecutionId for CodeDeploy.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    var</span><span> params</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        deploymentId</span><span style="color: #94E2D5;">:</span><span> deploymentId</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        lifecycleEventHookExecutionId</span><span style="color: #94E2D5;">:</span><span> lifecycleEventHookExecutionId</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        status</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;Succeeded&#39;</span><span style="color: #9399B2;font-style: italic;"> // status can be &#39;Succeeded&#39; or &#39;Failed&#39;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    //const bar = await codedeploy.getDe</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // Pass CodeDeploy the prepared validation test results.</span></span>
+<span class="giallo-l"><span>    codedeploy</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">putLifecycleEventHookExecutionStatus</span><span>(params</span><span style="color: #9399B2;">,</span><span style="color: #CBA6F7;"> function</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">err</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> data</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        if</span><span> (err)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">            // 검증 실패</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            callback</span><span>(</span><span style="color: #A6E3A1;">&#39;Validation test failed&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">            // 검증 성공</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            callback</span><span>(</span><span style="color: #CBA6F7;">null</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Validation test succeeded&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>이건 공식문서에서 제공하는 템플릿이고, 나는 다음과 같이 사용했다.</p>
+<p>람다의 target version을 호출해서 오류가 나면 putLifecycleEventHookExecutionStatus로 실패했다고 이벤트를 날려주고, 문제없으면 putLifecycleEventHookExecutionStatus에 성공알림을 보내는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #A6E3A1;">&#39;use strict&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> aws</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;aws-sdk&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> codedeploy</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">CodeDeploy</span><span>(</span><span style="color: #9399B2;">{</span><span>apiVersion</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;2014-10-06&#39;</span><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> lambda</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Lambda</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> context</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> callback</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 이 값은 BeforeAllowTraffic로 걸면 자동으로 들어옴</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> deploymentId</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">.</span><span>DeploymentId</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> lifecycleEventHookExecutionId</span><span style="color: #94E2D5;"> =</span><span> event</span><span style="color: #94E2D5;">.</span><span>LifecycleEventHookExecutionId</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 체크용 호출</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span> lambda</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">		.</span><span style="color: #89B4FA;font-style: italic;">invoke</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>			FunctionName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;express_test:9&#39;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> //버전은 배포중인 target 버전이 들어가게 해주면 됨.</span></span>
+<span class="giallo-l"><span>			Payload</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(</span><span style="color: #9399B2;">{}</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">		.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">&#39;response: &#39;</span><span style="color: #9399B2;">,</span><span> response)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span>(response</span><span style="color: #94E2D5;">.</span><span>FunctionError</span><span style="color: #94E2D5;"> !==</span><span style="color: #A6E3A1;">&#39;Unhandled&#39;</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">&#39;성공&#39;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	    await</span><span> codedeploy</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">putLifecycleEventHookExecutionStatus</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            deploymentId</span><span style="color: #94E2D5;">:</span><span> deploymentId</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            lifecycleEventHookExecutionId</span><span style="color: #94E2D5;">:</span><span> lifecycleEventHookExecutionId</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            status</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;Succeeded&#39;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        callback</span><span>(</span><span style="color: #CBA6F7;">null</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Validation test succeeded&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span> </span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">&#39;실패&#39;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	    await</span><span> codedeploy</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">putLifecycleEventHookExecutionStatus</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            deploymentId</span><span style="color: #94E2D5;">:</span><span> deploymentId</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            lifecycleEventHookExecutionId</span><span style="color: #94E2D5;">:</span><span> lifecycleEventHookExecutionId</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            status</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;Failed&#39;</span><span> </span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        callback</span><span>(</span><span style="color: #A6E3A1;">&#39;Validation test failed&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>람다 역할에 CodeDeploy와 LambdaInvoke 권한을 걸어주고, 메모리와 실행시간 제한을 좀 늘려줘야 한다.</p>
+<p>여기서 나는 단순하게 메인에서 오류가 뜨는지 아닌지만 검사했지만, 상황에 따라서 더 많은 검증을 해야할 수도 있을 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="baepo-saengseong">배포 생성</h2>
+<p>이제 배포 설정을 만들어보자.</p>
+<p><img src="/images/img_52cb1f671a422b95.png" alt="" />
+이름을 짓고, 위에서 만든 배포용 설정파일을 연결해주면 된다.<br />
+s3로 받아와도 되고, 편집기로 그냥 텍스트를 박을 수도 있다.</p>
+<br>
+<p><img src="/images/img_1766ac910f102319.png" alt="" />
+그리고 배포 구성과 롤백 구성을 설정해준다.<br />
+이왕이면 롤백은 되게 해두는게 좋겠고...</p>
+<p>배포 구성은 필요에 따라 다음 리스트 중에 고르면 된다.</p>
+<p><img src="/images/img_50fecbac67bab8a9.png" alt="" />
+나는 개인적으로 카나리가 좋은 것 같다.</p>
+<p>그래서 이렇게 다 통과하면 잘 배포가 된 것이다.</p>
+<p><img src="/images/img_6b38a4a67a985ac7.png" alt="" /></p>
+<p>접속도 잘 되면 성공이다.</p>
+<p><img src="/images/img_ba08f8cd73e47ef8.png" alt="" /></p>
+<p><img src="/images/img_0184257cbfdc513c.png" alt="" /></p>
+<p>만약에 다음과 같이 소스에 오류가 있는 채로 배포를 시도한다면</p>
+<p><img src="/images/img_0a04c9a1de909994.png" alt="" /></p>
+<p>훅 함수에서 failed를 날리므로 배포가 취소되고 롤백이 수행될 것이다.</p>
+<p><img src="/images/img_18e1dfef58e74c1a.png" alt="" /></p>
+<p>그렇다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/lambda/latest/dg/lambda-rolling-deployments.html">https://docs.aws.amazon.com/ko_kr/lambda/latest/dg/lambda-rolling-deployments.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/codedeploy/latest/userguide/tutorial-lambda-sam.html">https://docs.aws.amazon.com/codedeploy/latest/userguide/tutorial-lambda-sam.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-service-role.html">https://docs.aws.amazon.com/codedeploy/latest/userguide/getting-started-create-service-role.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/reference-appspec-file-example.html">https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/reference-appspec-file-example.html</a><br />
+<a rel="external" href="https://ystatit.medium.com/aws-codedeploy-basic-walk-through-lambda-cf3be01d3e06">https://ystatit.medium.com/aws-codedeploy-basic-walk-through-lambda-cf3be01d3e06</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html#appspec-hooks-lambda">https://docs.aws.amazon.com/ko_kr/codedeploy/latest/userguide/reference-appspec-file-structure-hooks.html#appspec-hooks-lambda</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222544625850/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.56.0 &amp; 2021 에디션 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222520213774/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Code Pipeline를 통한 배포 자동화: Elastic Beanstalk<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

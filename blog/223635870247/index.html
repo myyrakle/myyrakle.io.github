@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] zerocopy | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223635870247/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] zerocopy">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223635870247/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-10-27T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223635870247/">[Rust] zerocopy</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-27T00:00:00+00:00"><time datetime="2024-10-27T00:00:00+00:00">2024.10.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="379 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223635870247" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>zerocopy는 복사비용 없는 메모리 조작을 간편한 형태로 보조하는 crate다.</p>
+<p>구글이 푸크시아 제작에 쓰려고 만든걸로 알고 있다.</p>
+<br>
+<br>
+<h2 id="wae-pilyohanga">왜 필요한가?</h2>
+<p>zero-copy 방법론에 대한 백그라운드는 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223629674161">https://blog.naver.com/sssang97/223629674161</a></p>
+<p>아무튼간에 메모리에서 들고온 바이트열 데이터를 Rust에서 제대로 다루려면 역직렬화/직렬화를 거쳐서 struct/enum을 통해 가공하는게 주된 사용 패턴일 것이다.</p>
+<p>근데 그냥 일반적인 방법을 사용해서 직렬화와 역직렬화를 반복하면 필시 불필요한 복사가 발생할 것이다.</p>
+<p>이 crate는 복사가 발생하지 않는 형태의 unsafe 직렬화/역직렬화를 적절하게 감싸서 제공하는 라이브러리다.<br />
+이것 자체로 syscall들을 제공하는 것은 아니다. 보조적인 용도다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-sayongbeob">기본 사용법</h2>
+<p>우선 zerocopy 종속성을 적절히 추가해준다.</p>
+<p><img src="/images/img_2674d7156a62deae.png" alt="" />
+derive는 features로 넣는 대신에 zerocopy-derive를 따로 넣을 수도 있다.<br />
+그러면 컴파일 속도가 나아진다나...</p>
+<p>아무튼, zerocopy를 사용한다면 보통 이런 느낌으로 구조체를 선언해서 사용하게 된다.</p>
+<p><img src="/images/img_72914f3a5cf11d92.png" alt="" />
+실질적인 기능을 구현하는 트레잇은 총 4가지다.</p>
+<ul>
+<li>TryFromBytes</li>
+<li>FromBytes</li>
+<li>IntoBytes</li>
+<li>FromZeros</li>
+</ul>
+<p>TryFromBytes/FromBytes는 일반적으로 우리가 알고있는 TryFrom 패턴으로 바이트열을 구조체 등으로 변환한다. 반환 타입은 Result&lt;&amp;T, Err&gt;다.<br />
+owned가 아닌 참조형으로 구조체를 생성하기 때문에 복사 동작을 최소화한 채로 원본 데이터를 사용할 수 있다.</p>
+<p>IntoBytes는 간단하다. 구조체 등을 바이트열로 변환하는 것이다.</p>
+<p>FromZeros는 좀 특이한데, 객체가 기본값(0)인 상태가 유효한 상태임을 보장하는 trait이다.</p>
+<p>또 zero-copy에는 zerocopy 구현에 필요한 보장을 나타내는 마커 trait이 3가지 있다. 아래 마커들을 적절히 달아줘야 위의 기능 derive도 달성할 수 있다.</p>
+<ul>
+<li>KnownLayout</li>
+<li>Immutable</li>
+<li>Unaligned</li>
+</ul>
+<p>KnownLayout는 대부분의 zerocopy 사용사례에 필요한 기본 마커다. 이걸 달아놔야 실제 구조체의 레이아웃 분석을 구현해줄 수 있다.<br />
+Immutable는 해당 타입이 변경 불가능해야함을 뜻한다.<br />
+Unaligned는 메모리 alignment가 필요하지 않는 타입을 가리킨다.</p>
+<br>
+<p>일단 한번 실제로 만들어보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use zerocopy</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Debug</span><span style="color: #9399B2;">,</span><span> KnownLayout</span><span style="color: #9399B2;">,</span><span> Immutable</span><span style="color: #9399B2;">,</span><span> TryFromBytes)]</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">repr</span><span>(u32)]</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">enum</span><span style="color: #F9E2AF;font-style: italic;"> Cuppa</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    Tea</span><span> { iced: bool</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> milk</span><span>: u8 </span><span style="color: #9399B2;">}</span><span style="color: #94E2D5;"> =</span><span> u32</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_ne_bytes</span><span>(</span><span style="color: #94E2D5;">*</span><span>b</span><span style="color: #A6E3A1;">&quot;CHAI&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    Coco</span><span style="color: #9399B2;"> {</span><span> marshmallows</span><span style="color: #9399B2;">:</span><span> u8</span><span style="color: #9399B2;"> }</span><span style="color: #94E2D5;"> =</span><span> u32</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_ne_bytes</span><span>(</span><span style="color: #94E2D5;">*</span><span>b</span><span style="color: #A6E3A1;">&quot;COCO&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>구조체 하나를 zerocopy를 덕지덕지 달면서 만들었다.<br />
+enum에 값을 할당한건 별 의미는 없다. 그냥 한거고, 꼭 저래야 할 필요는 없다.</p>
+<p>이 경우엔 TryFromBytes를 달았기 때문에 바이트열-&gt;구조체 변환을 사용할 수 있다.</p>
+<p>그럼 이런 느낌으로 사용할 수 있다.</p>
+<p><img src="/images/img_2eafa2feb5dec391.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> data</span><span style="color: #94E2D5;"> =</span><span> u64::</span><span style="color: #89B4FA;font-style: italic;">from_ne_bytes</span><span>([b</span><span style="color: #A6E3A1;">&#39;C&#39;</span><span style="color: #9399B2;">,</span><span> b</span><span style="color: #A6E3A1;">&#39;H&#39;</span><span style="color: #9399B2;">,</span><span> b</span><span style="color: #A6E3A1;">&#39;A&#39;</span><span style="color: #9399B2;">,</span><span> b</span><span style="color: #A6E3A1;">&#39;I&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 42</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>])</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> obj</span><span style="color: #94E2D5;"> =</span><span> Cuppa::</span><span style="color: #89B4FA;font-style: italic;">try_ref_from_bytes</span><span>(data</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_bytes</span><span>())</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if let</span><span> Ok(Cuppa</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">Tea</span><span> { iced</span><span style="color: #9399B2;">,</span><span> milk }) </span><span style="color: #94E2D5;">=</span><span> obj</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;iced: {}, milk: {}&quot;</span><span style="color: #9399B2;">,</span><span> iced</span><span style="color: #9399B2;">,</span><span> milk)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span></code></pre>
+<p>바이트열을 받아서, 그걸 변환하고 출력하도록 했다.</p>
+<br>
+<p><img src="/images/img_3116effd9ad9b3ea.png" alt="" />
+그럼 잘 동작할 것이다.</p>
+<p>앞서 말했듯이 저기서 생성된 obj 객체는 참조된 채로 구조체 모양을 갖춘 것일 뿐이다.<br />
+그래서 실제로는 복사된 것이 아니라 참조된 것이다.</p>
+<p>이거 말고도 바이트열 역변환이나 자잘한 보조기능들이 있긴 하지만, 이게 zero-copy라는 crate의 핵심이다.</p>
+<br>
+<br>
+<p><a rel="external" href="https://github.com/google/zerocopy/discussions/1680">https://github.com/google/zerocopy/discussions/1680</a><br />
+<a rel="external" href="https://google.github.io/comprehensive-rust/ko/bare-metal/useful-crates/zerocopy.html">https://google.github.io/comprehensive-rust/ko/bare-metal/useful-crates/zerocopy.html</a><br />
+<a rel="external" href="https://github.com/google/zerocopy/discussions/1680">https://github.com/google/zerocopy/discussions/1680</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223637437385/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Amazon Managed Prometheus (AMP)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223635893021/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] alignment에 대한 글.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

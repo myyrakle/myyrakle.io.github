@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Control Tower: multi account 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223087326147/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Control Tower: multi account 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223087326147/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-04-28T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223087326147/">[AWS] Control Tower: multi account 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-04-28T00:00:00+00:00"><time datetime="2023-04-28T00:00:00+00:00">2023.04.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="325 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223087326147" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_1de20820e51464cc.png" alt="" />
+클라우드 서비스를 사용하다보면, 계정을 추가로 파서 격리된 환경을 추가로 만들 경우가 종종 있다. 리소스 관리 측면에서나, 비용 처리, 보안 측면에서든 말이다.</p>
+<p>대표적으로, 기존 서비스와 별개의 새 서비스를 런칭할 때가 그렇다.</p>
+<p>근데 아무래도 계정을 계속 파고 관리하는건 아무래도 여러모로 번거로운 부분이 있다.<br />
+GCP나 Azure는 프로젝트나 계정 단위로 분할하는 기능을 기본으로 제공하는데, AWS는 Control Tower를 통해서 선택적으로 이러한 기능을 제공한다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>이것 자체에 대한 비용은 따로 없다.<br />
+이걸로 분기된 각각의 account에서 별도로 비용이 발생할 뿐이다.</p>
+<br>
+<br>
+<br>
+<h2 id="raending-jon-seoljeong">랜딩 존 설정</h2>
+<p>멀티 account를 구성하려면 먼저 랜딩 존이란걸 구성해야 한다.<br />
+이동해서 설정을 해준다.</p>
+<p><img src="/images/img_e62c6424851e1236.png" alt="" /></p>
+<p>기본 리전을 고르고</p>
+<p><img src="/images/img_de62f7b8cc815467.png" alt="" /></p>
+<p>조직 이름을 선택한다.</p>
+<p><img src="/images/img_86b81d70cbc28094.png" alt="" /></p>
+<p>그리고 아카이브 계정과 감사 계정의 이메일을 적당히 설정해준다.</p>
+<p><img src="/images/img_528ee5163aa6abf0.png" alt="" />
+보통 감사 계정이 그 account의 root 계정이 되는 셈이다.</p>
+<br>
+<p><img src="/images/img_d9f049f83fcc3689.png" alt="" />
+적당히 넘기고 만들어준다.</p>
+<p>그럼 초기화에 시간이 좀 걸리고</p>
+<p><img src="/images/img_7e1c483811059669.png" alt="" /></p>
+<p>구성이 된다.</p>
+<p><img src="/images/img_46744f8e10cb5087.png" alt="" />
+이런식으로 기존의 "Root" 어카운트의 sub account 개념으로 test_ou account가 추가된 형태가 되는 것이다.</p>
+<br>
+<br>
+<p><img src="/images/img_9fceabed727e146f.png" alt="" /></p>
+<p><img src="/images/img_371d54123d860447.png" alt="" /></p>
+<p><img src="/images/img_7515b2bd76df91fc.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="sub-account-rogeuinhagi">sub account 로그인하기</h2>
+<p>아마 랜딩이 완료됐다면 이런 초대 메일이 하나 날라올 것이다.</p>
+<p><img src="/images/img_2ff4fa66c135f06f.png" alt="" />
+그럼 저기 들어가서 회원가입을 해주면 된다.<br />
+그리고 저기 동그라미친 링크도 잘 보관해줘야 한다.<br />
+이게 내가 방금 만든 multi account에 대한 전용 로그인 페이지다!<br />
+기존의 로그인 방식과 별개로, multi account에 대한 로그인을 하려면 저기로만 들어가야 한다.</p>
+<p>아무튼 들어가서 로그인 잘 하면</p>
+<p><img src="/images/img_40f5a4f4ee263395.png" alt="" /></p>
+<p>이렇게 선택해서 들어갈 수 있다.</p>
+<p><img src="/images/img_423699742e010ec2.png" alt="" /></p>
+<p>잘 뜬다.</p>
+<p><img src="/images/img_79452e9c9dd24937.png" alt="" />
+막 만든 account답게 텅 비어있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gita">기타</h2>
+<p>새로만든 조직&amp;계정 정보를 조회할때 "신뢰할 수 있는 액세스가 활성화되지 않았다."면서 뭐라 할때가 있는데, 그때는 AWS CLI로 다음 커맨드를 실행해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>aws organizations enable</span><span style="color: #94E2D5;">-</span><span>aws</span><span style="color: #94E2D5;">-</span><span>service</span><span style="color: #94E2D5;">-</span><span>access</span><span style="color: #94E2D5;"> --</span><span>service</span><span style="color: #94E2D5;">-</span><span>principal account</span><span style="color: #94E2D5;">.</span><span>amazonaws</span><span style="color: #94E2D5;">.</span><span>com</span></span></code></pre>
+<p><img src="/images/img_37c10f985e310f92.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/controltower/latest/userguide/aws-multi-account-landing-zone.html">https://docs.aws.amazon.com/controltower/latest/userguide/aws-multi-account-landing-zone.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/organizations/latest/userguide/services-that-can-integrate-account.html">https://docs.aws.amazon.com/ko_kr/organizations/latest/userguide/services-that-can-integrate-account.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223087309595/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] lock 동기화: Mutex, RwLock<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223087167228/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 모듈시스템과 계층구조 (File hierarchy)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

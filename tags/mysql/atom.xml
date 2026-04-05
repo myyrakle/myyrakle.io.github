@@ -1,0 +1,832 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - MySQL</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/mysql/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-02-05T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/mysql/atom.xml</id>
+    <entry xml:lang="en">
+        <title>MySQL 9.6에서 외래키 동작 방식이 변경됨.link</title>
+        <published>2026-02-05T00:00:00+00:00</published>
+        <updated>2026-02-05T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224172360740/"/>
+        <id>https://myyrakle.github.io/blog/224172360740/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224172360740/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blogs.oracle.com&#x2F;mysql&#x2F;no-more-hidden-changes-how-mysql-9-6-transforms-foreign-key-management&quot;&gt;https:&#x2F;&#x2F;blogs.oracle.com&#x2F;mysql&#x2F;no-more-hidden-changes-how-mysql-9-6-transforms-foreign-key-management&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] binlog 기반의 CDC 구현</title>
+        <published>2025-08-20T00:00:00+00:00</published>
+        <updated>2025-08-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223976356246/"/>
+        <id>https://myyrakle.github.io/blog/223976356246/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223976356246/">&lt;p&gt;MySQL은 binlog라는 로그 계층을 통해 WAL(Write Ahead Log)를 구현한다.&lt;&#x2F;p&gt;
+&lt;p&gt;따라서 이를 기반으로 쓰기 기록을 조회해서 복제나 CDC 시스템을 구현하는 것이 가능하다.&lt;br &#x2F;&gt;
+물론 postgres 등에 비하면 편의성 수준이 매우 낮고 구린 편이다...&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;bin-log-hwalseonghwa-sangtae-mic-seoljeong-hwagin&quot;&gt;BIN LOG 활성화 상태 및 설정 확인&lt;&#x2F;h2&gt;
+&lt;p&gt;binlog가 활성화되어있는지 확인하려면, 다음 쿼리를 날려보면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;show variables like&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;log_bin&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_06bd1959d3d2c4ae.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 ON이면 된다.&lt;br &#x2F;&gt;
+보통 기본값이 ON이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 상세한 옵션은 다음 명령으로 확인할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;SHOW VARIABLES LIKE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;binlog%&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_af49138aaeaccd45.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;저 기본값들 중에서 뭔가 수정하고 싶은게 있다면, config 파일을 수정하고 재시작하면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo vi&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &#x2F;&lt;&#x2F;span&gt;&lt;span&gt;etc&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&#x2F;&lt;&#x2F;span&gt;&lt;span&gt;my&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;cnf&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_973580a8c0709123.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;binlog-pail-hwagin&quot;&gt;binlog 파일 확인&lt;&#x2F;h2&gt;
+&lt;p&gt;안타깝게도, MySQL에는 postgres의 replication처럼 편리한 형태로 제공되는 log 동기화 매커니즘이 없다.&lt;br &#x2F;&gt;
+직접 로그파일 다 스캔하면서 뭐가 들어왔는지 봐야 한다...&lt;&#x2F;p&gt;
+&lt;p&gt;일단 파일이 뭐가 있는지부터 보자.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;show binary logs&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c9af0d9b68650f60.png&quot; alt=&quot;&quot; &#x2F;&gt;
+자. 2개의 파일이 있는 것을 볼 수 있다.&lt;br &#x2F;&gt;
+어디에 뭐가 들어있는지는 모르겠지만, 아무튼 저기에 이런저런 의미있는 데이터들이 기록이 되는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 저 log_name이 각각의 로그 식별자다. 저걸 사용해서 실제 로그 데이터에 접근해야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;rogeu-johoehagi&quot;&gt;로그 조회하기&lt;&#x2F;h2&gt;
+&lt;p&gt;로그는 방금 본 log name 기반으로 show binlog events 명령을 사용해서 조회할 수 있다.&lt;br &#x2F;&gt;
+조회 방식은 LIMIT OFFSET이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;SHOW BINLOG EVENTS IN&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;binlog.000001&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;SHOW BINLOG EVENTS IN&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;binlog.000001&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; from&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 914&lt;&#x2F;span&gt;&lt;span&gt; limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10&lt;&#x2F;span&gt;&lt;span&gt; # 그 다음 페이지 조회&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;SHOW BINLOG EVENTS limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10&lt;&#x2F;span&gt;&lt;span&gt; # 전체 로그 다 보기&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_42d975dec4431fb4.png&quot; alt=&quot;&quot; &#x2F;&gt;
+다음 페이지를 조회하려면 계속 End_log_pos 값을 그 다음 from에 넘겨주면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;byeongyeong-rogeu-hwagin&quot;&gt;변경 로그 확인&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터를 한번 넣어보고, 로그에 잘 뜨는지 한번 확인해보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f57304fb921533f7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b2a623861a10ee24.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그러면 아마 00001 로그는 시스템 내부 로그가 많아서 00002로그에서 노출될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런 식으로 간략하게 어떤 테이블에 대한 write를 했는지 정도만 알 수 있는데&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_141737115b007628.png&quot; alt=&quot;&quot; &#x2F;&gt;
+문제는 그 이상을 알 수 없다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;어떤 테이블에 뭔가 했는지는 알 수 있는데, 무슨 값을 넣었는지, 어떤 행을 지웠는지를 전혀 알 수가 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sabibdoen-silje-deiteo-johoehagi&quot;&gt;삽입된 실제 데이터 조회하기&lt;&#x2F;h2&gt;
+&lt;p&gt;실제 로그 데이터를 까서 어떤걸 넣었는지 보려면 mysqlbinlog를 써야만 한다.&lt;br &#x2F;&gt;
+일반적인 형태의 쿼리로는 아예 보는게 불가능하다...&lt;&#x2F;p&gt;
+&lt;p&gt;mysqlbinlog는 mysql 스택을 설치하면 함께 딸려온다.&lt;&#x2F;p&gt;
+&lt;p&gt;대충 이렇게 쓰면 된다.&lt;br &#x2F;&gt;
+DB 접속정보 넣고, 읽기 원하는 로그 정보 넣고 날린다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;mysqlbinlog&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;read&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;from&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;remote&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;server \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;host&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;port&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;3306&lt;&#x2F;span&gt;&lt;span&gt; \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;user&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;root&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;password&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;q1w2e3r4 \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;verbose&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;base64&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;output&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;DECODE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;ROWS \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  binlog&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;000002&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;mysqlbinlog&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;read&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;from&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;remote&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;server \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;host&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;port&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;3306&lt;&#x2F;span&gt;&lt;span&gt; \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;user&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;root&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;password&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;q1w2e3r4 \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;verbose&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;base64&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;output&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span&gt;DECODE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;ROWS \&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;  --&lt;&#x2F;span&gt;&lt;span&gt;start&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;position&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1407&lt;&#x2F;span&gt;&lt;span&gt; \ # 특정 BINLOG 포지션부터 조회&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;  binlog&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;000002&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8fa5fc877a10b268.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그러면 이렇게 뭐가 산만하게 날라오는데&lt;&#x2F;p&gt;
+&lt;p&gt;잘 찾아보면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a4991bd9e491c78f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+INSERT 로그를 확인할 수 있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 여러개를 한번에 날린다면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b9da8dbe676a9114.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ff2c26516a90727b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+한번에 묶어서 들어온다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 적당히 파싱해서 쓰도록 처리하면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;5.7&#x2F;en&#x2F;mysqlbinlog.html&quot;&gt;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;5.7&#x2F;en&#x2F;mysqlbinlog.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.4&#x2F;en&#x2F;show-binary-logs.html&quot;&gt;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.4&#x2F;en&#x2F;show-binary-logs.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.4&#x2F;en&#x2F;show-binlog-events.html&quot;&gt;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.4&#x2F;en&#x2F;show-binlog-events.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 초당 쓰기 처리량에 대한 글.link</title>
+        <published>2025-04-15T00:00:00+00:00</published>
+        <updated>2025-04-15T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223833333280/"/>
+        <id>https://myyrakle.github.io/blog/223833333280/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223833333280/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;sirupsen.com&#x2F;napkin&#x2F;problem-10-mysql-transactions-per-second&quot;&gt;https:&#x2F;&#x2F;sirupsen.com&#x2F;napkin&#x2F;problem-10-mysql-transactions-per-second&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 부분적 Unique 제약 만들기</title>
+        <published>2024-11-17T00:00:00+00:00</published>
+        <updated>2024-11-17T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223663435821/"/>
+        <id>https://myyrakle.github.io/blog/223663435821/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223663435821/">&lt;p&gt;PostgreSQL이나 MongoDB 같은 몇몇 DB들은 인덱스를 조건적으로 설정하는 훌륭한 Partial Index 기능을 제공한다. 이건 부분적인 Unique 제약을 거는 것에 굉장히 유용하다.&lt;br &#x2F;&gt;
+예를 들면 deleted_at이 null인 것에 대해서만 유일성을 건다거나 하는 상황 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 MySQL은 여러모로.. 후진적인 부분이 많은 DB라서 이런건 없다.&lt;br &#x2F;&gt;
+다만 약간 에둘러서 동작을 흉내낼 수는 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;위에서 언급했던 &quot;deleted_all이 null 인 것에만&quot; 인덱스 조건을 걸고 싶다면 expression index라는 조금 다른 대안을 응용해볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 이런 테이블이 있다면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE TABLE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; users&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    id integer PRIMARY KEY AUTO_INCREMENT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; VARCHAR&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;50&lt;&#x2F;span&gt;&lt;span&gt;) NOT NULL&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    email text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    deleted_at datetime&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;보통 이메일을 유일키로 걸고 싶을 것이다.&lt;br &#x2F;&gt;
+그런데 삭제된 user는 유일키 조건에서 제외하고 싶다면?&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE UNIQUE INDEX idx_email ON users&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(email&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; (CASE WHEN deleted_at IS NULL THEN&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; true&lt;&#x2F;span&gt;&lt;span&gt; ELSE NULL END))&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;좀 복잡해보이는데, 이런 식으로 걸면 된다.&lt;br &#x2F;&gt;
+두번째 인덱스 조건에다가는 특이하게도 표현식을 걸었는데, deleted_at가 null이면 true를 반환하고, 아니면 null을 반환하도록 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;알다시피 RDB들에서 유일키 항목 값에 null이 포함되면 그 유일키 제약은 반쯤 망가진다. 제약을 걸지 못하는 것이다. 그래서 저러면 deleted_at이 NULL인 것만 non-null 값이 들어가니 유일키가 동작한다.&lt;&#x2F;p&gt;
+&lt;p&gt;한번 돌려보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9f2d1cffb8153ee3.png&quot; alt=&quot;&quot; &#x2F;&gt;
+먼저 테이블과 인덱스를 만들고&lt;&#x2F;p&gt;
+&lt;p&gt;적당히 데이터를 던졌다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span&gt; 데이터 초기화&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;INSERT INTO&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; users&lt;&#x2F;span&gt;&lt;span&gt; (name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; email) &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;VALUES &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;Alice&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;alice.foo@gmail.com&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;Bob&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;bob.bar@gmail.com&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; 실패&lt;&#x2F;span&gt;&lt;span&gt; (유일키 제약에 걸림)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;INSERT INTO&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; users&lt;&#x2F;span&gt;&lt;span&gt; (name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; email) &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;VALUES &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;Bob&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;bob.bar@gmail.com&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; 성공&lt;&#x2F;span&gt;&lt;span&gt; (유일키 제약에 안걸림)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;INSERT INTO&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; users&lt;&#x2F;span&gt;&lt;span&gt; (name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; email&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; deleted_at) &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;VALUES &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;Bob&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;bob.bar@gmail.com&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; now&lt;&#x2F;span&gt;&lt;span&gt;())&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2a1878590f82a1b3.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 기대한 대로 잘 동작한다.&lt;&#x2F;p&gt;
+&lt;p&gt;partial index처럼 실제로 인덱스 크기를 줄이지도 못하고 사용법도 복잡한 편이지만, 어떻게 할 수는 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;76045795&#x2F;mysql-unique-index-constraint-only-when-another-column-is-null&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;76045795&#x2F;mysql-unique-index-constraint-only-when-another-column-is-null&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 계정 및 권한</title>
+        <published>2022-06-30T00:00:00+00:00</published>
+        <updated>2022-06-30T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222795334081/"/>
+        <id>https://myyrakle.github.io/blog/222795334081/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222795334081/">&lt;h2 id=&quot;gyejeong-mogrog-johoe&quot;&gt;계정 목록 조회&lt;&#x2F;h2&gt;
+&lt;p&gt;계정 목록은 mysql 특수 테이블 user를 통해 조회하거나 수정할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; from mysql&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;user&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_36824940f123a5a6.png&quot; alt=&quot;&quot; &#x2F;&gt;
+Select_priv는 select를 할 수 있는지 여부이고, Insert_priv 등도 동일하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gyejeong-saengseong&quot;&gt;계정 생성&lt;&#x2F;h2&gt;
+&lt;p&gt;계정은 create user 명령을 사용해 추가할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE USER&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;유저네임&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;%&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; IDENTIFIED BY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;패스워드&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4564b226b53c2bae.png&quot; alt=&quot;&quot; &#x2F;&gt;
+&#x27;%&#x27; 는 계정의 IP다. %는 모든 IP를 Open해주는 와일드카드다.&lt;br &#x2F;&gt;
+내부에서만 접속이 가능하게 하려면 localhost를 써주면 된다.&lt;br &#x2F;&gt;
+특정 IP에서만 로그인이 가능하게 하려면 그 IP를 적어주면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gyejeong-sagje&quot;&gt;계정 삭제&lt;&#x2F;h2&gt;
+&lt;p&gt;계정 삭제는 drop user 명령으로 처리할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;drop user&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;계정명&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;%&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ae875e25b42de28a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gweonhan-buyeo&quot;&gt;권한 부여&lt;&#x2F;h2&gt;
+&lt;p&gt;만약 방금 갓 만든 계정이라면 아무것도 할 수 없을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3dbadff8ee96c5bd.png&quot; alt=&quot;&quot; &#x2F;&gt;
+권한이 없기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;권한은 다음과 같은 형태로 부여가 가능하다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;GRANT 권한종류&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; ...&lt;&#x2F;span&gt;&lt;span&gt; ON 데이터베이스&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;테이블 TO&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;유저네임&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;%&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; WITH GRANT OPTION&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;만약 모든 권한을 주고싶다면 권한은 ALL PRIVILEGES를. 데이터베이스와 테이블은 와일드카드로 주면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;GRANT ALL PRIVILEGES ON&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *.*&lt;&#x2F;span&gt;&lt;span&gt; TO&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;유저네임&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;%&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; WITH GRANT OPTION&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;test라는 데이터베이스에 DELETE를 제외한 대부분의 권한을 주고 싶다면 이런 식으로 하면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;GRANT SELECT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; INSERT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; UPDATE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; DELETE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; CREATE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; RELOAD&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; PROCESS&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; REFERENCES&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; INDEX&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; ALTER&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; SHOW DATABASES&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; CREATE TEMPORARY TABLES&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; LOCK TABLES&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; EXECUTE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; REPLICATION SLAVE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; REPLICATION CLIENT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; CREATE VIEW&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; SHOW VIEW&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; CREATE ROUTINE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; ALTER ROUTINE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; CREATE USER&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; EVENT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; TRIGGER ON test&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span&gt; TO&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;유저네임&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;%&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; WITH GRANT OPTION&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gweonhan-cwiso&quot;&gt;권한 취소&lt;&#x2F;h2&gt;
+&lt;p&gt;부여했던 권한을 제거하려면 REVOKE를 사용하면 된다.&lt;br &#x2F;&gt;
+신택스는 GRANT와 거의 흡사하다. TO만 FROM으로 바뀔 뿐이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;REVOKE 권한종류&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; ...&lt;&#x2F;span&gt;&lt;span&gt; ON 데이터베이스&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;테이블 FROM&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;유저네임&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;%&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;만약 SELECT와 INSERT 권한만 빼앗고 싶다면 다음과 같이 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt; REVOKE SELECT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; INSERT ON&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *.*&lt;&#x2F;span&gt;&lt;span&gt; FROM&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;유저네임&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;@&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;%&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;원래 있던 것에&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f8b81eb57d54db25.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;REVOKE를 날리면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_beb7773fa1222315.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 도로 바뀐다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1679ba59d224cb04.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 이벤트 스케줄러</title>
+        <published>2021-08-10T00:00:00+00:00</published>
+        <updated>2021-08-10T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222464443396/"/>
+        <id>https://myyrakle.github.io/blog/222464443396/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222464443396/">&lt;p&gt;이벤트 스케줄러는 배치성 작업 쿼리를 날릴 때 유용한 MySQL의 자체 기능 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;실행할 쿼리와, 실행될 시간을 정해서 정해진 시간에 맞춰 특정 쿼리가 실행되도록 하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;대략적인 정의법은 아래와 같다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE EVENT 이벤트명&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ON SCHEDULE EVERY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;20&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt; MINUTE&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;STARTS&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;2021-06-25 20:21:27.000&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ON COMPLETION PRESERVE&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ENABLE&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;COMMENT&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;테스트용&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;DO &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;update foo &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;set bar&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;1234&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;where&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;위의 이벤트는 &#x27;2021-06-25 20:21:27.000&#x27;부터 시작해서 20분마다 DO 밑의 쿼리를 자동으로 실행시킬 거란 뜻이다.&lt;&#x2F;p&gt;
+&lt;p&gt;위의 MINUTE은 시간(DAY_HOUR), 초(SECOND), 일(DAY) 단위로도 바꿀 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.0&#x2F;en&#x2F;create-event.html&quot;&gt;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.0&#x2F;en&#x2F;create-event.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] LIMIT OFFSET 성능 튜닝</title>
+        <published>2021-07-12T00:00:00+00:00</published>
+        <updated>2021-07-12T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222428817459/"/>
+        <id>https://myyrakle.github.io/blog/222428817459/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222428817459/">&lt;p&gt;데이터 리스트를 뽑는 API를 구현한다면 보통 LIMIT OFFSET으로 페이지네이션 처리를 많이 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 MySQL에서는 무작정 Limit Offset만 쓰다가는 성능에서 손해를 많이 볼 수가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;정확히는, 데이터가 수십만개 이상으로 많은 상태에서 OFFSET이 뒤로 갈수록 느려지는 문제인데, 다른 DB는 어떤지 모르겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;한번 예시와 함께 살펴보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;테스트에 사용한 테이블에는 약 200백만개의 데이터가 들어있는 상태다.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 LIMIT OFFSET 쿼리를 한번 걸어보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_74a32d6178fc169a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ffc96e4fedcaaac4.png&quot; alt=&quot;&quot; &#x2F;&gt;
+약 5초가 걸렸다. 이건 원래 느릴만한 거라서 이정도는 걸릴 수 있는 쿼리다.&lt;br &#x2F;&gt;
+이 상태에서는 문제가 없으나&lt;&#x2F;p&gt;
+&lt;p&gt;오프셋이 뒤로 가면 문제가 생긴다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1b42412fec886e76.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_50735edd0bc88f8c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+세상에. 5초 걸리던게 18초가 걸렸다.&lt;br &#x2F;&gt;
+게다가 뒤로 갈수록 점점 더 느려진다.&lt;&#x2F;p&gt;
+&lt;p&gt;이게 왜 그런가 하면,&lt;br &#x2F;&gt;
+이러면 풀스캔을 때린 다음에 전부 정렬을 하고, LIMIT OFFSET으로 자르는데, 정렬 단계에서 성능 부하가 상당히 걸리기 때문이라고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;이걸 좀더 빠르게 개선하고 싶다면, 방법은 의외로 간단하다.&lt;br &#x2F;&gt;
+기존 쿼리를 통째로 서브쿼리로 감싸고, 뻥 조인 한번 해서 UNIQUE KEY로 인덱스를 타게 만들면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7bb65a238e6cd8f0.png&quot; alt=&quot;&quot; &#x2F;&gt;
+저기서 fake.id는 UNIQUE KEY다.&lt;br &#x2F;&gt;
+이러면 이제 그냥 풀스캔이 아니라 풀 인덱스 스캔을 태우게 돼서, 정렬시간이 크게 단축된다. 인덱스로 긁어오는 단계에서 이미 정렬을 처리할 수 있기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;자, 이제 8초밖에 걸리지 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e81580916fd75911.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여전히 뒤로갈수록 조금씩 느려지긴 하는데, 그 차이가 훨씬 좁아진다.&lt;&#x2F;p&gt;
+&lt;p&gt;다만, 인덱스 스캔이란게 범위가 크면 클수록 비효율적이다보니 이것도 임계점을 넘어가면 오히려 느려질 수도 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;elky84.github.io&#x2F;2018&#x2F;10&#x2F;05&#x2F;mysql&#x2F;&quot;&gt;https:&#x2F;&#x2F;elky84.github.io&#x2F;2018&#x2F;10&#x2F;05&#x2F;mysql&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 쿼리 최적화</title>
+        <published>2021-07-08T00:00:00+00:00</published>
+        <updated>2021-07-08T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222425090791/"/>
+        <id>https://myyrakle.github.io/blog/222425090791/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222425090791/">&lt;p&gt;MySQL은 다른 RDB들에 비해서 옵티마이저의 최적화 능력이 많이 부실한 편이다.&lt;br &#x2F;&gt;
+그래서 쿼리를 짤때마다 신경을 좀 많이 써줘야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;테스트에 사용할 테이블은 다음과 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_657f358cb84bccd5.png&quot; alt=&quot;&quot; &#x2F;&gt;
+상품 테이블. 아래 Brand의 참조키인 brand_id를 가진다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eb7df8ccb43c8d35.png&quot; alt=&quot;&quot; &#x2F;&gt;
+브랜드 테이블.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_616e64f462159135.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그리고 상품 테이블에 1:1 대응되는 아무개 테이블.&lt;br &#x2F;&gt;
+정렬에 사용할 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_772919e3acf14711.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 이것들을 이용해서 대강 다음과 같은 쿼리가 사용된다고 가정한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Something c &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; c&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;product_id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by c&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;value&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0d879a802d16bed9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;kweoripeulraen-bogi&quot;&gt;쿼리플랜 보기&lt;&#x2F;h2&gt;
+&lt;p&gt;쿼리플랜은 explain 키워드를 앞에다 붙이면 볼 수 있다.&lt;br &#x2F;&gt;
+실제로 쿼리가 어떤 방식으로 동작하고, 각각의 단계에서 비용이 얼마나 발생하는지를 알 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;explain &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Something c &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; c&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;product_id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by c&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;value&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a0d42b47222e523a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+여기서의 플랜을 보면,&lt;&#x2F;p&gt;
+&lt;p&gt;첫번째 항목은 Something이다. using filesort는 정렬을 한다는 것이고, rows를 보면 근 30만개나 가져온다.&lt;br &#x2F;&gt;
+이 쿼리에서는 정렬이 가장 비싼 동작이라서 먼저 Something을 긁어온 다음에 정렬하고, 베이스 테이블로 사용하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;두번째 항목은 Product다. 사용된 키는 PRIMARY라고 되어있으니, Something의 product_id로 Product의 id를 인덱싱해온다.&lt;&#x2F;p&gt;
+&lt;p&gt;세번째 항목은 Brand다. 마찬가지로 기본키로 인덱스가 잡혀있고, Product의 brand_id로 Brand의 id를 인덱싱해온다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 쿼리플랜 자체는 별다른 문제가 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;indegseu-hinteu-use-index&quot;&gt;인덱스 힌트 (use index)&lt;&#x2F;h2&gt;
+&lt;p&gt;앞서 말했듯, MySQL의 옵티마이저는 좀 멍청해서 직접 인덱스를 집어줘야 하는 경우가 많다.&lt;&#x2F;p&gt;
+&lt;p&gt;위의 경우에는 테이블 조인도 별로 없고, 인덱스도 별로 없어서 별 문제가 없었지만, 실 디비 작업을 하다보면 문제가 비 온 뒤의 대나무처럼 튀어나온다.&lt;&#x2F;p&gt;
+&lt;p&gt;특히 인덱스가 많을수록 분간을 못하는 게 많은 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 한번 들어보자. 아래 쿼리에서&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;popularity&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;Brand의 조인은 Brand의 기본키인 id를 조건으로 한다.&lt;br &#x2F;&gt;
+그러니 당연히 기본키 인덱스를 잡는 것이 가장 빠르고, 효율적이다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 이런 당연한걸 못잡을 때가 많다. 더 탐색률이 좋은 복합인덱스를 두고 구린 인덱스를 잡는다든지...&lt;br &#x2F;&gt;
+그럴 때는 다음과 같이 사용할 인덱스를 명시해줘야 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b use&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; index&lt;&#x2F;span&gt;&lt;span&gt;(PRIMARY)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt; Brand의 기본키를 사용하라&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;popularity&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;기본키는 다 PRIMARY로 쓰는데, 임의로 만든 인덱스면 그 인덱스 이름을 써주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 USE INDEX는 기본적으로 &#x27;권장&#x27;을 하는 것이지 강제를 하는건 아니다.&lt;br &#x2F;&gt;
+강제로 인덱스를 고정해주고 싶다면 FORCE INDEX를 사용해야 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b force&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; index&lt;&#x2F;span&gt;&lt;span&gt;(PRIMARY)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt; Brand의 기본키를&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; 사용하라&lt;&#x2F;span&gt;&lt;span&gt; (강제)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;popularity&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;쓸일이 잦지는 않지만 use index&#x2F;force index 뒤에 추가로 힌트를 더 달아줄 수도 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b force index for&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; join&lt;&#x2F;span&gt;&lt;span&gt;(PRIMARY)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt; join용으로 인덱스를 잡아라&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;popularity&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b force index for order&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; by&lt;&#x2F;span&gt;&lt;span&gt;(PRIMARY)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt; order by용으로 인덱스를 잡아라&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;popularity&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Brand b force index for group&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; by&lt;&#x2F;span&gt;&lt;span&gt;(PRIMARY)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt; group by용으로 인덱스를 잡아라&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;popularity&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;join-sunseo-gojeong-straight-join&quot;&gt;조인 순서 고정 (Straight_Join)&lt;&#x2F;h2&gt;
+&lt;p&gt;Straight_Join은 조인의 순서를 고정시키는 특수 키워드다.&lt;&#x2F;p&gt;
+&lt;p&gt;원래 옵티마이저는 조인문을 받으면 그걸 그대로 돌리는게 아니라, 아까 위에서 봤듯이 최대한 빠르게 돌릴 수 있는 방향으로 조인 순서를 막 뒤섞는다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고, 조인쿼리를 짜다보면 위의 Product 같은 베이스 테이블이 아니라 이후에 이어붙인 테이블의 컬럼으로 정렬조건을 사용할 일이 매우 잦다. 이럴 때는 인덱스만 있으면 알아서 최적화를 잡아줘야 하는데... 디비가 못해줄 때가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;내가 그럴때 가끔 사용한 방법은&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;조인 순서를 바꾸지 못하게 고정시킨 다음에,&lt;&#x2F;li&gt;
+&lt;li&gt;정렬조건으로 사용할 컬럼의 테이블을 먼저 select해서 정렬해오고,&lt;&#x2F;li&gt;
+&lt;li&gt;그 정렬을 유지시키는 것이다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;보기 좋은 방법은 아니지만 이걸로 괜찮은 효과를 좀 봤다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select straight_join a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.*&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;name&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; brand_name&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;from &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    from Brand &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    order by popularity&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt; &#x2F;* 먼저 정렬해서 읽어오기 *&#x2F;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;) b&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;join Product a&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;on a&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;brand_id&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;id&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;order by b&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;popularity&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 100&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.0&#x2F;en&#x2F;index-hints.html&quot;&gt;https:&#x2F;&#x2F;dev.mysql.com&#x2F;doc&#x2F;refman&#x2F;8.0&#x2F;en&#x2F;index-hints.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 데이터베이스 백업 및 복원하기</title>
+        <published>2020-07-06T00:00:00+00:00</published>
+        <updated>2020-07-06T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222022669146/"/>
+        <id>https://myyrakle.github.io/blog/222022669146/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222022669146/">&lt;p&gt;데이터베이스의 데이터들을 새로운 환경으로 복제할 필요가 있었다.&lt;br &#x2F;&gt;
+그럴때는 보통 덤프를 떠서 어떻게 전송해주고, 그걸로 업로드를 하는 편이 편리하다.&lt;&#x2F;p&gt;
+&lt;p&gt;테스트 환경은 라즈비안 -&amp;gt; 아마존 리눅스(레드햇),&lt;br &#x2F;&gt;
+DBMS는 mariadb다.&lt;&#x2F;p&gt;
+&lt;p&gt;먼저 덤프를 떠야한다.&lt;br &#x2F;&gt;
+mysqldump에 평소 접속하던대로 -u 사용자명, -p을 입력하고&lt;br &#x2F;&gt;
+추출할 DB or 테이블명, &#x27;&amp;gt; 출력파일명&#x27;을 쳐주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5e9c0334548df49e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 sql 형식으로 저장되어있던 데이터를 다 뽑아줄 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그걸 어떻게 어떻게 잘 주고받아서,  받는 측에서는 아래와 같이 올리면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ea3cdce730e7d4de.png&quot; alt=&quot;&quot; &#x2F;&gt;
+삽입될 DB명 &amp;lt; 삽입할 덤프파일&lt;br &#x2F;&gt;
+저기서 DB는 빈 DB라도 만들어줘야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 삽입된 DB로 들어가면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4b59d47df9af0188.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;복사된 테이블과 데이터들이 다 잘 들어가있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_11284fd92cfb4ffb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] Django 연동시 오류</title>
+        <published>2020-01-23T00:00:00+00:00</published>
+        <updated>2020-01-23T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221783449948/"/>
+        <id>https://myyrakle.github.io/blog/221783449948/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221783449948/">&lt;p&gt;forward&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221783448996&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221783448996&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] Django 연동하기</title>
+        <published>2020-01-20T00:00:00+00:00</published>
+        <updated>2020-01-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221779353807/"/>
+        <id>https://myyrakle.github.io/blog/221779353807/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221779353807/">&lt;p&gt;forward&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221779353193&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221779353193&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 예외 SSLException: closing inbound before receiving peer&#x27;s close_notify</title>
+        <published>2020-01-19T00:00:00+00:00</published>
+        <updated>2020-01-19T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221778029568/"/>
+        <id>https://myyrakle.github.io/blog/221778029568/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221778029568/">&lt;p&gt;MySQL을 그냥 연결하면 지속적으로 계속 터지는 예외다.&lt;&#x2F;p&gt;
+&lt;p&gt;이게... MySQL은 원래 기본설정이 SSL로 연결될 것을 요구해서 그런 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 데이터베이스 연동 URI에 GET 파라미터 형식으로 useSSL 값을 false로 설정해주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;환경마다 다르겠지만... 뭐, 이런 식으로 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_50dfa8a0647237a3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 윈도에서 utf8 설정.link</title>
+        <published>2020-01-09T00:00:00+00:00</published>
+        <updated>2020-01-09T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221765613468/"/>
+        <id>https://myyrakle.github.io/blog/221765613468/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221765613468/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;repacat.tistory.com&#x2F;19&quot;&gt;https:&#x2F;&#x2F;repacat.tistory.com&#x2F;19&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] C++ 연동 (Visual Studio)</title>
+        <published>2019-12-22T00:00:00+00:00</published>
+        <updated>2019-12-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221745294637/"/>
+        <id>https://myyrakle.github.io/blog/221745294637/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221745294637/">&lt;p&gt;forward&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;221538633662&quot;&gt;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;221538633662&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] Node.js 연동</title>
+        <published>2019-12-22T00:00:00+00:00</published>
+        <updated>2019-12-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221745294897/"/>
+        <id>https://myyrakle.github.io/blog/221745294897/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221745294897/">&lt;p&gt;forward&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;221660303374&quot;&gt;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;221660303374&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] JSP 연동</title>
+        <published>2019-12-22T00:00:00+00:00</published>
+        <updated>2019-12-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221745295376/"/>
+        <id>https://myyrakle.github.io/blog/221745295376/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221745295376/">&lt;p&gt;forward&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;221718412485&quot;&gt;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;221718412485&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] Rust 연동</title>
+        <published>2019-12-22T00:00:00+00:00</published>
+        <updated>2019-12-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221745345260/"/>
+        <id>https://myyrakle.github.io/blog/221745345260/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221745345260/">&lt;p&gt;forward&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221745344581&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221745344581&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[MySQL] 설치 및 시작 in Windows</title>
+        <published>2019-09-18T00:00:00+00:00</published>
+        <updated>2019-09-18T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221652064727/"/>
+        <id>https://myyrakle.github.io/blog/221652064727/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221652064727/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dev.mysql.com&#x2F;downloads&#x2F;windows&#x2F;installer&#x2F;8.0.html&quot;&gt;https:&#x2F;&#x2F;dev.mysql.com&#x2F;downloads&#x2F;windows&#x2F;installer&#x2F;8.0.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+위 링크에 들어가서 저걸 받는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_12dcbbc95b802948.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;노 땡스&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_63eb474b19a6c3b2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;그리고 받은 인스톨러를 실행시키면 설치 좀 하고 이렇게 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a169d58a1bafde69.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;특별한 이유 없으면 디폴트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e22c414322859a68.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d747713cbf083f55.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;예스&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_099f4dd0969b36df.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이제 execute를 누르면 설치가 시작된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_dd4d392bb06a9b6a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;시간이 10분정도 걸린다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6e6da0bdb61af2d2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+깔릴 동안에 국밥이나 먹고 오자&lt;&#x2F;p&gt;
+&lt;p&gt;다 되면 넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_324c1fafb706f921.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e7c7890e4e23810d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;특별한 이유 없으면 그냥 스탠다드로&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_25b2301f50934ac8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;특별한 이유 없으면 그냥 넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_31b5c6dbded31c78.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e090c5ed002ba6e7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;비밀번호 설정해주고 넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_946384587d6aae50.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1d9507c42c3d9736.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;이제 execute하면 설치된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f29c8ab4322d52ac.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_074790a198d6883f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이것도 한세월 걸린다.&lt;&#x2F;p&gt;
+&lt;p&gt;되면 넥스트 넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_dbd3cffa450325a0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;피니쉬. 이 인간들은 피니쉬가 뭔지 모르나?&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d8fe06128728d7ab.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_99806845e3362d8e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;비밀번호 체크하고 넥스트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_36645db00896f7f8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;익스큐트&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a7fbe74b0491bdeb.png&quot; alt=&quot;&quot; &#x2F;&gt;
+다되면 피니쉬&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f468ced46d2a8930.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그놈의 넥스트 진짜&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2617556c2dfa907a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이제 진짜 피니쉬&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f3a0f639c9dfccc6.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이제 뭐가 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eb4928d6f0802de3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;근데 뜬건 다 꺼도 된다.&lt;br &#x2F;&gt;
+커맨드로 먼저 mysql을 써보자.&lt;br &#x2F;&gt;
+대충 저 경로에 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c6113c55b8630263.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;편리한 사용을 위해 환경변수에 등록해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_86cb2176df9887e0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4fa544a11004adff.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이제 커맨드를 열고 저렇게 친다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ab8a4456a0786bb9.png&quot; alt=&quot;&quot; &#x2F;&gt;
+아까 설정해줬던 암호를 입력하자.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bc9a38f4f615430e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이렇게 잘 뜰 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;쿼리도 잘 먹는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1d0b905e419aa996.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;데이터 베이스 생성 및 접속&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_da53fc00795e786e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;테이블 생성&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_81285f0e43f4d6fd.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;테이블 구조 뷰&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c910c5255e966df6.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;튜플 삽입&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_95688dad91f34122.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;셀렉트 all&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5fcf4af8c0ac3721.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;여튼 잘된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;all-record.tistory.com&#x2F;93&quot;&gt;https:&#x2F;&#x2F;all-record.tistory.com&#x2F;93&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dog-developers.tistory.com&#x2F;20&quot;&gt;https:&#x2F;&#x2F;dog-developers.tistory.com&#x2F;20&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

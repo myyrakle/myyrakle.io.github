@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C++] 스마트 포인터: unique_ptr | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221805546474/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C++] 스마트 포인터: unique_ptr">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221805546474/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2020-02-12T00:00:00+00:00">
+    <meta property="article:tag" content="C++">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221805546474/">[C++] 스마트 포인터: unique_ptr</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-02-12T00:00:00+00:00"><time datetime="2020-02-12T00:00:00+00:00">2020.02.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="472 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C++</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221805546474" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트: "자원 관리와 스마트 포인터"<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/221805519374">https://m.blog.naver.com/sssang97/221805519374</a></p>
+<p>unique_ptr은 이름 그대로 유일성(unique)를 갖는 포인터다. 이 포인터의 포인터값은 복사될 수 없고, 하나의 unique_ptr 객체만이 하나의 포인터값을 쥐고 있을 수 있다.<br />
+이런걸 '소유권'이라고 부르곤 한다.</p>
+<p>근데 이렇게 소유권을 부여하는 것으로 얻을 수 있는 게 뭘까?<br />
+하나의 unique_ptr이 과감하게 할당을 해제해도, 그로 인해 dangling 포인터(유효하지 않은 포인터)가 발생하지 않을 거라는 보장이 생기는 것이다!<br />
+한놈만 쥐고 있는거니까.</p>
+<p>그리고 unique_ptr은 객체가 영역(scope)을 벗어나 자신의 소멸자가 호출될 때 자동으로 할당을 해제한다.<br />
+근데 영역을 넘나들게 하고 싶다면 어떨까? 그냥 영역에 갇힌 채로만 사용해야 하는 건가?<br />
+당연히 아니다. 그냥 C++11의 move semantic을 사용해 유일성을 보존한 채로 객체를 이동시키면 된다.</p>
+<p>백문불여일견이라, 코드부터 한번 봐보자.<br />
+일단 생성과 소멸을 확인하기 위해, 전용 래퍼 타입을 구현해봤다. 별건없다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p>그럼 이제 저걸로 스마트포인터를 써보자. unique_ptr은 템플릿 클래스다. 포인터의 원본타입을 템플릿 인자로 받는다.<br />
+그리고 생성자론 동적할당된 포인터값을 받는다.<br />
+게다가 *, -&gt; 등의 연산자가 정의되어있어 그냥 포인터와 마찬가지로 사용할 수 있다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+잘 돌아가는걸 볼 수 있다.<br />
+그리고 동적할당된 Int의 소멸자가 자동으로 호출됐다. main 함수가 종료되며 unique_ptr의 소멸자가 작동, 객체를 정리한 것이다.</p>
+<br>
+<p><strong>복사 금지</strong><br />
+그리고 앞서 언급했듯이, unique_ptr은 유일성을 보장한다. 따라서 복사는 불가능하다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+복사생성자와 복사할당연산자가 전부 삭제된 함수라 그렇다.<br />
+unique_ptr의 값을 동적으로 여기저기 넘기고 싶다면, 그냥 참조로 넘기거나 이동시켜야 한다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+자세한 것은 무브시맨틱 포스트들을 참조하길 바란다.<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/221472346738">https://m.blog.naver.com/sssang97/221472346738</a></p>
+<br>
+<p><strong>복사의 예외?</strong><br />
+unique_ptr의 복사는 원천적으로 금지되어있지만, 한가지 예외가 존재한다.<br />
+바로 함수의 반환값 최적화(Return Value Optimization)로 날라온 값은 받을 수 있다는 것이다.<br />
+반환값 최적화가 수행되는 함수의 반환값은, 사실상 이동으로 넘어오기 때문이다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+그래서 이럴때는 굳이 반환타입을 &amp;&amp;로 해놓고 이동을 사용할 필요가 없다.</p>
+<br>
+<p><strong>포인터의 생존 확인</strong><br />
+unique_ptr는 이동시키면 원본 포인터 객체가 죽는다. 하지만 내부 객체가 날라가는 거지, 사용이 불가능해지는 건 아니라, 유효성을 체크해야 할 수도 있다.<br />
+포인터 객체의 생사 확인은 bool 캐스팅으로 해결할 수 있다.<br />
+이런식으로.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<br>
+<p><strong>성능?</strong><br />
+unique_ptr의 성능은 일반 포인터와 거의 같다고 보면 된다.<br />
+그냥 소멸자에서 delete해주는게 다라서,<br />
+추가로 메모리를 먹는 것도 없고... 그냥 가볍게 사용해도 무난하다.</p>
+<br>
+<p><strong>좀 더 편리한 생성: make_unique</strong><br />
+위에선 스마트포인터를 생성할때, 생성자 인자로 직접 new를 해서 보내줬었다.<br />
+근데 꼭 그럴 필요가 있는걸까?<br />
+게다가 저러면 타입 표현이 중복된다.<br />
+<strong>unique_ptr&lt;<strong><strong>Int</strong></strong>&gt; p(new <strong><strong>Int</strong></strong>(99));</strong><br />
+제너릭 인자로 Int 하나, 또 new할때 Int 하나.<br />
+보기에 썩 좋지는 않다.</p>
+<p>make_unique는 이러한 표현을 좀더 간소화해주는 생성용 함수다.<br />
+제너릭 인자로 타입을 써주고, 함수 인자에는 생성자의 인자들만 가변인자로 보내주면 된다.<br />
+그러면 알아서 내부적으로 new 생성해준다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+아 근데 이건 C++14부터 제공된다.</p>
+<p>이외에도 여러가지 기능이 있으니 자세한 사항은 문서를 참조하길 바란다.</p>
+<p>unique_ptr 규격 참조<br />
+<a rel="external" href="https://en.cppreference.com/w/cpp/memory/unique_ptr">https://en.cppreference.com/w/cpp/memory/unique_ptr</a></p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221805519374/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C++] 자원 관리와 스마트 포인터<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221805985226/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] 스마트 포인터: shared_ptr<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

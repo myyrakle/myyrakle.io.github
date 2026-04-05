@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[LLM] Function Call (with Gemini) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223828976297/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[LLM] Function Call (with Gemini)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223828976297/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-04-10T00:00:00+00:00">
+    <meta property="article:tag" content="LLM">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223828976297/">[LLM] Function Call (with Gemini)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-10T00:00:00+00:00"><time datetime="2025-04-10T00:00:00+00:00">2025.04.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="365 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/llm/">LLM</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223828976297" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Function Call은 OpenAI에서 처음 공개한 LLM 기반 개발 방법론 중 하나다.</p>
+<p>LLM을 기반으로 기능을 개발하려고 하다보면, 입력과 출력이 자유로운 문자열이라서 개발에 난항을 겪을 수 있다. Function Call은 이러한 과정을 구조화하기 위해 나온 것이라 할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-gaenyeom">기본 개념</h2>
+<p>Function Call의 기본 개념은 별게 없다.<br />
+LLM의 요청과 응답을 함수처럼 구조화된 형태로 소통하게 하는 것이다.</p>
+<p><img src="/images/img_036ffac4a4a891d9.png" alt="" />
+Flow는 대략 이렇다.</p>
+<ol>
+<li>Function Call로 함수들을 정의해서 LLM에 요청하면</li>
+<li>LLM이 문맥에 맞는 함수를 선택하고, 함수의 정의에 맞춰서 구조화된 형태로 값을 넘겨준다. 이걸 함수와 인자라고 부른다.</li>
+<li>이 상태에서 정보가 충분하다면 선택된 함수와 인자값을 사용해서 그대로 쓰고 끝내거나</li>
+<li>LLM에 함수 기반으로 값을 조립해서 다시 요청을 보낼 수도 있다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="hangye">한계</h2>
+<p>MCP와 다르게 Function Call은 표준화된 인터페이스 같은게 아니다.<br />
+그래서 Function Calling의 기능 형태나 입력/출력 형식은 LLM 제공사마다 다를 수 있다.<br />
+여기서는 Gemini의 예시만 들어보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongrye-gemini-2-flash">사용례 (Gemini 2 Flash)</h2>
+<p>여기서는 Gemini를 기반으로 Function Call의 작동 형태를 한번 훑어보겠다.</p>
+<p><img src="/images/img_3c2712bdd768e060.png" alt="" />
+Gemini 문서에 따르면 Gemini의 Function Call은 이런 구조를 가진다.</p>
+<p>사용 언어는 파이썬이다.<br />
+필수 모듈부터 깔아주고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>uv add google google</span><span style="color: #94E2D5;">.</span><span>genai</span></span></code></pre>
+<p><img src="/images/img_698c71e59a6235a3.png" alt="" /></p>
+<p>코드를 작성해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>from google</span><span style="color: #94E2D5;">.</span><span>genai</span><span style="color: #CBA6F7;"> import</span><span> types</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">from</span><span> google import genai</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>API_KEY = </span><span style="color: #A6E3A1;">&quot;키값&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Define a function that the model can call to control smart lights</span></span>
+<span class="giallo-l"><span>set_light_values_declaration = </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;name&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;set_light_values&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;description&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;Sets the brightness and color temperature of a light.&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;parameters&quot;</span><span>: {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;type&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;object&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;properties&quot;</span><span>: {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;brightness&quot;</span><span>: {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;type&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;integer&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;description&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;Light level from 0 to 100. Zero is off and 100 is full brightness&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;color_temp&quot;</span><span>: </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;type&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;string&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;enum&quot;</span><span>: [</span><span style="color: #A6E3A1;">&quot;daylight&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;cool&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;warm&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">                &quot;description&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;Color temperature of the light fixture, which can be `daylight`, `cool` or `warm`.&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            },</span></span>
+<span class="giallo-l"><span>        }</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;required&quot;</span><span>: [</span><span style="color: #A6E3A1;">&quot;brightness&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;color_temp&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    }</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># This is the actual function that would be called based on the model</span><span style="color: #A6E3A1;">&#39;s suggestion</span></span>
+<span class="giallo-l"><span>def set_light_values(brightness: int</span><span style="color: #9399B2;">,</span><span> color_temp: str) -&gt; dict[str</span><span style="color: #9399B2;">,</span><span> int | str]:</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;&quot;&quot;Set the brightness and color temperature of a room light. (mock API).</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    Args:</span></span>
+<span class="giallo-l"><span>        brightness: Light level</span><span style="color: #CBA6F7;"> from</span><span> 0 to 100. Zero is off and 100 is full brightness</span></span>
+<span class="giallo-l"><span>        color_temp</span><span style="color: #9399B2;">:</span><span> Color temperature</span><span style="color: #CBA6F7;"> of</span><span> the light fixture</span><span style="color: #9399B2;">,</span><span> which can be</span><span style="color: #A6E3A1;"> `daylight`</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> `cool`</span><span> or</span><span style="color: #A6E3A1;"> `warm`</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    Returns</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        A dictionary containing the set brightness and color temperature</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;&quot;&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    return {&quot;</span><span>brightness</span><span style="color: #A6E3A1;">&quot;: brightness, &quot;</span><span>colorTemperature</span><span style="color: #A6E3A1;">&quot;: color_temp}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">br</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Generation Config with Function Declaration</span></span>
+<span class="giallo-l"><span>tools = types.Tool(function_declarations=[set_light_values_declaration])</span></span>
+<span class="giallo-l"><span>config = types.GenerateContentConfig(tools=[tools])</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Configure the client</span></span>
+<span class="giallo-l"><span>client = genai.Client(api_key=API_KEY)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Define user prompt</span></span>
+<span class="giallo-l"><span>contents = [</span></span>
+<span class="giallo-l"><span>    types.Content(</span></span>
+<span class="giallo-l"><span>        role=&quot;user&quot;, parts=[types.Part(text=&quot;Turn the lights down to a romantic level&quot;)]</span></span>
+<span class="giallo-l"><span>    )</span></span>
+<span class="giallo-l"><span>]</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Send request with function declarations</span></span>
+<span class="giallo-l"><span>response = client.models.generate_content(</span></span>
+<span class="giallo-l"><span>    model=&quot;gemini-2.0-flash&quot;, config=config, contents=contents</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Extract tool call details</span></span>
+<span class="giallo-l"><span>tool_call = response.candidates[0].content.parts[0].function_call</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(tool_call)</span></span></code></pre>
+<p>하나씩 뜯어보자면</p>
+<p><img src="/images/img_b778ee67e2355522.png" alt="" />
+이게 우리가 Gemini에 요구하는 함수의 정의다.<br />
+함수 이름, 설명, 파라미터를 정의했다.<br />
+설명을 읽어서 해당 함수가 요구하는 것을 LLM이 인지할 것이고, 파라미터의 정의에 맞춰서 값들을 넘겨줄 것이다.</p>
+<p>그리고 저 함수의 정의와 함께 요청을 보낸다.</p>
+<p><img src="/images/img_03034c148fcb6c6b.png" alt="" />
+낭만적인 밝기와 온도를 알려달라고 했다.<br />
+그러면 그 요구사항에 맞춰서 용도에 맞는 함수를 알아서 선택하고, 그에 맞는 인자값도 넣어서 응답으로 보내주는 것이다.</p>
+<p>그러면</p>
+<p><img src="/images/img_597350247c284ad6.png" alt="" />
+이런 식으로 응답이 온다.</p>
+<br>
+<p><img src="/images/img_2408d3bab1e0e700.png" alt="" />
+이후에는 적당히 비슷하게 유틸 함수 만들어서 호출하고 그 응답을 가공하는 식으로 쓰면 된다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># Extract tool call details</span></span>
+<span class="giallo-l"><span>tool_call</span><span style="color: #94E2D5;"> =</span><span> response</span><span style="color: #94E2D5;">.</span><span>candidates[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #94E2D5;">.</span><span>content</span><span style="color: #94E2D5;">.</span><span>parts[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #94E2D5;">.</span><span>function_call</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">print</span><span>(tool_call)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">if</span><span> tool_call</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #94E2D5;"> ==</span><span style="color: #A6E3A1;"> &quot;set_light_values&quot;</span><span>:</span></span>
+<span class="giallo-l"><span>    result</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> set_light_values</span><span>(</span><span style="color: #94E2D5;">**</span><span>tool_call</span><span style="color: #94E2D5;">.</span><span>args)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    print</span><span>(f</span><span style="color: #A6E3A1;">&quot;Function execution result: {result}&quot;</span><span>)</span></span></code></pre>
+<p><img src="/images/img_3e5617c245079b10.png" alt="" /></p>
+<p><img src="/images/img_8d254df470002bdd.png" alt="" />
+이런 식으로 말이다.</p>
+<p>그리고 이후에 컨텍스트를 이어가고 싶다면 저 응답값을 이용해서 또 뭔가를 하면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://huggingface.co/docs/hugs/guides/function-calling">https://huggingface.co/docs/hugs/guides/function-calling</a><br />
+<a rel="external" href="https://dev.to/fotiecodes/function-calling-vs-model-context-protocol-mcp-what-you-need-to-know-4nbo">https://dev.to/fotiecodes/function-calling-vs-model-context-protocol-mcp-what-you-need-to-know-4nbo</a><br />
+<a rel="external" href="https://www.promptingguide.ai/applications/function_calling">https://www.promptingguide.ai/applications/function_calling</a><br />
+<a rel="external" href="https://ai.google.dev/gemini-api/docs/function-calling?hl=ko&amp;example=meeting#python_1">https://ai.google.dev/gemini-api/docs/function-calling?hl=ko&amp;example=meeting#python_1</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223828946151/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 인덱스 최적화: 커버링 인덱스와 분포, 순서<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223827361065/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[LLM] MCP<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

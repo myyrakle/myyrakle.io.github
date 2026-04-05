@@ -1,0 +1,1562 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - SQL</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/sql/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2024-07-31T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/sql/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[SQL] 커버링 인덱스 (Covering Index)</title>
+        <published>2024-07-31T00:00:00+00:00</published>
+        <updated>2024-07-31T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223531204143/"/>
+        <id>https://myyrakle.github.io/blog/223531204143/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223531204143/">&lt;p&gt;커버링 인덱스는 특정 쿼리에 컴팩트하게 최적화된 인덱스를 구성하는 것을 말한다.&lt;&#x2F;p&gt;
+&lt;p&gt;한번 직접 돌려보면서 알아보자. 환경은 PostgreSQL이나, RDB들은 그 원리가 거의 같다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gibon-indegseu&quot;&gt;기본 인덱스&lt;&#x2F;h2&gt;
+&lt;p&gt;일단 간단한 테이블을 만들어서 적당한 테스트셋을 랜덤으로 만들어보겠다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE TABLE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    id SERIAL PRIMARY KEY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    rand int&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    n int&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;insert into&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt;(rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; n)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; floor&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;random&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 500001&lt;&#x2F;span&gt;&lt;span&gt;)::integer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; t&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;n  &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;from&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; generate_series&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10000000&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; n&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; t&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_061b433c145fc2f2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+행 1000만에 랜덤 숫자 50만이니, 확률적으로 랜덤 숫자 하나당 20개 정도 물린다고 볼 수 있겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;저대로 그냥 적당히 필터를 해보면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;explain&lt;&#x2F;span&gt;&lt;span&gt;(analyze) select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; from buldak where rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 5640&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ae40acecd5f0afe0.png&quot; alt=&quot;&quot; &#x2F;&gt;
+당연히 풀스캔을 떄릴 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 인덱스를 만들면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create index foo on&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt;(rand)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6e4c63253b1270b4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그때부터는 인덱스가 껄려서 빨라진다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_377d68e769019fd2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;단일 컬럼으로만 필터링해도 충분한 그런 사례에서는 별로 신경쓸 것이 없다.&lt;br &#x2F;&gt;
+하지만 일반적인 비즈니스 서비스는 저 정도로는 턱도 없고, 보통은 굉장히 복잡한 필터링이 요구될 때가 많다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;dajung-keolreom-indegseu&quot;&gt;다중 컬럼 인덱스&lt;&#x2F;h2&gt;
+&lt;p&gt;컬럼이 2개 이상이 되면 그때부터 고민을 해야할 시기가 온다.&lt;&#x2F;p&gt;
+&lt;p&gt;먼저 테스트데이터를 적당히 쌓아보자.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE TABLE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; rust&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    id SERIAL PRIMARY KEY&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    narrow_rand int&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    wide_rand int&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    n int&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;insert into&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; rust&lt;&#x2F;span&gt;&lt;span&gt;(wide_rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; narrow_rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; n)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; floor&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;random&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10001&lt;&#x2F;span&gt;&lt;span&gt;)::integer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; floor&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;random&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 51&lt;&#x2F;span&gt;&lt;span&gt;)::integer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; t&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;n  &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;from&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; generate_series&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10000000&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; n&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; t&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a1f23075dc657ad2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이번에는 비중을 좀 다르게 했다.&lt;br &#x2F;&gt;
+wide에는 랜덤 폭을 늘여놔서 인덱싱이 좀더 빠르게 타게끔 했고, narrow는 사실상 인덱스가 무의미할 정도로 분포시켰다.&lt;&#x2F;p&gt;
+&lt;p&gt;저대로 그냥 조회하면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;explain&lt;&#x2F;span&gt;&lt;span&gt;(analyze) select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; from rust where wide_rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 400&lt;&#x2F;span&gt;&lt;span&gt; and narrow_rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 45&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d804e887a5901650.png&quot; alt=&quot;&quot; &#x2F;&gt;
+당연히 다 풀스캔만 때릴 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 먼저 narrow=&amp;gt;wide 순서로 구성된 복합인덱스를 만들어보겠다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;DROP INDEX IF EXISTS asdf&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE INDEX asdf ON&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; rust&lt;&#x2F;span&gt;&lt;span&gt; (narrow_rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; wide_rand)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_30f6e45d999dd361.png&quot; alt=&quot;&quot; &#x2F;&gt;
+인덱스는 잘 걸렸고, 0.06초 정도가 걸린다.&lt;&#x2F;p&gt;
+&lt;p&gt;반대 순서로 걸면 어떨까?&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;DROP INDEX IF EXISTS asdf&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE INDEX asdf ON&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; rust&lt;&#x2F;span&gt;&lt;span&gt; (wide_rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; narrow_rand)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_63901176412d9ce8.png&quot; alt=&quot;&quot; &#x2F;&gt;
+0.03초로 조금 더 빨라진 성능을 보여준다.&lt;br &#x2F;&gt;
+극적인 결과를 보이려면 더 조정을 해야할텐데, 귀찮아서 이 정도까지만 했다.&lt;&#x2F;p&gt;
+&lt;p&gt;먼저 wide로 인덱스를 거는게 더 좁은 범위로 잡고 스캔을 시작할 수 있기 때문이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;order-by-jeol&quot;&gt;Order By 절&lt;&#x2F;h2&gt;
+&lt;p&gt;이번에는 Order by 같은 부가적인 Select 연산에 대해서 최적화 사례를 들어보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;테스트데이터는 맨 위에서 쓴 테이블을 재사용한다.&lt;br &#x2F;&gt;
+먼저 데이터 세팅부터 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;delete&lt;&#x2F;span&gt;&lt;span&gt; from buldak&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create index&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; if&lt;&#x2F;span&gt;&lt;span&gt; not exists foo on&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt;(rand)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;insert into&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt;(rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; n)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; floor&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;random&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10001&lt;&#x2F;span&gt;&lt;span&gt;)::integer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; t&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;n  &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;from&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; generate_series&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10000000&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; n&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; t&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4c9ef1234d248947.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이번에는 필터-&amp;gt;정렬 같은 복합 연산에 대해서 어떻게 인덱싱을 해야할지 정리해보겠다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;explain&lt;&#x2F;span&gt;&lt;span&gt;(analyze) select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; from buldak where rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 5640&lt;&#x2F;span&gt;&lt;span&gt; order by n desc limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cbd1e3e7f29d5ef6.png&quot; alt=&quot;&quot; &#x2F;&gt;
+적당히 짜봤다.&lt;br &#x2F;&gt;
+당연히 인덱스가 있긴 있어서 타긴 타는데, 뭔가 체크가 많고 연산이 많다.&lt;br &#x2F;&gt;
+실행시간도 1초가 넘게 나왔다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기에 대해서 커버링 인덱스를 구성하려면, 이런 식으로 넣어줘야 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE INDEX bar ON&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt; (rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; n DESC)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_075de632eee3699b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+먼저 rand로 필터하고, n으로 내림차순 정렬을 처리할 수 있는 인덱스다. 항상 WHERE가 먼저고, ORDER가 그 다음임을 기억하길 바란다.&lt;br &#x2F;&gt;
+그리고 정렬까지 고려해야 최적의 케이스로 인덱스를 타니 유의한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러고 나서 다시 날려보면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;explain&lt;&#x2F;span&gt;&lt;span&gt;(analyze) select&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; *&lt;&#x2F;span&gt;&lt;span&gt; from buldak where rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 5640&lt;&#x2F;span&gt;&lt;span&gt; order by n desc limit&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_74a54ae607d37680.png&quot; alt=&quot;&quot; &#x2F;&gt;
+깔끔하게 인덱스를 타고, 성능도 0.03으로 매우 시원하게 나온는 것을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;group-by-jeol&quot;&gt;Group By 절&lt;&#x2F;h2&gt;
+&lt;p&gt;Group By 절도 Order By 절과 양상이 크게 다르지는 않다.&lt;br &#x2F;&gt;
+그저 필터 순서가 WHERE =&amp;gt; GROUP BY =&amp;gt; ORDER BY 순서로 이뤄진다는 것 정도만 알아두면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;drop index&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; if&lt;&#x2F;span&gt;&lt;span&gt; exists foo&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;drop index&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; if&lt;&#x2F;span&gt;&lt;span&gt; exists bar&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;인덱스 없이 쌩으로 조회하면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;explain&lt;&#x2F;span&gt;&lt;span&gt;(analyze) select rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; count&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span&gt;) from buldak where n&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1000&lt;&#x2F;span&gt;&lt;span&gt; group by rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b5fe00ff1aaa77a3.png&quot; alt=&quot;&quot; &#x2F;&gt;
+당연히 어지럽게 풀스캔때리고 이상한 짓거리들을 잔뜩 할 것이다.&lt;br &#x2F;&gt;
+실행시간도 0.2초 정도 나왔다.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 단일 인덱스만 만들면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE INDEX foo ON&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt; (n)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5cceb9d67ff3bb64.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그것만 해도 일단 group 하기 전에 스캔하는 것 자체를 인덱스로 가져오니 꽤 빨라지긴 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기서 더 최적화를 해주려면, Group by 절까지 포함해서 인덱스를 걸어줘야 한다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;CREATE INDEX bar ON&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; buldak&lt;&#x2F;span&gt;&lt;span&gt; (n&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; rand)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_46285a56e352aa62.png&quot; alt=&quot;&quot; &#x2F;&gt;
+데이터 형태가 딱 그렇게 맞지 않아서 큰 차이가 나지는 않긴 하는데, 옵티마이저도 새로 만든 인덱스를 골랐고, 약간 더 빨라졌다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;select-jeol-coejeoghwa&quot;&gt;Select 절 최적화&lt;&#x2F;h2&gt;
+&lt;p&gt;이렇게까지는 잘 안하긴 하는데, 좀더 최적화를 한다면 include 인덱스라고 해서 Select 절 까지도 최적화를 할 수 있다. 이건 마지막 프로세스다.&lt;&#x2F;p&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222148841925&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222148841925&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;jojoldu.tistory.com&#x2F;476&quot;&gt;https:&#x2F;&#x2F;jojoldu.tistory.com&#x2F;476&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[PostgreSQL] password 변경</title>
+        <published>2023-10-15T00:00:00+00:00</published>
+        <updated>2023-10-15T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223236935823/"/>
+        <id>https://myyrakle.github.io/blog/223236935823/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223236935823/">&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;ALTER USER 유저네임 WITH PASSWORD&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;패스워드&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_776dd058489243eb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 외래키(Foreign Key)</title>
+        <published>2021-04-17T00:00:00+00:00</published>
+        <updated>2021-04-17T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222313734688/"/>
+        <id>https://myyrakle.github.io/blog/222313734688/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222313734688/">&lt;p&gt;외래키는 테이블에서 다른 테이블의 값을 참조할 때, 이를 검증하기 위해 사용하는 기능이다.&lt;&#x2F;p&gt;
+&lt;p&gt;쓰지 않아도 참조를 하는 것 자체에는 문제가 없지만, 정합성을 강조할 수 있고, 참조대상값이 바뀌는 것에 대해서 무언가 확실한 보장을 할 수 있다는 장점이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;성능 때문에 이걸 써야 하는지에 대해 사람들마다 좀 의견이 갈리는 부분이 있는데, 일단 그런건 차치하고 기능적인 부분부터 다뤄보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;게시판을 구현하기 위해 사용자와 포스트에 대한 테이블을 설계한다고 가정하겠다.&lt;br &#x2F;&gt;
+외래키를 고려하지 않고 짠다면 대충 아래와 같은 구조가 될 것이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span&gt; 사용자 테이블&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create table tb_user&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    id serial&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    name text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    primary&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; key&lt;&#x2F;span&gt;&lt;span&gt;(id)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span&gt; 사용자가 작성한 포스트 테이블&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create table tb_post&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    id serial&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    title text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    content text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    writer_id int&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    primary&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; key&lt;&#x2F;span&gt;&lt;span&gt;(id)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;여기서 tb_post의 writer_id 컬럼이 바로 tb_user의 id를 가리키는 사실상의 외래키 컬럼이다.&lt;br &#x2F;&gt;
+따로 외래키 설정을 하지 않고 그냥 그때그때 조인해서 써도 사용에는 문제가 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 중간에 가리키고 있는 tb_user의 값이 갑자기 삭제되거나 변경돼도 직관적으로 파악하고 대응할 수 없다는 단점이 있다.&lt;br &#x2F;&gt;
+tb_user의 값을 삭제할때마다 직접 이걸 참조하는 tb_post 등의 테이블에서 writer_id 값을 어떻게 할지 수동으로 처리해줘야 하는 것이다.&lt;br &#x2F;&gt;
+게다가 참조키값으로 존재하지도 않는 이상한 키값을 넣는 것도 막을 수가 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;외래키 기능은 이에 대한 편의를 제공해준다.&lt;br &#x2F;&gt;
+외래키의 선언은 다음과 같이 할 수 있다.&lt;br &#x2F;&gt;
+**foreign key(현재 테이블 컬럼) references tb_user(참조할 테이블 컬럼)**이다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span&gt; 사용자 테이블&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create table tb_user&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    id serial&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    name text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    primary&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; key&lt;&#x2F;span&gt;&lt;span&gt;(id)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;--&lt;&#x2F;span&gt;&lt;span&gt; 사용자가 작성한 포스트 테이블&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;create table tb_post&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    id serial&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    title text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    content text&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    writer_id int&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    primary&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; key&lt;&#x2F;span&gt;&lt;span&gt;(id)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    foreign&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; key&lt;&#x2F;span&gt;&lt;span&gt;(writer_id) references&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; tb_user&lt;&#x2F;span&gt;&lt;span&gt;(id)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그럼 일단 참조관계를 파악하기도 직관적이고, 아래와 같은 이상한 참조값 삽입도 막을 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e3510ab4bf6bef15.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;on-delete-sogseong&quot;&gt;ON DELETE 속성&lt;&#x2F;h2&gt;
+&lt;p&gt;이건 외래키로 삭제에 대한 제약이나 트리거를 걸어주는 기능이다.&lt;&#x2F;p&gt;
+&lt;p&gt;예시 테이블의 경우를 들면, tb_user 값을 delete할때, 해당 값을 참조하는 tb_post가 있을 때 어떻게 반응할지를 정의하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;Cascade, Set null, Set default, Restrict, No Action의 다섯가지 옵션을 제공하고, 기본값은 No Action이다.&lt;&#x2F;p&gt;
+&lt;p&gt;cascade는 tb_user가 삭제되면 참조하는 tb_post도 전부 삭제하는 것이고,&lt;br &#x2F;&gt;
+set null은 writer_id를 null로 설정하는 것,&lt;br &#x2F;&gt;
+set detault는 writer_id를 디폴트값으로 설정하는 것,&lt;br &#x2F;&gt;
+restrict는 그낭 tb_user의 삭제를 막는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;restrict의 경우에만 한번 테스트를 해보겠다.&lt;br &#x2F;&gt;
+우선 on delete를 적용해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_36f26db69be9b790.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;만약 이렇게 값이 있고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_230d7c93f8002b2e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;참조되고 있는 tb_user 1을 삭제하려고 한다면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c1b5422960aa11b2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+원천 차단해버린다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;on-update-sogseong&quot;&gt;ON UPDATE 속성&lt;&#x2F;h2&gt;
+&lt;p&gt;이것도 ON DELETE와 맥락이 같고, 제공되는 속성도 Cascade, Set null, Set default, Restrict, No Action 다섯개로 동일하다. 기본값은 No Action이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이건 참조하고 있는 컬럼값이 바뀔 경우에. 그러니까 이 경우엔 tb_user의 id값이 바뀔 경우에 tb_post의 writer_id값을 어떻게 할지를 지정해주는 기능이다.&lt;&#x2F;p&gt;
+&lt;p&gt;cascade는 그냥 바꾼 값으로 tb_post에서도 다시 똑같이 바꿔주고,&lt;br &#x2F;&gt;
+set null은 writer_id를 null로 설정하는 것,&lt;br &#x2F;&gt;
+set detault는 writer_id를 디폴트값으로 설정하는 것,&lt;br &#x2F;&gt;
+restrict는 그낭 변경을 막는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이번엔 cascade로 한번 돌려보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_59c4e70aa9764a71.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;데이터는 이전과 동일하게 들어있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b91aeceed8275072.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;만약 1의 값을 11111로 바꾼다면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9cc23063fe40de90.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;참조하고 있던 tb_post에서도 바뀔 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3105e8513489be3d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;대충 그때그때 잘 쓰면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;bamdule.tistory.com&#x2F;45&quot;&gt;https:&#x2F;&#x2F;bamdule.tistory.com&#x2F;45&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;39388912&#x2F;does-adding-a-foreign-key-to-an-indexed-column-boost-performance&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;39388912&#x2F;does-adding-a-foreign-key-to-an-indexed-column-boost-performance&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.postgresql.org&#x2F;docs&#x2F;9.4&#x2F;performance-tips.html&quot;&gt;https:&#x2F;&#x2F;www.postgresql.org&#x2F;docs&#x2F;9.4&#x2F;performance-tips.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 인덱스 튜닝: Right Growing Index</title>
+        <published>2021-01-25T00:00:00+00:00</published>
+        <updated>2021-01-25T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222218761408/"/>
+        <id>https://myyrakle.github.io/blog/222218761408/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222218761408/">&lt;p&gt;일반적으로 기본키나 인덱스값들엔 증가하는 값을 넣을 때가 몹시 많다.&lt;&#x2F;p&gt;
+&lt;p&gt;mysql의 경우엔 auto_increment를 쓰고,&lt;br &#x2F;&gt;
+다른 rdb들에선 시퀀스 등으로 숫자값을 때려넣곤 한다.&lt;br &#x2F;&gt;
+혹은 타임스탬프 타입 컬럼에 인덱스를 걸고 삽입될때마다 현재시간을 넣게 할 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 하면 삽입될때마다 값이 일정하게 증가하기만 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 대부분의 인덱스는 B-Tree를 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;생각해보자.
+&lt;img src=&quot;&#x2F;images&#x2F;img_9f91a3123635ee77.gif&quot; alt=&quot;image&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9f91a3123635ee77.gif&quot; alt=&quot;image&quot; &#x2F;&gt;
+B트리는 항상 균형을 유지해야 하는 자료구조다.&lt;br &#x2F;&gt;
+근데 값이 계속 현재보다 큰것만 들어와서 오른쪽에만 쌓이면 어떻게 되겠는가?&lt;&#x2F;p&gt;
+&lt;p&gt;오버플로가 발생해서 노드를 쪼개는 작업이 아주 빈번하게 일어날 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;중소규모의 시스템에서는 별다른 문제가 없지만, 대규모로 가면 발생할 수 있는 성능 이슈다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;단순 숫자값을 식별자로 쓰는 경우&lt;br &#x2F;&gt;
+=&amp;gt; 이 경우엔 현재시간+시퀀스 형태의 문자열을 사용하거나, 아예 보안적으로도 안전한 uuid 등을 사용하는 방법이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;타임스탬프 인덱스&lt;br &#x2F;&gt;
+=&amp;gt; 이건 그 자체가 유효한 값이라 좀더 까다로운데... DB에 따라 해결법이 다를 수도 있다. 경우에 따라 다를 수도 있고.&lt;br &#x2F;&gt;
+복합 인덱스로 걸어서 해결하는 방법도 있는 것 같다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>ACID: 관계형 데이터베이스의 4원칙</title>
+        <published>2020-12-20T00:00:00+00:00</published>
+        <updated>2020-12-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222179862726/"/>
+        <id>https://myyrakle.github.io/blog/222179862726/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222179862726/">&lt;p&gt;ACID는 일반적인 관계형 데이터베이스에서 가장 중요시하는 4개의 트랜잭션 관련 원칙을 축약한 단어다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f05675158aed16cc.jpeg&quot; alt=&quot;&quot; &#x2F;&gt;
+순서대로 원자성(Aromicity), 일관성(Consistency), 고립성(Isolation), 지속성(Duration)을 뜻한다.&lt;&#x2F;p&gt;
+&lt;p&gt;대충 정리해보자&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;atomicity&quot;&gt;Atomicity&lt;&#x2F;h2&gt;
+&lt;p&gt;원자성은 여러개의 작업을 하나의 원자적 단위로 묶어 처리할 수 있는지에 대한 부분이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하나로 묶인 원자적 작업은 5개의 작업으로 이루어져있더라도,&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;5개가 전부 성공&lt;&#x2F;li&gt;
+&lt;li&gt;5개가 전부 실패&lt;br &#x2F;&gt;
+의 2가지로만 실제 반영이 된다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;가령, 포인트를 사용해 물품을 구매하는 작업을 해야한다고 치자.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 먼저 사용자의 포인트를 update로 감소시키고,&lt;br &#x2F;&gt;
+물품을 구매목록에 insert하든 해야 할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 update 후에 문제가 생겨서 포인트만 까이고 구매가 되지 않는다면 어찌할것인가?&lt;&#x2F;p&gt;
+&lt;p&gt;트랜잭션을 사용하면 아주 단순해진다. 그냥 그 작업을 하나로 묶어서 뭐가 문제가 생긴다면 다 무효로 해버리면 되는 것이다.&lt;br &#x2F;&gt;
+이것을 롤백(rollback)이라 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 성공한다면 그냥 전부다 반영하면 된다.&lt;br &#x2F;&gt;
+이게 커밋(commit)이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;consistency&quot;&gt;Consistency&lt;&#x2F;h2&gt;
+&lt;p&gt;일관성은, 트랜잭션 수행 전후로도 항상 일관된 데이터구조 및 제약을 가져야 한다는 말이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;isolation&quot;&gt;Isolation&lt;&#x2F;h2&gt;
+&lt;p&gt;고립성은 각 트랜잭션은 독립된 상태여야 한다는 것이다. A와 B 트랜잭션이 동시에 실행되더라도, 서로간에 영향을 주지 않아야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;duration&quot;&gt;Duration&lt;&#x2F;h2&gt;
+&lt;p&gt;지속성은 적용된 상태가 계속해서 지속되어야 함을 의미한다.&lt;br &#x2F;&gt;
+트랜잭션이 한번 commit됐다면, 그 내용이 뜬금없이 날라가거나 하면 안된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;dev.to&#x2F;princessanjana1996&#x2F;acid-properties-in-databases-43aa&quot;&gt;https:&#x2F;&#x2F;dev.to&#x2F;princessanjana1996&#x2F;acid-properties-in-databases-43aa&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;covenant.tistory.com&#x2F;85&quot;&gt;https:&#x2F;&#x2F;covenant.tistory.com&#x2F;85&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 트랜잭션</title>
+        <published>2020-09-28T00:00:00+00:00</published>
+        <updated>2020-09-28T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222101871685/"/>
+        <id>https://myyrakle.github.io/blog/222101871685/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222101871685/">&lt;p&gt;트랜잭션은 DB의 핵심 기능 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;보통 데이터베이스의 본질을 이야기할 때 거론되는 것 중 하나가 원자성이다.&lt;br &#x2F;&gt;
+일정 실행 단위를 묶어서, 그게 하나의 기본 단위로 동작할 수 있어야 한다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;한번 예를 들어보겠다.&lt;br &#x2F;&gt;
+소비자를 나타내는 A 테이블이 있고, 판매자를 나타내는 B 테이블이 있다.&lt;br &#x2F;&gt;
+만약에 거래를 해서 A가 B에게서 물건을 구매한다면, 일반적으로는 A는 돈이 삭감되고 나서 물품이 지급될 것이고, B는 돈이 추가되고 물품이 줄어들 것이다. 이 거래는 하나의 완성된 작업이어야 한다.&lt;br &#x2F;&gt;
+만약 중간에 오류가 나서 A의 돈만 줄어들고 물품이 들어오지 않는다면 이는 심각한 문제가 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 바람직한 로직이라면 오류 발생 시 아무것도 수정되지 않아야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;이를 간단히 수행할 수 있게 해주는 것이 바로 트랜잭션이란 기능이다.&lt;br &#x2F;&gt;
+여러개의 쿼리를 하나의 트랜잭션으로 묶어서, 완전 성공, 아니면 완전 실패의 둘로만 결과를 구분할 수 있는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;한번 돌려보면서 살펴보자.&lt;br &#x2F;&gt;
+테스트 환경은 PostgreSQL이나, 다른 RDB들도 별 차이는 없을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;대충 id값과 텍스트값을 가지는 테이블이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3d71ea8dfa98d835.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_aae90225dad43cec.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;트랜잭션의 시작은 begin transaction으로 수행할 수 있다.&lt;br &#x2F;&gt;
+이제부터 이 연결에서 실행되는 쿼리들은 전부 이 트랜잭션 안에 &#x27;갇힌다.&#x27;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a6eca2c83f035ba2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;로우 하나를 삭제해봤다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6a9b120d870c7c3a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+정상적으로 삭제했다고 뜨고,&lt;&#x2F;p&gt;
+&lt;p&gt;select해봐도 잘 삭제된 것을 확인할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_233eb4c9b3598aea.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이 상태에서 저 연결 말고, 터미널 하나 더 열어서 접속하고 똑같이 select를 해봤다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2b073147385af3da.png&quot; alt=&quot;&quot; &#x2F;&gt;
+음? 바뀌지 않은 것을 확인할 수 있다.&lt;br &#x2F;&gt;
+방금 수행한 그 작업은 트랜잭션 안에서 실행됐기 때문에, 그 안에서만 갇혀있고 실제로는 적용되지 않았기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;다시 돌아가서, rollback을 쳐봤다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_600e785f6148b133.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 삭제했던게 다시 원복된다.&lt;br &#x2F;&gt;
+보통 뭐 하나라도 오류가 발생하거나 잘못된 게 있으면 항상 롤백으로 트랜잭션 내의 작업을 전부 취소해버린다.&lt;&#x2F;p&gt;
+&lt;p&gt;실행한 내용들에 아무 문제도 없다면, 반대로 그냥 commit 명령만 사용하면 된다.&lt;br &#x2F;&gt;
+이건 트랜잭션에서 수행한 내용들을 전부 실제 DB에 다 적용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_67d4491a35ef7d78.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;생각보다 간단하다.&lt;br &#x2F;&gt;
+begin transaction.&lt;br &#x2F;&gt;
+commit&lt;br &#x2F;&gt;
+rollback&lt;br &#x2F;&gt;
+이 셋만 알면 된다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 기본 연산자</title>
+        <published>2020-08-21T00:00:00+00:00</published>
+        <updated>2020-08-21T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222066682848/"/>
+        <id>https://myyrakle.github.io/blog/222066682848/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222066682848/">&lt;p&gt;테스트 환경은 PostgreSQL이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;bigyoyeonsanja&quot;&gt;비교연산자&lt;&#x2F;h2&gt;
+&lt;p&gt;기본적인 비교 연산자로는 =, !=, &amp;lt;&amp;gt;, &amp;lt;, &amp;gt;, &amp;gt;=, &amp;lt;=가 있다.&lt;br &#x2F;&gt;
+!=와 &amp;lt;&amp;gt;는 동일한 연산자다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4abf6b9fe46add71.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sacigyeonsan&quot;&gt;사칙연산&lt;&#x2F;h2&gt;
+&lt;p&gt;일반적으로 언어들에서 사용하는 연산자와 동일하다.&lt;br &#x2F;&gt;
++, -, *, &#x2F;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9caf41640b8be6e8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;예외로, 나머지셈은 MOD 함수를 사용해야 한다.&lt;br &#x2F;&gt;
+postgres의 경우에는 % 연산자를 제공하나, 표준이 아니라 다른 시스템에서도 돌아가진 않을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3a2cde1951551bd0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;biteuyeonsanja&quot;&gt;비트연산자&lt;&#x2F;h2&gt;
+&lt;p&gt;비트열로 값을 제어하는 비트연산자도 제공된다.&lt;br &#x2F;&gt;
+|, &amp;amp;, &amp;gt;&amp;gt;, &amp;lt;&amp;lt;, ~, ^ 등이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_97fff92b79ec31c2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+일반적으로 쓸 일이 많지는 않을 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;nonriyeonsanja&quot;&gt;논리연산자&lt;&#x2F;h4&gt;
+&lt;p&gt;논리연산자로는 AND, OR, NOT이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_290b37eb6bd41fbd.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;is-yeonsanja&quot;&gt;IS 연산자&lt;&#x2F;h2&gt;
+&lt;p&gt;특별한 값, NULL, TRUE, FALSE에 한해서 전용 동등 비교를 사용할 수가 있다.&lt;br &#x2F;&gt;
+=나 !=랑 큰 차이는 아마 없을 것이다.&lt;br &#x2F;&gt;
+가독성의 차이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_01c5a8736f3a20cb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;in-yeonsanja&quot;&gt;IN 연산자&lt;&#x2F;h2&gt;
+&lt;p&gt;값 in 리스트의 형태를 띤다.&lt;br &#x2F;&gt;
+in일 경우엔 값이 리스트의 값 중 하나일 때만 true를 반환하고,&lt;br &#x2F;&gt;
+not in일 경우엔 없을 때 true를 반환한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8169d7df8f05be97.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;like-yeonsanja&quot;&gt;LIKE 연산자&lt;&#x2F;h2&gt;
+&lt;h2 id=&quot;likeneun-munjayeol-tamsaegyong-yeonsanjada&quot;&gt;like는 문자열 탐색용 연산자다.&lt;&#x2F;h2&gt;
+&lt;p&gt;편리하지만, 많은 성능상의 문제점이 있다는 것에 유의해야 한다.&lt;br &#x2F;&gt;
+대충 다음과 같이 사용할 수 있다. 왼쪽에는 대상 컬럼, 오른쪽이 검색할 조건, 단어다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_153fdd48a410fa2b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이것만 본다면 =나 !=와 무슨 차이가 있나 싶을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;like는 단순비교뿐만 아니라 와일드카드를 통한 일종의 패턴매칭이 가능하다!&lt;br &#x2F;&gt;
+단일문자는 _, 전체는 %다.&lt;&#x2F;p&gt;
+&lt;p&gt;아무거나 한 문자로 시작되며, oo로 끝나는 검색어는 다음과 같이 작성할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_595b24b166aa6738.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;뭐든간에 o를 포함하는 문자열은 다음과 같이 검색할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c5977381385709c1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;실제 검색 등을 구현할 때는 웬만해서 사용하게 되지만 단순 동등비교를 할때는 쓰지 않는게 좋다.&lt;br &#x2F;&gt;
+느리다.&lt;&#x2F;p&gt;
+&lt;p&gt;게다가 대부분의 DB 시스템에서는 앞에 와일드카드가 붙으면 인덱스를 타지 않는 문제가 있다.&lt;br &#x2F;&gt;
+뒤에붙는건 괜찮은데 앞에 붙으면 대부분 안된다고 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;between-yeonsanja&quot;&gt;BETWEEN 연산자&lt;&#x2F;h2&gt;
+&lt;p&gt;이건 값이 특정 범위에 속하는지를 확인하는 연산자다.&lt;br &#x2F;&gt;
+&lt;strong&gt;값 between 시작 and 끝&lt;&#x2F;strong&gt; 의 형태를 가진다.&lt;br &#x2F;&gt;
+&amp;lt;=, &amp;gt;= 연산자를 사용하는 것과 동일한 결과를 주지만, 가독성이 더 괜찮고, 최적화에도 조금 유리한 점이 있다는 것이 장점이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fc9c2fd7409609e9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cloud.google.com&#x2F;bigquery&#x2F;docs&#x2F;reference&#x2F;standard-sql&#x2F;operators?hl=ko&quot;&gt;https:&#x2F;&#x2F;cloud.google.com&#x2F;bigquery&#x2F;docs&#x2F;reference&#x2F;standard-sql&#x2F;operators?hl=ko&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cloud.google.com&#x2F;bigquery&#x2F;docs&#x2F;reference&#x2F;standard-sql&#x2F;functions-and-operators?hl=ko&quot;&gt;https:&#x2F;&#x2F;cloud.google.com&#x2F;bigquery&#x2F;docs&#x2F;reference&#x2F;standard-sql&#x2F;functions-and-operators?hl=ko&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 쿼리 튜닝 기본수칙</title>
+        <published>2020-07-27T00:00:00+00:00</published>
+        <updated>2020-07-27T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222043019143/"/>
+        <id>https://myyrakle.github.io/blog/222043019143/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222043019143/">&lt;p&gt;&lt;strong&gt;1. 쿼리에서 처리가 쉬운 부분과 소스에서 처리가 쉬운 부분을 파악하라&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;쿼리로 처리 가능한 부분은 되도록 쿼리로 처리하되, 소스코드에서 처리가 더 유리한 부분이 있다면 소스에서 한다.&lt;&#x2F;li&gt;
+&lt;li&gt;대체로는 소스보다 쿼리에서 바로 처리하는 것이 빠르다.&lt;&#x2F;li&gt;
+&lt;li&gt;하지만 쿼리에 모든 걸 떠맡기면 DB 서버에 부하가 커진다.&lt;&#x2F;li&gt;
+&lt;li&gt;(클라우드 서비스의 경우) 서버는 증식이 가능하므로, 어느정도는 소스에서 처리하는 것도 좋다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;&lt;strong&gt;2. 서브쿼리보단 조인을 통해 해결하라&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;조인을 통해 값을 추출해내는 것이 인덱스를 타기 쉬워, 성능에 유리하다.&lt;&#x2F;li&gt;
+&lt;li&gt;하지만 단일요소에 대해서는 서브쿼리가 단순하고 빠를 수 있다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;&lt;strong&gt;3. 문자열 비교에 like를 과용하지 말라&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;like는 문자열 패턴을 사용하므로 =보다 연산속도가 훨씬 느리다. 꼭 필요한 경우가 아니면 사용하지 말자.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;&lt;strong&gt;4. 불필요한 함수 호출을 자제하라&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;5. 최대한 인덱스를 타도록 쿼리를 구성하라&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;그게 빠르다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;&lt;strong&gt;6. 인덱스 컬럼이 너무 많아도 안좋다.&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;인덱스가 너무 많아도 부하가 걸린다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;&lt;strong&gt;7. 외래키(FK) 기능은 사용하지 말라&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;FK는 완벽한 정합성을 강요하는 다소 이론적이고 이상적인 기능이다.&lt;&#x2F;li&gt;
+&lt;li&gt;매번 키 무결성 체크를 하므로 부하가 꽤 크게 걸린다.&lt;&#x2F;li&gt;
+&lt;li&gt;게다가 실제 비즈니스 로직과는 잘 맞지 않는다. 딱 떨어지지 않는 부분이 매우 많다.&lt;&#x2F;li&gt;
+&lt;li&gt;그래서 버그를 양산하기도 좋다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;br&gt;
+&lt;p&gt;계속 추가하고 정리할 것&lt;br &#x2F;&gt;
+2020-07-27 작성&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 숫자에 빈 자리 0으로 채우기</title>
+        <published>2020-06-08T00:00:00+00:00</published>
+        <updated>2020-06-08T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221993571148/"/>
+        <id>https://myyrakle.github.io/blog/221993571148/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221993571148/">&lt;p&gt;숫자값들을 사용하다보면, 숫자의 길이수를 고정하고 앞에 0을 채워야 할 경우가 잦다.&lt;br &#x2F;&gt;
+그럴 때는 lpad 함수를 사용하는 것이 편하다.&lt;br &#x2F;&gt;
+길이를 지정하고, 왼쪽부터 빈 공간에 특정 문자를 채우는 것이다.&lt;br &#x2F;&gt;
+rpad는 반대로 오른쪽부터 채운다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런 식으로 쓰면 된다.&lt;br &#x2F;&gt;
+테스트 환경은 postgreSQL이지만, 표준이라 다른데서도 다 쓸 수 있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_975152f717d11353.png&quot; alt=&quot;&quot; &#x2F;&gt;
+첫번째는 문자열이 들어가야 하므로 ::text로 변환하고, 두번째 인자는 길이, 세번째 인자는 채울 문자다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;26379446&#x2F;padding-zeros-to-the-left-in-postgresql&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;26379446&#x2F;padding-zeros-to-the-left-in-postgresql&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;cloud.google.com&#x2F;bigquery&#x2F;docs&#x2F;reference&#x2F;standard-sql&#x2F;string_functions?hl=ko&quot;&gt;https:&#x2F;&#x2F;cloud.google.com&#x2F;bigquery&#x2F;docs&#x2F;reference&#x2F;standard-sql&#x2F;string_functions?hl=ko&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 내장함수: coalesce</title>
+        <published>2020-05-29T00:00:00+00:00</published>
+        <updated>2020-05-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221982812784/"/>
+        <id>https://myyrakle.github.io/blog/221982812784/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221982812784/">&lt;p&gt;꽤 유용한 SQL 표준 함수 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;값의 리스트를 받고, 거기서 null이 아닌 첫번째 값을 반환한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_08c8c4e465809a74.png&quot; alt=&quot;&quot; &#x2F;&gt;
+null처리를 하는데 있어 유용한 함수다.&lt;&#x2F;p&gt;
+&lt;p&gt;null이 들어올 수 있는 항목을 첫번째, null일 경우의 디폴트값을 두번째로 넣어주면 되는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3d18a95a005bf054.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.w3schools.com&#x2F;sql&#x2F;func_sqlserver_coalesce.asp&quot;&gt;https:&#x2F;&#x2F;www.w3schools.com&#x2F;sql&#x2F;func_sqlserver_coalesce.asp&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 사용자의 생성 및 권한 부여</title>
+        <published>2020-05-19T00:00:00+00:00</published>
+        <updated>2020-05-19T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221969776037/"/>
+        <id>https://myyrakle.github.io/blog/221969776037/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221969776037/">&lt;p&gt;테스트 환경은 postgreSQL이다.&lt;&#x2F;p&gt;
+&lt;p&gt;일단 root 계정으로 접속한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b43a1cce4363dcd0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sayongjayi-saengseong&quot;&gt;사용자의 생성&lt;&#x2F;h2&gt;
+&lt;p&gt;사용자의 생성은 CREATE USER 쿼리로 수행할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_730636016156c5ba.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이름과 패스워드를 지정해주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 해당 계정으로 접속이 가능해질 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_198a8e9c9d131ecf.png&quot; alt=&quot;&quot; &#x2F;&gt;
+물론 이대로는 읽거나 쓸 수는 없다.&lt;br &#x2F;&gt;
+권한을 부여해줘야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sayongja-jeongbo-byeongyeong&quot;&gt;사용자 정보 변경&lt;&#x2F;h2&gt;
+&lt;p&gt;사용자의 정보를 변경하려면, ALTER USER 쿼리를 사용하면 된다.&lt;br &#x2F;&gt;
+아래는 testuser의 패스워드를 변경하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_17e3ba1de37222f7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sayongja-sagje&quot;&gt;사용자 삭제&lt;&#x2F;h2&gt;
+&lt;p&gt;등록된 사용자를 삭제하고 싶다면, DROP USER 쿼리를 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7a61c0ac3d1e4dda.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gweonhan-buyeo&quot;&gt;권한 부여&lt;&#x2F;h2&gt;
+&lt;p&gt;사용자에게 데이터베이스에 대한 접근 권한을 주려면 GRANT 쿼리를 사용할 수 있다.&lt;br &#x2F;&gt;
+권한을 부여할 DB로 이동한 상태에서&lt;br &#x2F;&gt;
+&lt;strong&gt;GRANT 행동 ON 테이블명 TO 사용자명;&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_01f2b462f420181b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+ALL PRIVILEGES는 모든 행동을 허가한다는 것이고&lt;&#x2F;p&gt;
+&lt;p&gt;특정 행동만 허가할 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_37ead1e9798a8da3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gweonhan-sagje&quot;&gt;권한 삭제&lt;&#x2F;h2&gt;
+&lt;p&gt;만약 기존에 존재하던 권한을 취소하고 싶다면, REVOKE 쿼리를 사용할 수 있다.&lt;br &#x2F;&gt;
+이건 GRANT와 마찬가지로 취소할 행동, 테이블, 사용자명을 받는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_93e9823cc7193ca1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이러면 DELETE에 대한 권한만 취소된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.lesstif.com&#x2F;dbms&#x2F;postgresql-61899197.html&quot;&gt;https:&#x2F;&#x2F;www.lesstif.com&#x2F;dbms&#x2F;postgresql-61899197.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.postgresql.org&#x2F;docs&#x2F;9.0&#x2F;sql-grant.html&quot;&gt;https:&#x2F;&#x2F;www.postgresql.org&#x2F;docs&#x2F;9.0&#x2F;sql-grant.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.cubrid.org&#x2F;manual&#x2F;ko&#x2F;9.1.0&#x2F;sql&#x2F;authorization.html&quot;&gt;https:&#x2F;&#x2F;www.cubrid.org&#x2F;manual&#x2F;ko&#x2F;9.1.0&#x2F;sql&#x2F;authorization.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 최적화 기본</title>
+        <published>2020-04-20T00:00:00+00:00</published>
+        <updated>2020-04-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221917830051/"/>
+        <id>https://myyrakle.github.io/blog/221917830051/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221917830051/">&lt;p&gt;대부분의 관계형 데이터베이스 시스템은 우리가 작성해서 날린 쿼리를 그대로 실행하진 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;좀더 빠르고 효율적으로 접근과 갱신을 수행할 수 있도록 최적화를 거친 뒤 작업을 행하는데, 이런 최적화를 수행해주는 친구를 옵티마이저(Optimizer)라고 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;옵티마이저의 종류&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+옵티마이저는 크게 2가지로 분류될 수 있다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;규칙 기반 옵티마이저&lt;&#x2F;li&gt;
+&lt;li&gt;비용 기반 옵티마이저&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;규칙 기반은 정해진 규칙에 의해서만 최적화를 수행하고.&lt;br &#x2F;&gt;
+비용 기반은 비용을 최대한 줄일수 있는 방법으로 최적화를 수행한다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 결국 중요한건 결과, 실제 비용이니. 대부분의 시스템에선 비용 기반의 최적화만을 사용한다 보면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;실행 계획&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+실행 계획은 날라온 쿼리를 실제로 어떻게 실행할지를 담는 내용이다.&lt;&#x2F;p&gt;
+&lt;p&gt;최적화 등의 차이 때문에 같은 쿼리라도 시스템마다 천차만별의 실행계획이 생성된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;http:&#x2F;&#x2F;iloveulhj.github.io&#x2F;posts&#x2F;sql&#x2F;sql-basic-optimization-principle.html&quot;&gt;http:&#x2F;&#x2F;iloveulhj.github.io&#x2F;posts&#x2F;sql&#x2F;sql-basic-optimization-principle.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;http:&#x2F;&#x2F;qwefgh90.github.io&#x2F;sphinx&#x2F;database&#x2F;sql_optimize.html&quot;&gt;http:&#x2F;&#x2F;qwefgh90.github.io&#x2F;sphinx&#x2F;database&#x2F;sql_optimize.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] join: 내부 조인</title>
+        <published>2020-03-29T00:00:00+00:00</published>
+        <updated>2020-03-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221878764632/"/>
+        <id>https://myyrakle.github.io/blog/221878764632/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221878764632/">&lt;p&gt;조인은 기본적으로 2개의 테이블을 결합해서 새로운 형태의 테이블을 만들어주는 기능이다.&lt;br &#x2F;&gt;
+조인에는 내부조인, 외부조인 등이 있는데, 내부조인이 가장 단순하고 직관적이며, 자주 쓰이는 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;내부조인은 조건이 일치하는 Row만을 병합하고, 나머지는 전부 버린다.&lt;&#x2F;p&gt;
+&lt;p&gt;예시를 보자.&lt;br &#x2F;&gt;
+테스트 환경은 postgreSQL이다.&lt;&#x2F;p&gt;
+&lt;p&gt;일단 이름과 직업을 표현하는 테이블, Worker가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ef6168ce4936c155.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3011b170d3ac87a1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 이름과 종교를 표현하는 테이블 Religious_Person이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d45b1d92b347bc50.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b953e80a69616293.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이 둘은 별개의 테이블이지만 &quot;name&quot;이라는, 의미론적으로 동일할 수 있는 컬럼을 갖고 있다.&lt;br &#x2F;&gt;
+그럼 이 상황에서 어떤 사람의 직업과 종교를 한번에 묶어서 처리하려면 어떻게 할 수 있을까?&lt;br &#x2F;&gt;
+각각 분리해서 다루고 처리하려면 그것도 꽤 지난한 일이지 않겠는가?&lt;br &#x2F;&gt;
+이러한 상황을 슬기롭게 해결할 수 있게 해주는 것이 바로 join이다.&lt;&#x2F;p&gt;
+&lt;p&gt;join은 select from 뒤에 붙어서 동작할 수 있다.&lt;br &#x2F;&gt;
+&lt;strong&gt;select ... from 테이블A &lt;strong&gt;&lt;strong&gt;inner join&lt;&#x2F;strong&gt;&lt;&#x2F;strong&gt; 테이블B &lt;strong&gt;&lt;strong&gt;on&lt;&#x2F;strong&gt;&lt;&#x2F;strong&gt; 조인조건식&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+inner 키워드는 생략 가능하다. 디폴트값이 inner라서.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 한번 써보자.&lt;br &#x2F;&gt;
+저기에 조인을 때려서 하나로 묶으려면 이렇게 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b753bb6f49c0fdd8.png&quot; alt=&quot;&quot; &#x2F;&gt;
+양쪽에 있는 사람만 묶여 직업과 종교 정보를 한번에 볼 수 있다.&lt;br &#x2F;&gt;
+깔끔하지 않은가.&lt;&#x2F;p&gt;
+&lt;br&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] join: 외부 조인</title>
+        <published>2020-03-29T00:00:00+00:00</published>
+        <updated>2020-03-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221878808928/"/>
+        <id>https://myyrakle.github.io/blog/221878808928/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221878808928/">&lt;p&gt;내부 조인이 무조건 일치하는 행만 합쳐서 빈틈이 없게 했다면, 외부조인은 조건이 일치하지 않아도 합쳐서 빈틈이 좀 생기는 기능이다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 외부 조인에도 종류가 3가지나 있다.&lt;br &#x2F;&gt;
+조인 구문에서 from 오른쪽의 테이블을 A, join 오른쪽의 테이블을 B라고 하면.&lt;br &#x2F;&gt;
+A를 우선으로 채우고 B만 빈칸이 될 수 있는 것이 왼쪽(left) 외부조인,&lt;br &#x2F;&gt;
+B를 우선으로 채우는 것이 오른쪽(right) 외부조인이다.&lt;br &#x2F;&gt;
+그리고 무식하게 갖다박는 완전(full) 외부조인이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;예시를 보는 게 이해가 빠르겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;테스트 환경은 postgreSQL이다.&lt;br &#x2F;&gt;
+그리고 테이블 A, B의 구조는 아래와 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;A는 이름, 직업 컬럼을 가지는 Worker라는 테이블이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ff506c67cfd6524e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e672b461a3bf9a56.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;B는 이름, 종교에 대한 정보를 가지는 종교인 테이블이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7d70aad49a12a073.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d9f4133190a5b3ee.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;oenjjog-join&quot;&gt;왼쪽 조인&lt;&#x2F;h2&gt;
+&lt;p&gt;&lt;strong&gt;select ... from A &lt;strong&gt;&lt;strong&gt;left outer join&lt;&#x2F;strong&gt;&lt;&#x2F;strong&gt; B on 조건식&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+outer 키워드는 생략이 가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;from에 붙는 왼쪽 테이블을 기준으로 오른쪽 테이블을 병합하는 것이다.&lt;br &#x2F;&gt;
+왼쪽 테이블은 전부 그대로 유지가 되고, 조건식이 일치하는 부분에 한해서만 오른쪽 테이블의 컬럼을 갖다붙힌다.&lt;br &#x2F;&gt;
+일치하는 것이 없는 경우에는 그냥 null이 들어간다.&lt;br &#x2F;&gt;
+아래와 같이.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bd3d6c871a269847.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;oreunjjog-join&quot;&gt;오른쪽 조인&lt;&#x2F;h2&gt;
+&lt;p&gt;&lt;strong&gt;select ... from A &lt;strong&gt;&lt;strong&gt;right outer join&lt;&#x2F;strong&gt;&lt;&#x2F;strong&gt; B on 조건식&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+outer 키워드는 생략이 가능하다.&lt;br &#x2F;&gt;
+그냥 왼쪽 조인과 반대로, 오른쪽 테이블을 기준으로 왼쪽 테이블을 병합하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 위치만 바뀌는 표현의 차이지, 기능은 거의 같다고 보면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_68e64ff4aff5f2ba.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;wanjeon-oebujoin&quot;&gt;완전 외부조인&lt;&#x2F;h2&gt;
+&lt;p&gt;&lt;strong&gt;select ... from A &lt;strong&gt;&lt;strong&gt;full outer join&lt;&#x2F;strong&gt;&lt;&#x2F;strong&gt; B on 조건식&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+이건 일치하는건 일단 하나의 Row로 연결하고, 나머지는 무식하게 갖다박는다.&lt;br &#x2F;&gt;
+이렇게 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b2e76a7888cf296f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] join: 교차 조인</title>
+        <published>2020-03-29T00:00:00+00:00</published>
+        <updated>2020-03-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221878824147/"/>
+        <id>https://myyrakle.github.io/blog/221878824147/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221878824147/">&lt;p&gt;cross join, 이하 교차 조인은 테이블에 일종의 행렬곱을 수행하는 구문이다.&lt;br &#x2F;&gt;
+from에 붙는 테이블을 A, join에 붙는 테이블을 B라고 한다면,&lt;&#x2F;p&gt;
+&lt;p&gt;교차 조인은 A의 모든 행을 B의 모든 행에 한번씩 다 곱한다.&lt;br &#x2F;&gt;
+그래서 교차 조인의 결과 행은, A와 B의 행을 곱한 개수가 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;테스트 환경은 postgreSQL이다.&lt;br &#x2F;&gt;
+그리고 테이블 A, B의 구조와 내용물은 아래와 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;A는 이름, 직업 컬럼을 가지는 Worker라는 테이블이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4659c9c6293fe622.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b00bfadef9fd04c8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;B는 이름, 종교에 대한 정보를 가지는 종교인 테이블이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2831e7d4d7c83088.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2cf299170bcb8df7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 교차 조인 구문은 아래와 같은 구조를 가진다.&lt;br &#x2F;&gt;
+&lt;strong&gt;select ... from A&lt;&#x2F;strong&gt;** cross join**** B**&lt;br &#x2F;&gt;
+다른 join들과 다르게 따로 조건식은 필요하지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;저 테이블들에 교차 조인을 날리면, 각각의 행이 7, 8 이므로 7x8=56행의 결과물이 나온다.&lt;br &#x2F;&gt;
+이렇게 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ffe0462b2cc7ed23.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0eaa7ee61a55e531.png&quot; alt=&quot;&quot; &#x2F;&gt;
+길기도 하다.&lt;&#x2F;p&gt;
+&lt;p&gt;쓸일이 많지는 않을 것이다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 질의 병합: union</title>
+        <published>2020-03-27T00:00:00+00:00</published>
+        <updated>2020-03-27T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221875176398/"/>
+        <id>https://myyrakle.github.io/blog/221875176398/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221875176398/">&lt;p&gt;union은 select의 결과값을 병합할 수 있게 해주는 SQL 문법요소다.&lt;&#x2F;p&gt;
+&lt;p&gt;테스트 환경은 PostgreSQL이다.&lt;br &#x2F;&gt;
+테스트에 사용할 테이블 구조는 아래와 같다.&lt;br &#x2F;&gt;
+최대한 단순하게 구성했다. 기본키인 id와 문자열 컬럼 하나뿐이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6808a4cc912f043d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 데이터는 이렇게 넣어놨다 가정한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4fa632d5b26fe908.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 한번 돌려보자.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;union-mun-union-distinct&quot;&gt;union 문 (union distinct)&lt;&#x2F;h2&gt;
+&lt;p&gt;union은 양쪽으로 select문을 받아, 그 양쪽의 결과를 결합해서 반환한다.&lt;br &#x2F;&gt;
+문법을 간단히 표현하면 아래와 같다. A와 B가 select 표현식이라고 보면 돤다.&lt;br &#x2F;&gt;
+&lt;strong&gt;A union B&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+&lt;strong&gt;A union distinct B&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+위의 두 표현식은 같은 의미다,&lt;br &#x2F;&gt;
+union은 따로 뭘 붙이지 않으면 distinct가 자동으로 붙기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;일단 테스트를 해보자.&lt;br &#x2F;&gt;
+만약 이러한 쿼리와&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e88ba25bbc3d3f43.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;저러한 쿼리를&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5f8ca8b0d1a51f2b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;결합하면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_dc55f833167a5ede.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 되는 것이다.&lt;br &#x2F;&gt;
+order by id는 그냥 보기 좋게 정렬하려고 넣었다.&lt;&#x2F;p&gt;
+&lt;p&gt;distinct를 넣어도 결과는 똑같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7d4d59255965b0e4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 distinct는 중복을 제거한다는 의미를 가진다.&lt;br &#x2F;&gt;
+그래서 만약 아래와 같이, 중복된 결과값이 나와도, 단 하나씩만 뽑히게 만든다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_247eb4845b79163a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+똑같은 전체목록을 합했음에도 두번씩 나오지 않음을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;union-allmun&quot;&gt;union all문&lt;&#x2F;h2&gt;
+&lt;p&gt;이건 union distinct와 다르게 중복이 있어도 배제하지 않고 무식하게 합쳐버린다.&lt;br &#x2F;&gt;
+그래서 아래와 같이 중복된 목록이 포함된 결과가 나올 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1780dd089a8de039.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;juyijeom&quot;&gt;주의점&lt;&#x2F;h2&gt;
+&lt;p&gt;코드만 보면 되게 편해보이지만 union은 사용이 권장되는 기능이 아니다.&lt;br &#x2F;&gt;
+오히려 최대한 쓰지 않는 것이 좋다.&lt;&#x2F;p&gt;
+&lt;p&gt;일단 이건, 대부분의 경우에 성능이 좋지 않다.&lt;br &#x2F;&gt;
+테이블에 한번 접근해도 되는 걸 두번 접근해서 합치기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이걸 사용할 바엔 select문에 where절을 잘 달아놓거나 다른 방법을 사용하는 것이 성능적으로 훨씬 낫다.&lt;br &#x2F;&gt;
+자세한 것은 아래 문서를 참조하는 것이 좋겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;http:&#x2F;&#x2F;www.hanbit.co.kr&#x2F;channel&#x2F;category&#x2F;category_view.html?cms_code=CMS8208581587&quot;&gt;http:&#x2F;&#x2F;www.hanbit.co.kr&#x2F;channel&#x2F;category&#x2F;category_view.html?cms_code=CMS8208581587&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 테이블 생성2 - 참조</title>
+        <published>2019-10-09T00:00:00+00:00</published>
+        <updated>2019-10-09T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221672364232/"/>
+        <id>https://myyrakle.github.io/blog/221672364232/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221672364232/">&lt;p&gt;데이터베이스를 구성하다보면 어떤 테이블에서 다른 테이블의 데이터를 참조할 경우가 있다. 꽤 잦다.&lt;&#x2F;p&gt;
+&lt;p&gt;가령 학교의 모든 학생에 대한 정보를 나타내는 테이블, Student가 있고,&lt;br &#x2F;&gt;
+이에 더해 컴퓨터공학과의 인원을 나타내는 테이블 Comeng_Student를 만든다고 치자.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 대략 개개인의 학생 정보를 죄다 때려넣기보단, Student에 대한 참조를 구성하는 것이 무결성이나 편의성, 성능이나 메모리 효율성 측면에서 전부 우월할 것이다.&lt;br &#x2F;&gt;
+만약 그대로 다 때려넣었는데, 한명이 자퇴를 한다면, Student와 Comeng_student에서 그 정보를 동시에 삭제해야 한다. 하지만 참조를 사용한다면 이러한 문제를 편리하게 처리할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;먼저 Student 테이블을 구성해보자.&lt;br &#x2F;&gt;
+테스트 환경은 MySQL이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b9fb5fe30872892c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+간단하게 이름만 넣어놨다.&lt;&#x2F;p&gt;
+&lt;p&gt;데이터도 넣어주고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e7d9f367f1662fdb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이제 저걸 참조하도록 해보자.&lt;br &#x2F;&gt;
+다른 테이블의 키를 참조하는 속성을 외래 키(Foreign Key)라고 한다.&lt;br &#x2F;&gt;
+그래서 사용 키워드도 foreign key다. 그리고 참조할 대상은 references로 지정한다.&lt;br &#x2F;&gt;
+&lt;strong&gt;foreign key(적용 속성) references 참조테이블명(참조속성)&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이러면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7983e020d76f0499.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이제 아까 있던 학생들을 참조해보도록 하자.&lt;br &#x2F;&gt;
+john과 rust만 추가해보도록 하겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_dc0c735f46789635.png&quot; alt=&quot;&quot; &#x2F;&gt;
+간단하다. 이제 이것들을 이용해서 간접적으로 Student에 접근하면 되는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;Comeng_Student에 속한 Student만 조회하고 싶다면, 이런식으로 중첩질의를 쓰면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3e94295f20ed3a7b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 이외에도 문제가 몇가지 있다.&lt;br &#x2F;&gt;
+만약 원본 데이터가 수정되거나 변경된다면, 그걸 참조하고 있는 외래키는 어떻게 반응하는가?&lt;&#x2F;p&gt;
+&lt;p&gt;이에 대한 설정을 또 건드릴 수가 있다.&lt;br &#x2F;&gt;
+테이블 생성시 외래키를 설정할 때, 뒤에다가 on delete, on update와 함께 일련의 키워드들을 붙여주는 것이다.&lt;br &#x2F;&gt;
+on delete는 원본 데이터가 삭제될 경우, on update는 원본 데이터가 수정될 경우다.&lt;br &#x2F;&gt;
+1.no action: 바꿔도 그냥 냅둠&lt;br &#x2F;&gt;
+2.cascade: 원본이 삭제되면 참조도 삭제, 변경되면 똑같이 변경.&lt;br &#x2F;&gt;
+3.set null: 원본이 바뀌거나 삭제되면 참조를 null로 변경&lt;br &#x2F;&gt;
+4.set default: 원본이 바뀌거나 삭제되면 참조를 디폴트값으로 변경(대부분 null)&lt;&#x2F;p&gt;
+&lt;p&gt;다른 DB는 어떨지 모르겠지만, 일단 MySQL에선 따로 설정을 하지 않는다면 참조되고 있는 원본을 삭제하거나 변경할 수가 없다.&lt;br &#x2F;&gt;
+따라서 Comeng_Student에서 참조하고 있는 Student의 원본 값 john을 지우려고 하면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2fae1c74254ceeaa.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 에러가 뜬다.&lt;&#x2F;p&gt;
+&lt;p&gt;일단 저기서 제일 괜찮아보이는 cascade를 써서 다시 테이블을 생성해보겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4683b012e00c6f17.png&quot; alt=&quot;&quot; &#x2F;&gt;
+아까처럼 다시 데이터도 넣어줬다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4632946837fa85b5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;자 이제 다시 john을 지워보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7dcd8f03df215604.png&quot; alt=&quot;&quot; &#x2F;&gt;
+잘 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;이제 다시 저기서 6이 가리키고 있는 원본 tom의 키를 건드려보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_54d04f438c94279c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+역시 잘 된다.&lt;br &#x2F;&gt;
+바뀌었다고 말해준다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4fc565e82f723cca.png&quot; alt=&quot;&quot; &#x2F;&gt;
+다시 보면 여기서도 바뀌어있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런 식이다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 테이블의 수정 및 삭제</title>
+        <published>2019-10-09T00:00:00+00:00</published>
+        <updated>2019-10-09T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221672380699/"/>
+        <id>https://myyrakle.github.io/blog/221672380699/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221672380699/">&lt;p&gt;SQL에서 기존에 존재하던 무언가를 수정할 때는 대체로 Alter 키워드를 사용한다.&lt;br &#x2F;&gt;
+테이블을 수정할 때도 마찬가지다.&lt;br &#x2F;&gt;
+무조건 alter table 테이블명 의 형태로 써놓고 추가 명령들을 기술한다.&lt;&#x2F;p&gt;
+&lt;p&gt;실습환경은 MySQL이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sogseong-byeongyeong&quot;&gt;속성 변경&lt;&#x2F;h2&gt;
+&lt;p&gt;기존에 존재하던 속성의 설정을 변경하는 것이다.&lt;br &#x2F;&gt;
+대강 보아하니 디폴트값에 대한 수정만 되는 것 같다.&lt;br &#x2F;&gt;
+아래의 구조를 가진다.&lt;br &#x2F;&gt;
+&lt;strong&gt;alter 속성명 set default 디폴트값&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;아래의 테이블에서 name의 디폴트값을 &quot;foo&quot;로 설정한다 치면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_586ecf8c58004eee.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_399841088ad93e00.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8ac02580d32fa057.png&quot; alt=&quot;&quot; &#x2F;&gt;
+적용도 잘 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sogseong-cuga&quot;&gt;속성 추가&lt;&#x2F;h2&gt;
+&lt;p&gt;테이블에 속성을 추가하는 것이다.&lt;br &#x2F;&gt;
+아래의 구조를 가진다.&lt;br &#x2F;&gt;
+&lt;strong&gt;add 속성명 타입 부가속성...&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;방금 위의 테이블에서&lt;br &#x2F;&gt;
+grade라는 속성을 추가해보겠다.&lt;br &#x2F;&gt;
+이왕이면 안전하도록 not null도 달고...&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8b4dfb05a288a839.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이렇게 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_efdba0490bda87d5.png&quot; alt=&quot;&quot; &#x2F;&gt;
+반영도 잘 된 것을 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sogseong-sagje&quot;&gt;속성 삭제&lt;&#x2F;h2&gt;
+&lt;p&gt;테이블에 존재하던 속성을 삭제하는 것이다.&lt;br &#x2F;&gt;
+더 간단하다.&lt;br &#x2F;&gt;
+아래의 구조를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;drop column 속성명&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;방금 추가한 속성을 다시 지워본다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4cc490f52e8f3e61.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_86469888787cede4.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 다시 잘 빠진걸 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;teibeul-sagje&quot;&gt;테이블 삭제&lt;&#x2F;h2&gt;
+&lt;p&gt;테이블을 삭제하는 법은 간단하다.&lt;br &#x2F;&gt;
+&lt;strong&gt;drop table 테이블명;&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1f7c93ff0ce7ba5c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] insert문</title>
+        <published>2019-10-08T00:00:00+00:00</published>
+        <updated>2019-10-08T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221671903915/"/>
+        <id>https://myyrakle.github.io/blog/221671903915/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221671903915/">&lt;p&gt;실습환경은 MySQL이다.&lt;br &#x2F;&gt;
+저장된 데이터의 내역은 아래와 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7ef69d7ac4e80efd.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fac5beb9f20c92a4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;insert는 테이블에 데이터를 삽입하는 쿼리다.&lt;br &#x2F;&gt;
+대략 아래의 구조를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;insert into 테이블명(속성명1, 속성명2, ...) values(값1, 값2, ...);&lt;&#x2F;p&gt;
+&lt;p&gt;따라서 저기다 데이터를 하나 더 넣으려면, 아래와 같이 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f2c4850782c03ca0.png&quot; alt=&quot;&quot; &#x2F;&gt;
+잘 들어갔다고 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4873f0c22bcf6f7c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이렇게 잘 추가되어 있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;NULL이 가능한 속성이라면 값을 아예 안 줄 수도 있다.&lt;br &#x2F;&gt;
+맨 위의 속성 목록을 보면 알겠지만, student 테이블은 가본키인 _index를 빼면 전부 NULL이 YES로 되어있다.&lt;br &#x2F;&gt;
+따라서 아래와 같은 쿼리도 잘 동작한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_384a1fad12a9fb38.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이렇게 빈 공간은 NULL이 들어간다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c014b4c4d067abeb.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그런데 NULL은 온갖 오류와 결함의 본산이 될 수 있기 때문에, 웬만하면 다 NOT NULL 속성을 주고, 값을 꼬박꼬박 다 채워주는게 좋다.&lt;br &#x2F;&gt;
+자세한건 create나 alter 절에서  따로 다루도록 하겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;이제까진 위에서 모든 속성 목록의 이름을 열거했지만, 모든 속성에 값을 넣을 것이라면 이름을 생략할 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e978407c49082b60.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 잘 들어가는 걸 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a92e3b1766490728.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그런데 이 방식은 속성의 순서도 다 맞춰줘야하고 나중에 보기도 귀찮기 때문에, 경험상 쓰기가 그리 좋진 않다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;이게 다다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] delete문</title>
+        <published>2019-10-08T00:00:00+00:00</published>
+        <updated>2019-10-08T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221671930722/"/>
+        <id>https://myyrakle.github.io/blog/221671930722/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221671930722/">&lt;p&gt;실습 환경은 MySQL이다.&lt;br &#x2F;&gt;
+저장된 데이터의 내역은 아래와 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1f4d891ea27bc266.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f55dfb736027dd83.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;delete는 단어의 뜻대로, 데이터를 지우는 쿼리다.&lt;br &#x2F;&gt;
+기본적으로 아래의 구조를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;delete from 테이블명 where 조건...;&lt;&#x2F;p&gt;
+&lt;p&gt;조건을 쓰지 않고 쿼리를 날리면 데이터가 전부 날라간다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a750029a83c9501e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d88e1e092dd142e1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 날라간 데이터는 일반적인 쿼리로는 되살릴 수가 없다.&lt;br &#x2F;&gt;
+백업파일을 건드리는 등의 특정 DB에 종속적인 행위가 필요하다.&lt;&#x2F;p&gt;
+&lt;p&gt;이건 대부분 엄청난 참사를 일으킬 수 있기 때문에, where를 달아서 날리는게 정석이다.&lt;br &#x2F;&gt;
+학교가 카이스트인 데이터만 날려보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f18d4944ef3f60cb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_711c9df0b6ec2a15.png&quot; alt=&quot;&quot; &#x2F;&gt;
+잘 날라갔다.&lt;&#x2F;p&gt;
+&lt;p&gt;이번엔 null인 녀석을 지워보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9baf64d69ceccac3.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a3993c0679f488f2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+잘 날라갔다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런식으로 쓰면 된다.&lt;br &#x2F;&gt;
+간단하다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] update문</title>
+        <published>2019-10-08T00:00:00+00:00</published>
+        <updated>2019-10-08T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221671969607/"/>
+        <id>https://myyrakle.github.io/blog/221671969607/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221671969607/">&lt;p&gt;실습 환경은 MySQL이다.&lt;br &#x2F;&gt;
+저장된 데이터의 내역은 아래와 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bb52315710040994.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_06edc72673d7830d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;update는 기존에 존재하던 데이터를 수정하는 쿼리다.&lt;br &#x2F;&gt;
+아래의 구조를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;update 테이블명 set 속성명1=값1, 속성명2=값2, ... where 조건식&lt;&#x2F;p&gt;
+&lt;p&gt;delete와 다르게 조건식은 필수다. 없으면 에러가 난다.&lt;&#x2F;p&gt;
+&lt;p&gt;저기서 이름 boom을 will로 바꿔보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_024a2d3a71245ceb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_651a31a2d0164147.png&quot; alt=&quot;&quot; &#x2F;&gt;
+잘 바뀐 걸 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 저기서 1년이 지나서, 나이와 학년을 전부 증가시킬 필요가 있다면 어떻게 할까?&lt;br &#x2F;&gt;
+update문은 기본적으로 delete처럼 조건식을 생략할 순 없다.&lt;br &#x2F;&gt;
+그냥 이렇게 하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d71abce01d0e50a1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9192113b5c9e6257.png&quot; alt=&quot;&quot; &#x2F;&gt;
+true는 참을 의미하는 논리값이다. 저렇게 쓰면 전부 매칭시켜준다.&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 테이블의 생성</title>
+        <published>2019-10-08T00:00:00+00:00</published>
+        <updated>2019-10-08T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221672201586/"/>
+        <id>https://myyrakle.github.io/blog/221672201586/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221672201586/">&lt;p&gt;테스트 환경은 MySQL이다.&lt;&#x2F;p&gt;
+&lt;p&gt;테이블의 생성은 create table로 수행할 수 있다.&lt;br &#x2F;&gt;
+생성 쿼리는 기본적으로 아래의 구조를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;create tale 테이블명&lt;br &#x2F;&gt;
+(&lt;br &#x2F;&gt;
+속성명1 타입1,&lt;br &#x2F;&gt;
+속성명2 타입2,&lt;br &#x2F;&gt;
+...&lt;br &#x2F;&gt;
+);&lt;&#x2F;p&gt;
+&lt;p&gt;정수타입의 기본 키 _index와 텍스트 타입의 속성 text를 갖는 테이블 Texts를 만들어보자.&lt;br &#x2F;&gt;
+int는 정수타입이고 varchar는 가변길이문자열 타입이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3c3f0a81227a2611.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그럼 이렇게 잘 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;방금 저 위에서 primary key는 해당 속성이 기본키임을 나타내는 부가속성이다.&lt;br &#x2F;&gt;
+저기선 속성 바로 뒤에 붙였지만 뒤로 미뤄서 쓸 수도 있다.&lt;br &#x2F;&gt;
+그리고 기본키는 테이블당 무조건 하나는 있어야한다.&lt;&#x2F;p&gt;
+&lt;p&gt;일단 만든것부터 지우고 다시 만들자. 테이블을 지우는 데는 drop table을 쓰면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_69455d449c2b1da2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8e57a1e904f63048.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이런식으로.&lt;&#x2F;p&gt;
+&lt;p&gt;속성에 붙이는 부가속성에는 이런 것들이 있다.&lt;br &#x2F;&gt;
+1.primary key: 기본키로 사용. null이 불가능하며, 중복불가.&lt;br &#x2F;&gt;
+2.unique: 중복불가&lt;br &#x2F;&gt;
+3.not null: null 입력불가&lt;&#x2F;p&gt;
+&lt;p&gt;기본키가 아니더라도 가능하다면 not null과 unique를 다 붙여주는게 안전하고 좋다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jeyagjogeon-buyeo-constraint-check&quot;&gt;제약조건 부여: constraint &amp;amp; check&lt;&#x2F;h2&gt;
+&lt;p&gt;constatrain 절을 사용하면 제약조건을 만들 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;방금의 테이블에서 _index 값을 100 이하로만 넣을 수 있도록 제약을 걸어보자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c95212476b60ce34.png&quot; alt=&quot;&quot; &#x2F;&gt;
+일단 지우고&lt;&#x2F;p&gt;
+&lt;p&gt;이런식으로 만들 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_40b9292ac3740368.png&quot; alt=&quot;&quot; &#x2F;&gt;
+constraint 뒤에 들어가는건 제약조건의 이름이고, check 뒤에 들어가는 것이 제약조건의 내용이다.&lt;br &#x2F;&gt;
+저렇게 해두면 저 check를 위반하는 값은 삽입할 수 없게 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a47532410b5cd3b6.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 constraint 뒤에  붙이는 제약조건명은, 혹시라도 나중에 제약조건을 수정하고 관리할 필요가 있을때 사용하는 것이다. 필요없다면 생략도 가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fb56a27d8c4c1a16.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조에 대한건 다음 포스팅에서 다루겠다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] select문 기본</title>
+        <published>2019-10-01T00:00:00+00:00</published>
+        <updated>2019-10-01T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221664973294/"/>
+        <id>https://myyrakle.github.io/blog/221664973294/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221664973294/">&lt;p&gt;테스트 환경은 MySQL이다.&lt;&#x2F;p&gt;
+&lt;p&gt;select는 데이터베이스에서 데이터를 읽어오는 역할을 한다.&lt;br &#x2F;&gt;
+기본적으로 아래의 형태를 갖는다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;select-sogseongmogrog-from-teibeulmyeong&quot;&gt;select 속성목록 from 테이블명&lt;&#x2F;h4&gt;
+&lt;p&gt;추가로 더 붙는게 있긴 하다만...&lt;br &#x2F;&gt;
+일단 이런식으로 속성목록에 속성을 죄다 써주면 이렇게 다 출력해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1036eb0099cc739a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;근데 매번 저러려면 좀 불편하다.&lt;br &#x2F;&gt;
+속성목록에 *를 쓰면 모든 속성을 출력하게 해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_84bae9695a3ebb05.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;하나씩 출력하는 것도 잘 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_00b1fcc2ccb505bb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5f84d0b7f20e96f1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jungbogjegeo-distinct&quot;&gt;중복제거 distinct&lt;&#x2F;h2&gt;
+&lt;p&gt;바로 위에서는 겹치는 값이 있어도 전부 쏟아냈다.&lt;br &#x2F;&gt;
+근데 이러면 경우에 따라서 논리적인 결함이 발생할 수 있다.&lt;br &#x2F;&gt;
+가령 단순히 존재하는 학교의 목록이나 학년의 목록만 필요한거라면? 카이스트가 3개나 있을 필요가 있는가?&lt;br &#x2F;&gt;
+이를 해결하기 위한 것이 distinct다.&lt;&#x2F;p&gt;
+&lt;p&gt;select 뒤에 distinct를 붙여주면 중복값을 지운 상태로 출력해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8bd400b2d48076ad.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5ffc728d557a3cd8.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;order-by-jeol&quot;&gt;order by 절&lt;&#x2F;h2&gt;
+&lt;p&gt;order by 절을 덧붙이면 출력 목록을 원하는대로 정렬시킬 수 있다.&lt;br &#x2F;&gt;
+by 뒤에는 정렬의 기준이 될 속성이 들어간다.&lt;&#x2F;p&gt;
+&lt;p&gt;아래 쿼리는 성적을 기준으로 정렬시킨 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3d78451c9e500e2a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;정렬 목록에 2개 이상을 쓰면, 2번째부터는 같은 값들을 정렬하는 2번째 정렬기준이 된다.&lt;br &#x2F;&gt;
+예를들어 저기서 age를 2번째 정렬기준으로 삼는다면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4b39c94528a502dc.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게, 겹치던 3학년과 4학년을 다시 age를 기준으로 재정렬해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;오름차순과 내림차순을 선택할 수도 있다.&lt;br &#x2F;&gt;
+asc를 붙이면 오름차순이 되는데, 어차피 디폴트가 asc라서 꼭 붙일 필요는 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1ead2bfc2a4713c5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이와 반대로 desc를 붙이면 내림차순이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ac4effd7551cc952.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;where-jeol&quot;&gt;where 절&lt;&#x2F;h2&gt;
+&lt;p&gt;이제까지는 저 7개의 모든 튜플들을 접근했지만, where과 조건식을 사용한다면 원하는 튜플만을 추출해서 작업을 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;비교에는 =, !=, &amp;lt;=, &amp;gt;= &amp;lt;, &amp;gt; 등을 사용할 수 있다,&lt;&#x2F;p&gt;
+&lt;p&gt;아래 쿼리는 grade가 4인 튜플만 출력한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d3d5d4115b4145e9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;아래 쿼리는 grade가 4가 아닌 튜플만 출력한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_65992a3e8e2cc4a1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;아래 쿼리는 grade가 4보다 작은것만 출력한다.&lt;br &#x2F;&gt;
+결과는 위와 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_931c28520bc6d31b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;아래 쿼리는 grade가 2와 같거나 작은것만을 출력한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_59b3552cc59c0f85.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;논리 연산자로는 not, and, or가 있다.&lt;br &#x2F;&gt;
+not은 조건식의 결과를 반전시킨다.&lt;br &#x2F;&gt;
+따라서 아래의 쿼리는 grade가 2가 아닌 튜플만 찾는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d8c6a910290641ea.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;and는 두 조건식이 모두 참이어야 참을 반환한다.&lt;br &#x2F;&gt;
+따라서 아래 쿼리는 grade가 4이면서 age가 23인 튜플만 찾는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c03f4dcb410f10af.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;or는 두 조건식 중에 하나만 참이어도 참을 반환한다.&lt;br &#x2F;&gt;
+따라서 아래 쿼리는 4인 튜플과 2인 튜플을 전부 찾는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f8b6359e8ead1d4e.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;특정 범위에 있는 속성값 튜플만을 가져오려면 이런식으로 할 수 있을 것이다.&lt;br &#x2F;&gt;
+아래 쿼리는 2&amp;lt;= x &amp;lt;=3 범위의 grade만을 추출한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5fb4f2bf794c38cb.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 저건 썩... 직관적인 형태의 쿼리는 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;위의 쿼리는 아래와 같이 개선할 수 있다.&lt;br &#x2F;&gt;
+속성 between 시작값 and 종료값&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_831ac7b75a32cd52.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;where-jeol-munjayeol-bigyo-mic-maecing&quot;&gt;where 절 문자열 비교 및 매칭&lt;&#x2F;h2&gt;
+&lt;p&gt;문자열도 기본 비교연산자를 통해 비교를 수행할 순 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f1177616008efc4c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&amp;lt;나 &amp;gt; 등을 쓰면 사전순으로 비교를 수행한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2ed32706a3c58dc4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;문제는 저런식으로는 제대로된 매칭을 수행하기 힘들다는 것이다.&lt;br &#x2F;&gt;
+like 연산자를 사용하면 문자열의 패턴을 매칭시킬 수 있다.&lt;br &#x2F;&gt;
+&lt;strong&gt;속성 like 문자열패턴&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;여기에는 특별 연산자가 몇개 더 있는데, _는 하나의 모든 문자를 표현하고,&lt;br &#x2F;&gt;
+%는 0개 이상의 모든 문자열을 표현한다.&lt;br &#x2F;&gt;
+가령 &quot;%o%&quot;라는 패턴은, o가 들어가는 모든 문자열을 의미하는 것이다.&lt;br &#x2F;&gt;
+그래서 그것대로 쿼리를 돌리면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_66bc56c9d888dd34.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 중간에 o가 들어가는 놈만 잘 찾아준다.&lt;&#x2F;p&gt;
+&lt;p&gt;마찬가지로 이렇게 하면 대로 끝나는 학교명만 찾는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_616d5a3545fe73ad.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;참고로 이렇게 해도 돌아간다.&lt;br &#x2F;&gt;
+%는 없는 것도 매칭해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_35f62213eb26303f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게도 할 수 있다. 대신 딱 2글자만 매칭된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_070d0887d941de03.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+&lt;p&gt;더 있긴 한데 나눠서 포스팅하도록 하겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;extbrain.tistory.com&#x2F;51&quot;&gt;https:&#x2F;&#x2F;extbrain.tistory.com&#x2F;51&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] select문: where, group, etc</title>
+        <published>2019-10-01T00:00:00+00:00</published>
+        <updated>2019-10-01T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221665010407/"/>
+        <id>https://myyrakle.github.io/blog/221665010407/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221665010407/">&lt;p&gt;실습환경은 MySQL이다.&lt;br &#x2F;&gt;
+저장된 데이터의 내역은 아래와 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_10ec5cba86d7dae4.PNG&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_72fbf8526e529b03.PNG&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;naejanghamsu&quot;&gt;내장함수&lt;&#x2F;h2&gt;
+&lt;p&gt;select에는 함께 사용할 수 있는 내장함수들이 몇개 있다.&lt;br &#x2F;&gt;
+count, max, min, sum, avg 등이 그것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;count는 특정 속성의 개수를 가져온다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b9b5657ab1f0d83f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;max는 특정 속성에서 가장 큰 값을 가져온다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c42096d1194c9182.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;min은 가장 작은걸 가져온다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7148a3a20e8d2c7c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;sum은 특정 속성의 값들을 전부 더해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e7d25672b934790a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;avg는 더한 평균값을 가져온다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_29fae274cae052cb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;where-jeol-in&quot;&gt;where 절: in&lt;&#x2F;h4&gt;
+&lt;p&gt;속성명 in (...)의 형태로 조건식을 달면 배열 (...)에 들어있는 항목에 대한 모든 속성을 가져오게 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c61d6b32c59ded4c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이것만 해서는 뭐 별게 있나 싶지만, 이걸 응용하면 select의 중첩이 편리하다.&lt;br &#x2F;&gt;
+select의 반환값도 일종의 배열처럼 처리될 수 있기 떄문이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;select-jungceob-kweori&quot;&gt;select 중첩 쿼리&lt;&#x2F;h2&gt;
+&lt;p&gt;select의 결과값을 다시 조건으로 삼아서 쿼리를 날리는 것이다.&lt;br &#x2F;&gt;
+예를 들어 in (...)의 안에 넣을 수도 있겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;아래 쿼리는 4학년이 있는 학교만 찾아서, 그 학교의 튜플을 전부 출력하는 중첩쿼리다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bf7a64e00a96d19b.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;kweori-gyeolgwa-byeonghab-union&quot;&gt;쿼리 결과 병합 union&lt;&#x2F;h4&gt;
+&lt;p&gt;각 쿼리 사이에 union을 사용하면, 쿼리의 결과값이 병합되어 출력된다.&lt;br &#x2F;&gt;
+단, 중복은 제거된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d81800c0aa64311a.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;culryeogsi-sogseongmyeong-byeongyeong-as&quot;&gt;출력시 속성명 변경 as&lt;&#x2F;h4&gt;
+&lt;p&gt;select 뒤에 속성명을 붙일 때 as를 사용하면 출력될때만 속성명을 다르게 보이게 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6ff5ddd3865320be.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;geurubhwa&quot;&gt;그룹화&lt;&#x2F;h4&gt;
+&lt;p&gt;그룹화는 속성의 값들을 기준으로 테이블을 재구성하는 것이다.&lt;br &#x2F;&gt;
+group by 절 뒤에 붙인 속성이 그룹의 기준이 된다.&lt;br &#x2F;&gt;
+가령 아래의 쿼리는, 중복되는 school_name 속성값들마다 avg로 age의 평균값을 낸다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_600b01e462d8de1e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 저렇게 하면 영 보기 싫으니까, AS로 대충 이름을 달아주는게 좋다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f12b1794816eeaa2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[SQL] 기본 규칙</title>
+        <published>2019-09-03T00:00:00+00:00</published>
+        <updated>2019-09-03T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221636907680/"/>
+        <id>https://myyrakle.github.io/blog/221636907680/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221636907680/">&lt;p&gt;1.대소문자를 구별하지 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;2.하나의 문장은 반드시 세미콜론(;)으로 끝난다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>SQL 정리</title>
+        <published>2019-06-18T00:00:00+00:00</published>
+        <updated>2019-06-18T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221564650898/"/>
+        <id>https://myyrakle.github.io/blog/221564650898/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221564650898/">&lt;p&gt;기본 데이터 제어&lt;&#x2F;p&gt;
+&lt;p&gt;삽입&lt;br &#x2F;&gt;
+insert into 테이블명(속성명들...) values(값들...)&lt;&#x2F;p&gt;
+&lt;p&gt;수정&lt;br &#x2F;&gt;
+update 테이블명 set 속성명=값, ... where 조건문&lt;&#x2F;p&gt;
+&lt;p&gt;삭제&lt;br &#x2F;&gt;
+delete from 테이블명 where 조건문&lt;&#x2F;p&gt;
+&lt;p&gt;검색&lt;br &#x2F;&gt;
+select 속성명... from 테이블명 where 조건문&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;테이블 생성&#x2F;삭제&lt;br &#x2F;&gt;
+create table 테이블명(...)&lt;br &#x2F;&gt;
+drop table 테이블명&lt;&#x2F;p&gt;
+&lt;p&gt;데이터베이스 생성&#x2F;삭제&lt;br &#x2F;&gt;
+create database 디비명&lt;br &#x2F;&gt;
+drop database 디비명&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;테이블에 속성 추가&#x2F;삭제&lt;br &#x2F;&gt;
+alter table 테이블명 add 속성내용...&lt;br &#x2F;&gt;
+alter table 테이블명 drop column 속성명&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;복합 조건문(if-else)&lt;br &#x2F;&gt;
+case &#x2F;&#x2F;시작&lt;br &#x2F;&gt;
+when 조건식 then 반환식&lt;br &#x2F;&gt;
+when 조건식 then 반환식&lt;br &#x2F;&gt;
+...&lt;br &#x2F;&gt;
+else 반환식&lt;br &#x2F;&gt;
+end &#x2F;&#x2F;끝&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

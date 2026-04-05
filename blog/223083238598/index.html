@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] lifetime: PhantomData | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223083238598/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] lifetime: PhantomData">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223083238598/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-04-24T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223083238598/">[Rust] lifetime: PhantomData</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-04-24T00:00:00+00:00"><time datetime="2023-04-24T00:00:00+00:00">2023.04.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="269 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223083238598" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PhantomData은 빡빡한 라이프타임 검사를 회피/보완하기 위해 제공되는 특수한 empty 마커 타입이다.<br />
+이걸 쓴다고 딱히 메모리를 더 먹거나 느려지지는 않고, 그냥 힌트만 제공하는 것이다.</p>
+<p>다른 포스트들을 보니까 Vec 타입을 예로 들면서 Drop에 필요한 어쩌고저쩌고... 하면서 설명하는데, 이건 2016년쯤 이후로는 유효하지 않은 설명이다.<br />
+그런건 필요하지 않다. 그냥 알아서 잘 drop해준다.</p>
+<p>이게 필요한 경우는 특정 타입에 대해 임시적으로 소유권을 가지는 프록시 타입을 구현할 때다.<br />
+가장 대표적인 것은 iterator 같은 타입이라고 보면 되겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="yesi">예시</h2>
+<p>자. 동적배열과 동적배열의 특정 지점을 가리키는 이터레이터를 구현한다고 가정하겠다.</p>
+<p>배열은 이렇게 구현했고</p>
+<p><img src="/images/img_6b35d088b48c7dc4.png" alt="" /></p>
+<p>이터레이터는 이렇게 구현했다.</p>
+<p><img src="/images/img_2ac0a1c845cd7836.png" alt="" /></p>
+<p>혹시 이상한 점이 보이는가?<br />
+안보인다고? 그럼 아래 코드를 보면 어떤가?</p>
+<p><img src="/images/img_3936b02b69077044.png" alt="" />
+배열은 내부 스코프에 가둬놔서 그 안에서 살고 죽는데, iterator는 바깥 스코프까지 리턴돼서 살아있는 척을 하고 있다.</p>
+<p>이러면 iterator가 이미 죽은 배열 객체를 참조하는 이상한 상황이 발생할 수가 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="raipeutaim-jehanhagi">라이프타임 제한하기</h2>
+<p>저 문제를 근본부터 막으려면, 저 iterator의 라이프타임을 생성 시점에 고정해야 한다.</p>
+<p>그러려면 우선 Iterator 객체에도 라이프타임을 마킹해야 하는데...</p>
+<p><img src="/images/img_24dc48bacd74b0ed.png" alt="" />
+음? 라이프타임을 추가하긴 했는데, 필드에 해당되는게 없으니 에러가 난다.<br />
+근데 그렇다고 raw pointer에 라이프타임을 달 수도 없고...</p>
+<p>PhantomData가 필요한 경우가 바로 이때다.<br />
+그냥 땜빵이다.</p>
+<p><img src="/images/img_d720151ec422886f.png" alt="" />
+그럼 컴파일이 될 것이다.</p>
+<p>iterator 생성 함수에도 이런식으로 라이프타임을 넣어주면</p>
+<p><img src="/images/img_2559f9203f75a019.png" alt="" /></p>
+<p>짜잔.</p>
+<p><img src="/images/img_d46f27e562844d4a.png" alt="" />
+이제 잘 검사해준다.</p>
+<p>대충 이런식으로 써먹으면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/std/marker/struct.PhantomData.html">https://doc.rust-lang.org/std/marker/struct.PhantomData.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/41533508/what-is-the-phantomdata-actually-doing-in-the-implementation-of-vec/42720413">https://stackoverflow.com/questions/41533508/what-is-the-phantomdata-actually-doing-in-the-implementation-of-vec/42720413</a><br />
+<a rel="external" href="https://doc.rust-lang.org/nomicon/phantom-data.html">https://doc.rust-lang.org/nomicon/phantom-data.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223083230164/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] unsafe: 수동 메모리 관리 - 동적배열 구현해보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223083988983/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[GCP] gcloud cli 설치하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

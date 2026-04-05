@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Linux] cgroup | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224119321322/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Linux] cgroup">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224119321322/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-12-23T00:00:00+00:00">
+    <meta property="article:tag" content="Linux">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224119321322/">[Linux] cgroup</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-23T00:00:00+00:00"><time datetime="2025-12-23T00:00:00+00:00">2025.12.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="391 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/linux/">Linux</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224119321322" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>cgroup은 리눅스 커널의 주요 기능 중 하나다. control group의 축약이다.<br />
+특정 계정 단위로 CPU/메모리 사용량, 디스크 i/o 사용량, 네트워크 트래픽 사용량, 프로세스 수 등을 제한할 수 있게 해준다.</p>
+<p>컨테이너 기술의 핵심을 이루고 있기 때문에, 서버-인프라와 관계된 작업을 한다면 거의 기본 소양에 가까운 녀석이기도 하다.<br />
+Docker/k8s 등에서 지원하는 컨테이너 간 리소스 격리 기능은 전부 cgroup 기능을 그대로 갖다 쓴 거라고 보면 된다. 사실 얘들이 직접 깎은건 별로 없다. 있는걸 잘 조합했을 뿐이다.</p>
+<br>
+<br>
+<br>
+<h2 id="beojeon-v1-v2">버전 v1, v2</h2>
+<p>cgroup은 현재 2개의 버전으로 파편화되어있다.<br />
+다음 명령을 사용하면 현재 리눅스 커널이 어떤 cgroup을 지원하는지 확인할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>mount</span><span style="color: #94E2D5;"> |</span><span> grep cgroup</span></span></code></pre>
+<p><img src="/images/img_1bc26d6129b8b770.png" alt="" />
+이러면 cgroup v2를 쓰는 것이다.</p>
+<p>v1이라고 해서 기본적인 기능이 부족하거나 버그가 많거나 한건 아니다. 복잡한거 좀 정리하고 인터페이스 수준의 안정화를 완료한 것이 cgroup v2다.</p>
+<p>커널 버전 4.5부터는 v2를 지원한다.<br />
+하지만 v1도 아직 레거시에서 많이 쓰이고 있고, 큰 문제는 없다. 오히려 2008년부터 오랫동안 써왔기 때문에 어떤 측면에서는 더 안정적이라고 할 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="cgroup-sayonghaebogi-memori-sayong-jehan-v2">cgroup 사용해보기 - 메모리 사용 제한 (v2)</h2>
+<p>한번 이게 어떻게 동작하는지를 직접 돌려보면서 확인해보자.</p>
+<p>가장 먼저 /sys/fs/cgroup이라는 경로에 새로운 cgroup 디렉터리를 만들어줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>sys</span><span style="color: #94E2D5;">/</span><span>fs</span><span style="color: #94E2D5;">/</span><span>cgroup</span><span style="color: #94E2D5;">/</span><span>test_demo</span></span></code></pre>
+<p><img src="/images/img_ca08bc67c85bf5e2.png" alt="" />
+이건 매우 특수한 경로라서, 빈 폴더만 만들어도</p>
+<br>
+<p><img src="/images/img_aca4d8f0f3a07b65.png" alt="" />
+바로 이렇게 자동으로 뭘 채워준다.<br />
+이 각각의 파일이 cgroup 제어용 설정 파일이다.</p>
+<br>
+<p><img src="/images/img_37198c0dd274abb6.png" alt="" />
+실제로 보면 이런 식으로 설정값이 들어있다.</p>
+<p>여기서 우리는 가장 티가 잘 나고 확인하기 쉬운 "메모리 제한"을 걸어보겠다.<br />
+메모리 제한에 도달하면 OOM으로 죽게 하는 것이다.</p>
+<p>다음 명령은 cgroup의 메모리 최대치를 100MB로 설정한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;100M&quot;</span><span style="color: #94E2D5;"> |</span><span> sudo tee</span><span style="color: #94E2D5;"> /</span><span>sys</span><span style="color: #94E2D5;">/</span><span>fs</span><span style="color: #94E2D5;">/</span><span>cgroup</span><span style="color: #94E2D5;">/</span><span>test_demo</span><span style="color: #94E2D5;">/</span><span>memory</span><span style="color: #94E2D5;">.</span><span>max</span></span></code></pre>
+<p><img src="/images/img_b4a2d21aa6c4e9b0.png" alt="" /></p>
+<p>메모리 스왑 설정도 꺼야 한다. 안그러면 메모리를 초과해도 메모리 스왑을 사용하고 OOM을 당하지 않는다.</p>
+<p><img src="/images/img_af88c80b476a2038.png" alt="" />
+이렇게 max로 설정되어있으면 스왑을 무제한으로 쓰는 것이다. 저거 다 쓸때까지 OOM KILL을 당하지 않는다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>echo</span><span style="color: #A6E3A1;"> &quot;0&quot;</span><span style="color: #94E2D5;"> |</span><span> sudo tee</span><span style="color: #94E2D5;"> /</span><span>sys</span><span style="color: #94E2D5;">/</span><span>fs</span><span style="color: #94E2D5;">/</span><span>cgroup</span><span style="color: #94E2D5;">/</span><span>test_demo</span><span style="color: #94E2D5;">/</span><span>memory</span><span style="color: #94E2D5;">.</span><span>swap</span><span style="color: #94E2D5;">.</span><span>max</span></span></code></pre>
+<p><img src="/images/img_bc74a88cd5111483.png" alt="" />
+스왑을 끄고 싶다면 이렇게 끄면 된다.</p>
+<p>그 다음에 할 것은, cgroup에 프로세스를 등록하는 것이다. 방법은 꽤 쉽다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cat</span><span style="color: #94E2D5;"> /</span><span>sys</span><span style="color: #94E2D5;">/</span><span>fs</span><span style="color: #94E2D5;">/</span><span>cgroup</span><span style="color: #94E2D5;">/</span><span>test_demo</span><span style="color: #94E2D5;">/</span><span>cgroup</span><span style="color: #94E2D5;">.</span><span>procs</span></span></code></pre>
+<p><img src="/images/img_3940fa112e590f22.png" alt="" />
+cgroup.procs라는 파일에 프로세스의 PID를 넣어주면 된다.<br />
+그래서 프로세스를 실행해서 PID를 받아온 다음에 넣어줘야만 한다. 프로세스를 시작하기 전에는 cgroup에 할당할 수가 없다.</p>
+<p>파이썬으로 메모리를 천천히 점유하는 코드를 짜서 실행해봤다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 메모리를 10M씩 천천히 계속 늘려가며 점유하는 프로그램</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> time</span></span>
+<span class="giallo-l"><span>import os</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>memory = []</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(</span><span style="color: #A6E3A1;">&quot;Process ID :&quot;</span><span style="color: #9399B2;">,</span><span> os.getpid())</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 엔터 대기...</span></span>
+<span class="giallo-l"><span>input(</span><span style="color: #A6E3A1;">&quot;Press Enter to start allocating memory...&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>while True:</span></span>
+<span class="giallo-l"><span>    # bytearray를 생성하고 실제로 메모리에 쓰기</span></span>
+<span class="giallo-l"><span>    chunk = bytearray(10 </span><span style="color: #F38BA8;">*</span><span> 1024 </span><span style="color: #F38BA8;">*</span><span> 1024)</span></span>
+<span class="giallo-l"><span>    # 메모리를 실제로 사용하도록 강제 (0xFF로 채우기)</span></span>
+<span class="giallo-l"><span>    for i in range(0</span><span style="color: #9399B2;">,</span><span> len(chunk)</span><span style="color: #9399B2;">,</span><span> 4096):  # 페이지 단위로 쓰기</span></span>
+<span class="giallo-l"><span>        chunk[i] = 0xFF</span></span>
+<span class="giallo-l"><span>    memory.append(chunk)</span></span>
+<span class="giallo-l"><span>    time.sleep(3)  # 3초 대기</span></span>
+<span class="giallo-l"><span>    print(f</span><span style="color: #A6E3A1;">&quot;Allocated memory: {len(memory) * 10} MB&quot;</span><span>)</span></span></code></pre>
+<p><img src="/images/img_5c57838f93ced11f.png" alt="" />
+실행하면 PID를 출력한 채로 멈추게 했다.</p>
+<p>저걸 이렇게 집어넣으면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>echo [PID]</span><span style="color: #94E2D5;"> |</span><span> sudo tee</span><span style="color: #94E2D5;"> /</span><span>sys</span><span style="color: #94E2D5;">/</span><span>fs</span><span style="color: #94E2D5;">/</span><span>cgroup</span><span style="color: #94E2D5;">/</span><span>test_demo</span><span style="color: #94E2D5;">/</span><span>cgroup</span><span style="color: #94E2D5;">.</span><span>procs</span></span></code></pre>
+<p><img src="/images/img_0e5839b49392d1a5.png" alt="" /></p>
+<p><img src="/images/img_db9ce1eb5b6702cf.png" alt="" /></p>
+<p>그리고 그 상태에서 실행을 재개하면</p>
+<p><img src="/images/img_4ba1b72fec93c352.png" alt="" />
+100MB을 먹은 상태에서 터질 것이다.<br />
+이게 cgroup이 해주는 것이다.</p>
+<p>Docker가 하는 것도 내부적으로 이렇게 파일 조작하고 하는 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.redhat.com/ko/documentation/red_hat_enterprise_linux/6/html/resource_management_guide/ch01">https://docs.redhat.com/ko/documentation/red_hat_enterprise_linux/6/html/resource_management_guide/ch01</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224119293124/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[DDD] bounded context와 엔티티의 공유<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224116710165/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>AI 생성 코드가 문제를 1.7배 더 많이 발생시킴.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

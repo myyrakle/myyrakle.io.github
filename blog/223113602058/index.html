@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] build.rs를 통한 빌드 스크립트 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223113602058/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] build.rs를 통한 빌드 스크립트 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223113602058/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-28T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223113602058/">[Rust] build.rs를 통한 빌드 스크립트 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-28T00:00:00+00:00"><time datetime="2023-05-28T00:00:00+00:00">2023.05.28</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="295 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223113602058" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust로 프로그램을 작성하다보면, 가끔은 C/C++ 기반의 방대한 환경을 활용해야 할 일이 있다.<br />
+이건 그런 상황에서만 주로 사용하는 조금은 deep한 기능이다.</p>
+<p>Rust에서 C로 작성된 코드를 갖다쓴다고 하면, C 코드를 직접 동적 라이브러리나 정적 라이브러리로 말아서, 직접 링크한 다음에 배포할 수도 있을 것이다.</p>
+<p>하지만 그러면 크로스컴파일에 제동이 좀 걸린다. 제대로 빌드와 배포를 수행하려면 그냥 그 머신에서 바로바로 C 코드를 컴파일하고 Rust도 컴파일해서 쭉 뽑는게 좋은데... build script는 딱 그걸 위한 보조기능이다.</p>
+<p>아래와 같이 프로젝트 내에 C 소스코드가 포함되어있다고 가정하겠다.</p>
+<p><img src="/images/img_d702cc8a4c8213ef.png" alt="" />
+이걸 build script를 써서 연동해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibonseoljeong">기본설정</h2>
+<p>우선 cargo.toml에서 build를 build.rs로 지정해준다.<br />
+그러면 저게 build script 진입점이 될 것이다.</p>
+<p><img src="/images/img_baf5a70261cc5e4c.png" alt="" />
+build-dependencies에는 c 컴파일용 cc 크레이트를 추가했다.<br />
+딱 build script 실행 컨텍스트 상에서만 적용되는 종속성 설정인데, c 컴파일 외에도 이것저것 더 할게 있다면 더 추가하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="build-script-jagseong">build script 작성</h2>
+<p>build script를 작성하는 법은 일반적인 main.rs를 작성하는 법과 크게 다르지 않다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // hello.c 파일이 변경될때마다 재빌드 하도록 한다.</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;cargo:rerun-if-changed=src/hello.c&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // c 컴파일러로 컴파일해서 정적 링크</span></span>
+<span class="giallo-l"><span>    cc</span><span style="color: #9399B2;">:</span><span>:Build</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">file</span><span>(</span><span style="color: #A6E3A1;">&quot;src/hello.c&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">compile</span><span>(</span><span style="color: #A6E3A1;">&quot;hello&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_bc9f460f09a90642.png" alt="" />
+다만 위와 같이 표준 출력을 통해 cargo에 특정 옵션을 전달할 수 있다는 점이 다르다.<br />
+이러면 cc로 컴파일을 한 다음에 자동으로 정적 링킹을 해줄 것이다.</p>
+<p>저래놓고 cargo build나 cargo run으로 컴파일을 한번 돌려보면</p>
+<p><img src="/images/img_3aa6d8c28613fe78.png" alt="" />
+build 디렉터리에 결과물들이 적당히 떨어진다.</p>
+<br>
+<p><img src="/images/img_c7149cc82dca1461.png" alt="" />
+저기서 발생한 표준출력도 텍스트파일로 저장되니, 디버깅할일이 있다면 까보면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="gajdasseugi">갖다쓰기</h2>
+<p>방금 cc로 컴파일한 결과물을 갖다써보자.</p>
+<p>방법은 그다지 어려울건 없다.<br />
+자동으로 링크를 해주기 때문에 컨텍스트에 자동으로 들어오고, extern 구문을 통해 프로토타입만 작성해준다.</p>
+<p><img src="/images/img_d0bc867cd66ab028.png" alt="" />
+이것도 원본 함수가 Rust 함수는 아니기 때문에 호출 자체는 unsafe다.</p>
+<p>그러면</p>
+<p><img src="/images/img_9ac0455fb3029466.png" alt="" />
+돌기는 잘 돌 것이다.</p>
+<p>이런식으로 쓰면 된다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/cargo/reference/build-scripts.html">https://doc.rust-lang.org/cargo/reference/build-scripts.html</a><br />
+<a rel="external" href="https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/cargo/reference/build-scripts.html">https://web.mit.edu/rust-lang_v1.25/arch/amd64_ubuntu1404/share/doc/rust/html/cargo/reference/build-scripts.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223114800667/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>CDN<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223113621629/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>k8s에 Prometheus + Grafana 통합하기 (kube-prometheus)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>캐싱 전략 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223479959982/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="캐싱 전략">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223479959982/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-06-15T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223479959982/">캐싱 전략</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-06-15T00:00:00+00:00"><time datetime="2024-06-15T00:00:00+00:00">2024.06.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="579 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223479959982" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>성능 최적화를 위해 Redis 같은 캐시 레이어를 붙이다보면, 또 이런데서 나오는 관리포인트나 딜레마가 발생하기 시작한다.<br />
+결국 데이터소스가 2개 이상이 되는 것이기 때문이다.</p>
+<p>여기에서는 상황에 따라서 몇가지 접근법이 존재한다.</p>
+<br>
+<br>
+<h2 id="cache-aside">Cache Aside</h2>
+<p>가장 일반적으로 많이 사용되는 캐싱 전략이다.</p>
+<p><img src="/images/img_8b27006b82e55468.png" alt="" />
+https://codeahoy.com/2017/08/11/caching-strategies-and-how-to-choose-the-right-one/</p>
+<ol>
+<li>앱은 일단 캐시에 원하는 데이터가 있는지를 검사한다.</li>
+<li>캐시가 있다면 그걸 바로 반환한다.</li>
+<li>캐시가 없다면 DB로부터 데이터를 만들어서 캐시에 저장하고, 반환한다.</li>
+</ol>
+<p>여기서 캐시 저장은 TTL 기반으로 수명을 두고서 사용하기도 한다.</p>
+<p>읽기가 많으면서도, 접근하는 데이터의 분포가 몰려있는 패턴에 적합하다.</p>
+<p>그리고 read 시의 성능이 균일하지 않다는 단점이 있지만, lazy한 특성 탓에 캐시 용량을 컴팩트하게 유지하기는 가장 좋다.<br />
+read되지 않으면 캐시에도 저장하지 않기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="read-through">Read Through</h2>
+<p>Read Through는 Cache Aside와 비슷하면서도 크게 다른 접근법이다.</p>
+<p><img src="/images/img_77f73cfbdbb4cb92.png" alt="" />
+https://codeahoy.com/2017/08/11/caching-strategies-and-how-to-choose-the-right-one/<br />
+DB를 기반으로 캐시를 만들고, 앱이 그 캐시를 읽는다는 점에서는 Cache Aside와 비슷하지만, 앱이 DB와 직접 연결되지 않는다는 것이 다르다.</p>
+<p>별도의 마법같은 처리를 통해서 캐시가 최신상태를 유지한다는 가정 하에서, 그냥 캐시에서만 값을 읽어오는 것이다.<br />
+그래서 캐시의 최신성을 보장하는 Write Through나 Write Back 패턴과 함께 사용할 때 의미가 있다.</p>
+<p>하지만 캐시를 모두 미리 저장해야한다는 전제조건이 있기 때문에, 모든 데이터를 균일하게 사용하는게 아니라면 Cache Aside에 비해 캐시 저장공간 낭비가 심할 수 있다는 것이 단점이다.</p>
+<br>
+<br>
+<br>
+<h2 id="write-through">Write Through</h2>
+<br>
+<p><img src="/images/img_e62311a4fbed32a6.png" alt="" />
+https://codeahoy.com/2017/08/11/caching-strategies-and-how-to-choose-the-right-one/<br />
+Write Through는 조금 다르게 캐시의 관리를 바라보는 접근방법이다.<br />
+DB를 수정하고 캐시를 맞추는게 아니라, 캐시를 수정하고 DB를 맞춘다.</p>
+<p>이러면 캐시가 항상 최신 상태라는 것을 보장할 수 있기 때문에, 읽기 시에 캐시를 수정하는 부담을 줄일 수 있다. Read Through를 사용할 수 있는 것이다.</p>
+<p>가령, Redis와 RDB를 스토리지로 사용하는 상황에서 캐시 데이터를 수정한다면, Redis의 캐시를 업데이트하고 RDB를 똑같이 업데이트해서 일관성을 유지하는 것이다.<br />
+대신 캐시는 최신이지만 모종의 이유로 DB에는 동기화되지 않는 골치아픈 문제가 발생할 수는 있다.</p>
+<p>읽기는 빠르게 만들 수 있지만, 비교적 느린 DB 레이어에도 수정을 동기적으로 하기 때문에 쓰기 작업 자체에 대해서는 레이턴시를 줄이는 데 한계가 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="write-behind">Write Behind</h2>
+<br>
+<p><img src="/images/img_ab0d06358293bac8.png" alt="" />
+https://codeahoy.com/2017/08/11/caching-strategies-and-how-to-choose-the-right-one/<br />
+Write Back이라고도 부른다.</p>
+<p>Write Through가 캐시를 먼저 수정하되 정직하게 데이터소스를 동시에 업데이트하는 방법이라면, Write Behind는 비동기적으로 느슨하게 동기화를 맞춘다.</p>
+<p>우선 캐시를 먼저 수정하고, 나중에 알아서 캐시 수정사항이 DB에 저장되도록 하는 것이다. 사실 CDC의 개념과 크게 다르지 않다.</p>
+<p>대표적으로 Redis는 엔터프라이즈 옵션을 쓸 경우에 한해 이러한 기능을 제공하고, RedisGears 같은 확장을 사용할 수도 있다.</p>
+<p>이건 쓰기가 매우 많은 패턴에 적합하다.<br />
+하지만 쓰기가 그리 많지 않다면 Read Through + Write Through로도 충분하다. 오히려 관리포인트만 증가할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="hadeuweeo-sujun-kaesing-jeonryag">하드웨어 수준 캐싱 전략</h2>
+<p>위에서는 Redis 같은 소프트웨어 시스템 수준 캐싱을 위주로 이야기했지만, 사실 이건 하드웨어 캐시 수준에서도 사용하는 개념이다.</p>
+<p>Redis를 CPU의 캐시 메모리로, DB를 일반 메모리로 대치시켜도 동일한 이야기를 할 수 있다.</p>
+<p><img src="/images/img_ee9bdcd0638f9ff9.jpg" alt="" />
+https://youtu.be/GhEYqA5dxD4?si=-t1v2RzE8TwxUp4T</p>
+<p>현대의 CPU들은 대부분 Write Back 기반의 캐싱 전략을 사용한다.<br />
+캐시 수정할때마다 램 수정한다고 기다리면 속이 터지기 때문이다...</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://cyber0946.tistory.com/m/81">https://cyber0946.tistory.com/m/81</a><br />
+<a rel="external" href="https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/gears-v1/python/recipes/write-behind/">https://redis.io/docs/latest/operate/oss_and_stack/stack-with-enterprise/gears-v1/python/recipes/write-behind/</a><br />
+<a rel="external" href="https://codeahoy.com/2017/08/11/caching-strategies-and-how-to-choose-the-right-one/">https://codeahoy.com/2017/08/11/caching-strategies-and-how-to-choose-the-right-one/</a><br />
+<a rel="external" href="https://codeahoy.com/learn/tutorials/distributed-caching-at-scale/">https://codeahoy.com/learn/tutorials/distributed-caching-at-scale/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223479875946/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] IO: memory map<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223480407378/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.79.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

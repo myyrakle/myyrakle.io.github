@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 라이프타임(lifetime) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221594974122/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 라이프타임(lifetime)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221594974122/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-07-25T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221594974122/">[Rust] 라이프타임(lifetime)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-07-25T00:00:00+00:00"><time datetime="2019-07-25T00:00:00+00:00">2019.07.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="325 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221594974122" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>라이프타임은 어떤 참조에 대한 수명을 표시하고 제약을 걸어서 안전성을 확보할 수 있는 문법요소중 하나다.</p>
+<p>가령 어떤 자원 A가 있고 이를 가리키는 참조 P가 있다. 그러다가 프로그램에서 A가 삭제되었는데, P는 여전히 존재한다면!<br />
+이러한 상황은 심각한 오류를 발생시킬 수 있다.<br />
+라이프타임은 이를 해결하기 위한 방법론이다.</p>
+<br>
+<p>i32의 참조자를 가지는 Foo 구조체를 정의해서 생성해보자.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+그럼 라이프타임 지정자를 빼먹었다고 뭐라고 한다.</p>
+<p>이걸 해결하려면 구조체 이름 옆에 &lt;'라이프타임이름'&gt; 정의해주고 참조에도 그걸 달아주면 된다.<br />
+이름은 뭘로해도 상관없는데 보통 관례적으로 a, b... 순서대로 쓰는거같다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+이렇게하면 멤버변수 x는 구조체 Foo와 같은 생명주기를 갖게 된다.<br />
+메서드를 정의할때는 impl&lt;'a&gt; Foo&lt;'a&gt;...로 하면 된다.</p>
+<br>
+<p>함수에도 비슷하게 적용할 수 있다. 다만 함수에서는 라이프타임을 지정하지 않아도 에러는 잘 안낸다.<br />
+그냥 암시적으로 라이프타임을 적용해주기 때문이다. 왜 구조체만 차별하는지는 모르겠다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p>라이프타임을 지정하면 이렇게 된다.<br />
+에디터가 좀 멍청해서 문자 리터럴로 파싱해버렸다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p>근데 뭔가 귀찮고 짜증나는 예외가 좀 있다.<br />
+함수 인자에 참조가 2개 이상 있고, 반환타입도 참조라면 라이프타임을 명시해줘야한다.<br />
+반환타입의 라이프타임이 둘중 뭘 따르는지 모르기 때문이다..</p>
+<p>예시를 보자.<br />
+아래의 forward 함수는 참조 2개를 받아서 첫번째 인자를 그대로 반환하기만 한다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+그럼 반환타입의 라이프타임을 알수없다고 에러를 던진다.</p>
+<p>이걸 해결하려면 2개의 인자를 하나의 라이프타임으로 묶어도 되고,<br />
+따로 구별한다음에 반환타입의 라이프타임은 그 2개중에 하나로 골라도 된다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+이렇게 하거나</p>
+<br>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+이렇게 하거나</p>
+<br>
+<p><strong>static 라이프타임</strong><br />
+'static은 유일하게 특별한 의미를 가지는 라이프타임이다.<br />
+말 그대로 정적이라는 뜻이다. 'static으로 지정된 변수 등은 절대로 죽지 않는다...
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<br>
+<p>사실 아직 쓰면서도 긴가민가하다. 제대로 이해하게 되면 다시 정리해서 수정토록 하겠다...</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/1.9.0/book/lifetimes.html">https://doc.rust-lang.org/1.9.0/book/lifetimes.html</a><br />
+<a rel="external" href="https://rinthel.github.io/rust-lang-book-ko/ch10-03-lifetime-syntax.html">https://rinthel.github.io/rust-lang-book-ko/ch10-03-lifetime-syntax.html</a> (보기 좋다.)</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221596871113/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C&#x2F;C++] openMP를 통한 병렬처리 in VS<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221591819658/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Scala] 함수<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

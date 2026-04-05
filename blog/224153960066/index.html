@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] advisory lock | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224153960066/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] advisory lock">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224153960066/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-01-21T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224153960066/">[PostgreSQL] advisory lock</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-01-21T00:00:00+00:00"><time datetime="2026-01-21T00:00:00+00:00">2026.01.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="320 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224153960066" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PostgreSQL은 엄격한 배타성이 필요할 경우를 위한 배타적 Lock 기능을 내장함수로 제공한다.<br />
+기능요소가 그다지 풍부하진 않지만, 가벼운 사용사례에서는 꽤 쓸만할 수 있다.</p>
+<br>
+<br>
+<h2 id="sayongbeob">사용법</h2>
+<p>기본적인 사용법은 그다지 복잡하지 않다.<br />
+전용 함수인 pg_advisory_lock에 lock ID를 넘겨서 호출하면 그만이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>select</span><span style="color: #89B4FA;font-style: italic;"> pg_advisory_lock</span><span>(N)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_2d29f00780302e15.png" alt="" />
+여기서 lock ID는 항상 정수여야 한다.<br />
+해당 ID로 Lock을 점유하고 있는 세션이 있다면 기다리고, 없다면 Lock을 점유하고 빈값을 반환한다.</p>
+<p>유의할 점이 좀 있는데, 이건 세션 단위로만 배타성을 보장한다는 것이다. 트랜잭션 단위가 아니다!</p>
+<p>아무튼 lock이 잡힌 상태에서 다른 세션이 lock을 시도하면</p>
+<p><img src="/images/img_23f948e03039455a.png" alt="" />
+원래 lock이 해제될 때까지 무한 대기에 빠진다.</p>
+<p>그리고 Lock을 해제하는 것은 unlock 함수를 통해서 처리할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>select</span><span style="color: #89B4FA;font-style: italic;"> pg_advisory_unlock</span><span>(N)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_2bd7fbe97097196c.png" alt="" />
+유의할 점은, lock을 점유하고 있는 세션에서만 unlock을 할 수 있다는 것이다. 다른 세션이 가로채서 날리는건 안된다. 그러면 false를 반환한다.</p>
+<p>그리고, Lock을 점유하던 세션이 닫히면 Lock은 자동으로 해제된다. 쓰레기가 무한대로 남아있을 일은 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="ttl-ceori">TTL 처리</h2>
+<p>advisory lock에는 Lock에 대한 TTL 처리가 명시적으로 제공되진 않는다. 마음대로 Lock을 가로챌 수도 없다. Lock에 대한 소유권이 해당 세션에게 오롯이 존재하는 구조다.</p>
+<p>그래도 Lock을 점유하지는 못하지만, TTL을 느슨하게나마 구현할 수는 있다.<br />
+가장 단순한 방법은 그냥 타임아웃을 적당히 주는 것이다.<br />
+쿼리 수준에서 타임아웃을 설정할 수도 있고, 애플리케이션 수준에서 설정해도 된다.</p>
+<p><img src="/images/img_7ca4b4079a552aba.png" alt="" />
+그러면 무한 대기에 빠지지 않고 적당히 오류처리를 해볼 수 있다.</p>
+<p>이것도 Lock을 점유하지 못하니 뭔가 계속 꼬일 수 있는 문제가 있지만, 최소한의 조치는 해볼 수 있을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeongsu-lock-id">정수 Lock ID</h2>
+<p>advisory lock의 단점 중 하나는, 문자열을 받지 못한다는 것이다.<br />
+그래서 원본 리소스 단위 식별자가 문자열일 경우에는 그걸 정수로 변환하는 번잡스런 과정이 필요하다.</p>
+<p>가장 단순하고 쉬운 방법은, hashtext 같은 함수를 써서 문자열을 정수 해시로 변환하는 것이다.</p>
+<p><img src="/images/img_92d630a60dcc9bb8.png" alt="" />
+이것도 물론 해시 충돌 가능성 등을 고려해야 하긴 한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS">https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/29353845/how-do-i-use-string-as-a-key-to-postgresql-advisory-lock">https://stackoverflow.com/questions/29353845/how-do-i-use-string-as-a-key-to-postgresql-advisory-lock</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224155291740/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] S3 - Glacier DEEP ARCHIVE<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224154949538/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Clickhouse] User Defined Function<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

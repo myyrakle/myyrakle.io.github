@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] S3 Table | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223916069594/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] S3 Table">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223916069594/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-06-30T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223916069594/">[AWS] S3 Table</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-30T00:00:00+00:00"><time datetime="2025-06-30T00:00:00+00:00">2025.06.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="423 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223916069594" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_585686400767222f.png" alt="" />
+S3 Table은 근래에 추가된 S3 부가기능 중 하나다.<br />
+S3에 파일을 "데이터베이스처럼" 넣고, "데이터베이스처럼" 읽기 위한 용도다.</p>
+<p>이 데이터베이스란게 일반적인 RDB나 Key-Value DB를 말하는건 아니고, 분석용 OLAP DB를 말하는 것이다.</p>
+<p>사실상 자사 서비스인 Athena와의 통합을 고려해서 만든 것이라고 보면 된다.<br />
+Athena에 대해 잘 모른다면, 먼저 알아두길 권한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223170376691">https://blog.naver.com/sssang97/223170376691</a></p>
+<br>
+<br>
+<br>
+<h2 id="vs-s3">vs S3</h2>
+<p>그래서 이게 S3와 대비해서 뭐가 달라지고 뭐가 좋아진건가?</p>
+<p>S3 Table은 파일을 그냥 파일로만 두는 S3와는 다르게, 최적화를 위한 파일 압축이나 불필요한 파일 제거 등의 작업을 자동으로 처리한다. 파일의 내부 저장 압축 형식은 Apache Parquet이다.</p>
+<p>그리고, AWS에서는 Athena를 통해서 쿼리를 할때 최대 3배까지도 성능 향상이 있다고 주장한다.<br />
+그리고 동시 트랜잭션 처리량도 10배 정도는 된다고 한다.</p>
+<p>근데 내가 볼때 3배 빠르다는건 마법같은 최적화를 한게 아니라, 압축을 하지 않은 상태로 쿼리를 한 것과 비교한게 아닐까 싶다...<br />
+원래 최적화를 위해서 번거롭게 세팅해서 전처리하고 돌리던 것을 자동화해주는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://aws.amazon.com/ko/s3/pricing/">https://aws.amazon.com/ko/s3/pricing/</a></p>
+<p>비용 체계는 기본 S3와 좀 다르다.</p>
+<p><img src="/images/img_eba18fd7f43316d0.png" alt="" />
+저장 비용만 하면 서울 기준 GB당 0.0288달러인데, 원래 S3는 GB당 0.025이었다.<br />
+약 15% 정도 더 비싼 것이다.</p>
+<p>모니터링하면서 제어를 해야하니까, 모니터링에 따른 객체 개당 비용도 존재한다.<br />
+1000개당 0.025달러다. 이건 저장비용과는 또 별개다.</p>
+<br>
+<br>
+<p><img src="/images/img_044cbad3f40a08c1.png" alt="" />
+그리고 압축이 발생할 경우 그 요금도 뜯어간다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayonghaebogi">사용해보기</h2>
+<p>한번 직접 만들어서 써보자.</p>
+<p><img src="/images/img_0cb187cba57ff838.png" alt="" />
+아예 전용 탭이 존재한다.</p>
+<br>
+<p><img src="/images/img_5c1f5932150b02fd.png" alt="" />
+버킷 자체는 그냥 만들면 된다. 줘야하는 옵션은 별로 없다.</p>
+<br>
+<p><img src="/images/img_1c4adf2d525d44b0.png" alt="" />
+그럼 이런 식으로 만들어지고, 버킷 페이지로 이동할 수 있게 된다.</p>
+<br>
+<p><img src="/images/img_0d2fa3fa7a171569.png" alt="" />
+테이블 버킷은 기존 버킷과는 좀 다르다.<br />
+콘솔에서 뭘 직접 올릴 수도 없고, 보통 DB에나 있는 네임스페이스와 테이블이라는 단위가 존재한다.</p>
+<p>실제로 테이블을 만들거나 데이터를 조작하는건 Athena를 통해서 이루어진다.</p>
+<p><img src="/images/img_a193d888625403d6.png" alt="" /></p>
+<p><img src="/images/img_489dbc3abaa1789e.png" alt="" />
+네임스페이스 만들고 이동해서</p>
+<br>
+<p><img src="/images/img_45c96da6fc25ea14.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE</span><span style="color: #A6E3A1;"> `foo`</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">daily_sales</span><span> (</span></span>
+<span class="giallo-l"><span>sale_date date</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>product_category string</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>sales_amount double)</span></span>
+<span class="giallo-l"><span>PARTITIONED</span><span style="color: #89B4FA;font-style: italic;"> BY</span><span> (</span><span style="color: #89B4FA;font-style: italic;">month</span><span>(sale_date))</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">TBLPROPERTIES</span><span> (</span><span style="color: #A6E3A1;">&#39;table_type&#39;</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;iceberg&#39;</span><span>)</span></span></code></pre>
+<p>자동 생성된 쿼리로 테이블을 만들면</p>
+<br>
+<p><img src="/images/img_0fa3a7515f918dfd.png" alt="" />
+테이블 목록에도 방금 만든 것이 뜰 것이다.</p>
+<p>그리고 Athena 콘솔에서 바로 데이터를 넣어서 테스트를 해볼 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSERT INTO daily_sales</span></span>
+<span class="giallo-l"><span>VALUES</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-01-15&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Laptop&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 900.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-01-15&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Monitor&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 250.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-01-16&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Laptop&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1350.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-02-01&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Monitor&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 300.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-02-01&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Keyboard&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 60.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-02-02&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Mouse&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 25.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-02-02&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Laptop&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1050.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-02-03&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Laptop&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1200.00</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(DATE</span><span style="color: #A6E3A1;"> &#39;2024-02-03&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Monitor&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 375.00</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_47b2bf5252103b39.png" alt="" /></p>
+<p><img src="/images/img_c77bf42d133b6d66.png" alt="" />
+넣으면 들어가고</p>
+<br>
+<p><img src="/images/img_8d6342a810ce3337.png" alt="" /></p>
+<p><img src="/images/img_35d074fef1695d7f.png" alt="" />
+조회도 원하는대로 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jjajeungnaneun-geos">짜증나는 것</h2>
+<p>아직 버킷 삭제 같은 기본적인 부분도 콘솔 구현을 안해놨다.<br />
+API로 찔러야 한다.</p>
+<p><img src="/images/img_6b39c5298cbb3c32.png" alt="" />
+아직 전반적으로 베타서비스 느낌이 있다.</p>
+<br>
+<br>
+<br>
+<p><a rel="external" href="https://aws.amazon.com/ko/s3/features/tables/">https://aws.amazon.com/ko/s3/features/tables/</a><br />
+<a rel="external" href="https://devocean.sk.com/blog/techBoardDetail.do?ID=167170&amp;boardType=techBlog">https://devocean.sk.com/blog/techBoardDetail.do?ID=167170&amp;boardType=techBlog</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/korea/new-amazon-s3-tables-storage-optimized-for-analytics-workloads/">https://aws.amazon.com/ko/blogs/korea/new-amazon-s3-tables-storage-optimized-for-analytics-workloads/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223916052815/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Docker] ulimit 옵션<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223916076795/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>러시아 네트워크 문제<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

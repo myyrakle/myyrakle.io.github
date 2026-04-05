@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>구조체 반환 최적화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221455091126/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="구조체 반환 최적화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221455091126/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-01-30T00:00:00+00:00">
+    <meta property="article:tag" content="C">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221455091126/">구조체 반환 최적화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-01-30T00:00:00+00:00"><time datetime="2019-01-30T00:00:00+00:00">2019.01.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="132 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221455091126" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>죠우저프님 작성</p>
+<p>typedef struct _RECT<br />
+    {<br />
+    int left, top, right, bottom;<br />
+    } RECT;</p>
+<br>
+<p>RECT Func()<br />
+    {<br />
+    RECT R;</p>
+<p>    R.left=1;<br />
+    R.top=2;<br />
+    R.right=3;<br />
+    R.bottom=4;<br />
+    return R;<br />
+        //함수의 리턴은 eax 레지스터(실수의 경우 MMX0)를 이용하는데 어떻게 구조체를 리턴하는 것일까?<br />
+        //로컬변수 R은 함수 종료시 없어지는데 리턴하는 것이 의미가 있을까?<br />
+    }</p>
+<br>
+<p>int main()<br />
+    {<br />
+    RECT R;</p>
+<p>    R=Func();<br />
+    printf("RECT: %d,%d,%d,%d\n", R.left, R.top, R.right, R.bottom);</p>
+<p>    return 0;<br />
+    }</p>
+<br>
+<br>
+<br>
+<p>컴파일러가 변형</p>
+<br>
+<br>
+<p>위의 코드를 컴파일하면 컴파일러가 코드를 이렇게 변형하여 컴파일합니다.</p>
+<br>
+<p>void Func(RECT *lpRet)   //RECT Func() 를 변형함<br />
+    {<br />
+    RECT R;</p>
+<p>    R.left=1;<br />
+    R.top=2;<br />
+    R.right=3;<br />
+    R.bottom=4;<br />
+    *lpRet=R;           //return R; 를 변형함<br />
+    }</p>
+<br>
+<p>int main()<br />
+    {<br />
+    RECT R;</p>
+<p>    Func(&amp;R);           //R=Func(); 를 변형함</p>
+<p>    printf("RECT: %d,%d,%d,%d\n", R.left, R.top, R.right, R.bottom);</p>
+<p>    return 0;<br />
+    }</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221469167946/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[node.js] node.js란?<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221453471653/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C++] Q: 왜 동적배열이 vector가 된건가요?<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

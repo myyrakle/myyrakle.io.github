@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] clap과 ratatui로 기깔난 CLI 만들어보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223382617511/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] clap과 ratatui로 기깔난 CLI 만들어보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223382617511/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-13T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223382617511/">[Rust] clap과 ratatui로 기깔난 CLI 만들어보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-13T00:00:00+00:00"><time datetime="2024-03-13T00:00:00+00:00">2024.03.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="657 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223382617511" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>내 경험상 CLI를 가장 견고하고 편리하게 작성할 수 있는 언어는 Rust다.<br />
+구조체 수준에서 모든 제약사항과 체크를 전부 정의할 수 있고, 그 타입의 강력함을 그대로 누릴 수 있기 때문이다.</p>
+<p>본 포스트에서는 clap과 ratatui를 이용해서 로그인, 로그아웃을 처리할 수 있는 간단한 예제 프로그램을 한번 만들어보고, 그것을 통해서 대략적인 작성법과 응용방법을 소개해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="clap-gibon-seoljeong">clap 기본 설정</h2>
+<p>먼저 몇가지 기본 종속성을 추가해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>atty</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.2.14&quot;</span><span style="color: #9399B2;">,</span><span> optional</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>structopt</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.3.18&quot;</span><span style="color: #9399B2;">,</span><span> optional</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>clap</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;4.4.18&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;derive&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>serde</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;derive&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span></code></pre>
+<p><img src="/images/img_0df1d1aecbdfe428.png" alt="" /></p>
+<br>
+<p>이제 코드를 하나씩 추가해보자.<br />
+먼저 최상위 커맨드 타입을 정의하고, 그 내에 서브커맨드 enum을 하나 집어넣는다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use clap</span><span style="color: #9399B2;">:</span><span>:Parser</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Parser</span><span style="color: #9399B2;">,</span><span> Debug)]</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">clap</span><span>(author</span><span style="color: #9399B2;">,</span><span> version</span><span style="color: #9399B2;">,</span><span> about</span><span style="color: #9399B2;">,</span><span> long_about</span><span style="color: #94E2D5;"> =</span><span> None)]</span></span>
+<span class="giallo-l"><span>pub struct Command</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    #[</span><span style="color: #89B4FA;font-style: italic;">clap</span><span>(subcommand)]</span></span>
+<span class="giallo-l"><span>    pub action</span><span style="color: #9399B2;">:</span><span> SubCommand</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(clap::Subcommand</span><span style="color: #9399B2;">,</span><span> Debug)]</span></span>
+<span class="giallo-l"><span>pub</span><span style="color: #CBA6F7;"> enum</span><span style="color: #F9E2AF;font-style: italic;"> SubCommand</span><span style="color: #9399B2;"> {}</span></span></code></pre>
+<p><img src="/images/img_c7d027185ac875ad.png" alt="" />
+SubCommand enum에는 곧 정의될 로그인과 로그아웃 커맨드가 들어갈 것이다.</p>
+<br>
+<p><img src="/images/img_d506e52717265aa2.png" alt="" />
+그리고 위와 같이 커맨드를 초기화하면 기본적인 틀 작성은 끝났다.</p>
+<p>이렇게 만들어진 프로그램은 cargo run을 통해 실행하거나</p>
+<p><img src="/images/img_da786988668dfa9d.png" alt="" /></p>
+<p>cargo install을 통해서 설치한 다음에 실행할 수 있다.</p>
+<p><img src="/images/img_b5dc927df7c74c1d.png" alt="" /></p>
+<p><img src="/images/img_70cdee0288880b64.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="seobeukeomaendeu-jeongyihagi">서브커맨드 정의하기</h2>
+<p>이제 하나씩 서브커맨드를 정의해보겠다.<br />
+Login과 Logout이 별도의 서브커맨드로 빠질 것이다.</p>
+<p>별도의 파일을 만들어서 login 커맨드를 먼저 정의했다.</p>
+<p><img src="/images/img_576c768196a01a27.png" alt="" />
+내부의 Option 객체를 통해서 플래그 요소들을 정의한다.<br />
+short은 -i 같은 숏컷을 생성할지를 명시하고, long은 --id 같은 풀텍스트를 생성할지를 명시한다. help는 당연히 도움말이다.<br />
+저 플래그들을 Optional 요소로 만들려면 타입을 Option으로 넣거나 default_value 속성을 부여해줘야 한다.</p>
+<br>
+<p><img src="/images/img_3a2c8b109321a52b.png" alt="" />
+그리고 저걸 아까 최상의 커맨드 객체의 서브커맨드에 variant로 추가한다.</p>
+<p>이번엔 logout 커맨드다. 이건 더 쉽다.</p>
+<p><img src="/images/img_e9434d133e8e8dfd.png" alt="" />
+옵션을 줄게 딱히 없기 때문이다.</p>
+<br>
+<br>
+<p><img src="/images/img_370240795cc74a03.png" alt="" />
+마찬가지로 최상의 커맨드의 서브커맨드로 등록해준다.</p>
+<br>
+<p><img src="/images/img_fd2ec43be8adb02b.png" alt="" />
+진입점에서도 action이 enum으로 분기되니, 패턴매칭으로 적절히 분기해주면 된다.</p>
+<p>그리고 실행해보면</p>
+<p><img src="/images/img_515a896add25546a.png" alt="" />
+서브커맨드 목록에 추가가 된 것을 볼 수 있다.</p>
+<br>
+<p><img src="/images/img_5493596ee3242f09.png" alt="" />
+실행도 잘 된다. 필수 플래그를 빼먹으면 없다고 잔소리한다.</p>
+<br>
+<p><img src="/images/img_7b557a54b2f903df.png" alt="" />
+다 넘겨서 주면 잘 작동할 것이다. 다만 아직은 아무런 동작을 하지 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="action-bunrihago-guhyeonhagi">action 분리하고 구현하기</h2>
+<p>이제 구현부를 적절히 추가해보자. 내 경우에는 이러한 상황에서는 파일별로 로직을 분리하는 것을 선호한다. 합치면 너무 보기 힘들고 더러워지기 때문이다.<br />
+action 모듈을 두고 각 subcommand 동작마다 파일을 하나씩 뒀다.</p>
+<p><img src="/images/img_4cbf92b14badf220.png" alt="" /></p>
+<p><img src="/images/img_7d94e90a5626ece4.png" alt="" />
+각 액션 함수들은 각 서브커맨드의 옵션 값을 인자로 받는다.</p>
+<br>
+<p><img src="/images/img_87c3f8d84214ecee.png" alt="" />
+그리고 진입점에서의 실행을 run으로 전부 떠넘긴다.<br />
+꽤 깔끔해보이지 않나?</p>
+<p>이제는 준비가 거의 다 되었으니, 그럴듯한 로직을 구현해보겠다.<br />
+로그인은 전달받은 플래그를 기반으로 credentials 파일로 내보내도록 했다.</p>
+<p><img src="/images/img_63ae05346b665c47.png" alt="" /></p>
+<p>로그아웃은 생성된 credential 파일을 삭제한다.</p>
+<p><img src="/images/img_71928be54e6f2a3c.png" alt="" /></p>
+<p>그러면 login을 시도하면</p>
+<p><img src="/images/img_444697c0052ec7ed.png" alt="" /></p>
+<p><img src="/images/img_aeb43c53e7a73db3.png" alt="" />
+입력한대로 생성이 되고</p>
+<p>로그아웃을 시도하면</p>
+<p><img src="/images/img_832793c2a4e6c06b.png" alt="" /></p>
+<p><img src="/images/img_af24512e5531d95c.png" alt="" />
+기대한대로 삭제가 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="tuiro-daehwahyeong-keomaendeu-guhyeonhagi">TUI로 대화형 커맨드 구현하기</h2>
+<p>근데 필수 플래그가 한두개면 모르는데, 플래그가 많아지면 이걸 다 찾아서 입력하는 것도 꽤 고역이다.<br />
+또는, 그냥 화면상에 패스워드를 그대로 노출하는게 보안상 문제가 될 수도 있다.</p>
+<p>그럴때는 편의성이나 보안을 위해서 TUI를 제공하는 것이 바람직할 수도 있다.<br />
+Rust의 꽤 쓸만한 TUI 환경인 ratatui를 사용해서 패스워드 마스킹까지 포함한 대화형 입력창을 구현해보겠다.</p>
+<p>먼저 아래 종속성을 2개 추가해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>crossterm</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.27.0&quot;</span></span>
+<span class="giallo-l"><span>ratatui</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.26.0&quot;</span></span></code></pre>
+<p><img src="/images/img_6226c906843acf50.png" alt="" /></p>
+<br>
+<br>
+<p><img src="/images/img_3d2974df738975ed.png" alt="" />
+대화형 실행을 위한 옵션을 Login 플래그에 추가해준다.</p>
+<br>
+<p><img src="/images/img_58c62875e5acad98.png" alt="" />
+그 옵션이 들어오면 대화형 컨텍스트로 제어를 이동시킨다.</p>
+<p>이제부터 시작이다.<br />
+아래는 베이스 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> interactive</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> io</span><span style="color: #9399B2;">:</span><span>:Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    use std</span><span style="color: #94E2D5;">:</span><span>:io::stdout;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    use crossterm::event::</span><span style="color: #9399B2;">{</span><span>self</span><span style="color: #9399B2;">,</span><span> KeyCode</span><span style="color: #9399B2;">,</span><span> KeyEventKind</span><span style="color: #9399B2;">}</span><span>;</span></span>
+<span class="giallo-l"><span>    use crossterm::terminal::</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        disable_raw_mode</span><span style="color: #9399B2;">,</span><span> enable_raw_mode</span><span style="color: #9399B2;">,</span><span> EnterAlternateScreen</span><span style="color: #9399B2;">,</span><span> LeaveAlternateScreen</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>;</span></span>
+<span class="giallo-l"><span>    use crossterm::ExecutableCommand;</span></span>
+<span class="giallo-l"><span>    use ratatui::backend::CrosstermBackend;</span></span>
+<span class="giallo-l"><span>    use ratatui::Terminal;</span></span>
+<span class="giallo-l"><span>    use ratatui::</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        style</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Color</span><span style="color: #9399B2;">,</span><span> Style</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span>        widgets</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Block</span><span style="color: #9399B2;">,</span><span> BorderType</span><span style="color: #9399B2;">,</span><span> Borders</span><span style="color: #9399B2;">,</span><span> Paragraph</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    stdout</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">execute</span><span>(EnterAlternateScreen)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    enable_raw_mode</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let backend</span><span style="color: #94E2D5;"> =</span><span> CrosstermBackend::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(</span><span style="color: #89B4FA;font-style: italic;">stdout</span><span>());</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut terminal</span><span style="color: #94E2D5;"> =</span><span> Terminal::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(backend)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut render_text</span><span style="color: #94E2D5;"> =</span><span> String::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>();</span></span>
+<span class="giallo-l"><span>    loop</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        render_text.clear();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let block</span><span style="color: #94E2D5;"> =</span><span> Block::</span><span style="color: #89B4FA;font-style: italic;">default</span><span>()</span></span>
+<span class="giallo-l"><span>            .title(</span><span style="color: #A6E3A1;">&quot;Login Page&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>            .borders(Borders</span><span style="color: #94E2D5;">:</span><span>:ALL)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">border_style</span><span>(Style::</span><span style="color: #89B4FA;font-style: italic;">default</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">fg</span><span>(Color::Magenta))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">border_type</span><span>(BorderType::Rounded);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let paragraph</span><span style="color: #94E2D5;"> =</span><span> Paragraph::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(render_text</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>())</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">block</span><span>(block);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        terminal</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">draw</span><span>(</span><span style="color: #94E2D5;">|</span><span>frame</span><span style="color: #94E2D5;">|</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            let area</span><span style="color: #94E2D5;"> =</span><span> frame</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">size</span><span>();</span></span>
+<span class="giallo-l"><span>            frame.render_widget(paragraph</span><span style="color: #9399B2;">,</span><span> area);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        if event</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">poll</span><span>(std::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_millis</span><span>(</span><span style="color: #FAB387;">16</span><span>))</span><span style="color: #94E2D5;">?</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            if let event</span><span style="color: #94E2D5;">:</span><span>:Event::</span><span style="color: #89B4FA;font-style: italic;">Key</span><span>(key)</span><span style="color: #94E2D5;"> =</span><span> event::</span><span style="color: #89B4FA;font-style: italic;">read</span><span>()</span><span style="color: #94E2D5;">?</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                if key.kind</span><span style="color: #94E2D5;"> ==</span><span> KeyEventKind::Press</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>                    match key.code </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>                        KeyCode</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">Char</span><span>(</span><span style="color: #A6E3A1;">&#39;q&#39;</span><span>)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                            break</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                        }</span></span>
+<span class="giallo-l"><span style="color: #EBA0AC;font-style: italic;">                        _</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span>        }</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    stdout</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">execute</span><span>(LeaveAlternateScreen)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    disable_raw_mode</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Goodbye!&quot;</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>처음 보면 장황해서 좀 어지러울 수도 있는데, 핵심은 별게 없다.<br />
+그냥 무한루프 뺑뺑이돌면서 텍스트를 계속 렌더링할 뿐이다.<br />
+그리고 키 입력으로 q가 들어오면 루프를 종료하고 나간다.</p>
+<p>저대로 실행해보면</p>
+<p><img src="/images/img_d1106366b491eb09.png" alt="" /></p>
+<p><img src="/images/img_7748acf35f226c35.png" alt="" />
+꽤 번쩍거리는 커맨드 컨텍스트로 전환이 된다.<br />
+q를 입력하면 종료될 것이다.</p>
+<p>이제 입력 과정을 구현해보겠다.<br />
+사실 별건 없다.</p>
+<p>스텝 과정을 타입으로 정의하고, 현재 스텝 컨텍스트와 입력 변수들을 정의한다.</p>
+<p><img src="/images/img_33421356fba72bcf.png" alt="" /></p>
+<p>매번 루프의 시작에서는 현재 스텝에 따라서 안내 텍스트와 현재 입력 상황을 렌더링해준다.</p>
+<p><img src="/images/img_e3a2dc1cf3e5beb6.png" alt="" />
+Done으로 종료가 되었을 때는 입력이 다 들어왔을테니, run 함수를 다시 호출해서 기존의 로직을 재사용한다.</p>
+<p>이벤트 핸들링은 좀더 장황하다.</p>
+<p><img src="/images/img_b45c7e118868c465.png" alt="" />
+각 스텝과 입력에 따라서 입력변수를 수정하거나, 다음 스텝으로 전이할 수 있게 해뒀다.<br />
+백스페이스가 들어오면 지우고, 문자가 들어오면 append한다. Esc를 누르면 프로그램이 종료되고, Enter를 누르면 다음 스텝으로 이동한다.</p>
+<p>이제 다시 실행해보자.</p>
+<p><img src="/images/img_8adc8c3295641334.png" alt="" />
+입력한 대로 잘 들어가고</p>
+<br>
+<p><img src="/images/img_b7c1fd8d177e13ec.png" alt="" />
+패스워드도 마스킹된 형태로 잘 들어간다.</p>
+<p>다 입력하고 엔터를 치면</p>
+<p><img src="/images/img_e0a3d52fc901b613.png" alt="" /></p>
+<p><img src="/images/img_b2a82be0626cdf52.png" alt="" />
+프로그램이 종료되고 입력한 값도 잘 방출될 것이다.</p>
+<p>이런 느낌으로 쓰면 된다.<br />
+노가다가 좀 있긴 하지만 그다지 어렵지는 않다.</p>
+<br>
+<br>
+<p>전체 코드는 아래 링크에서 볼 수 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/clap-example">https://github.com/myyrakle/clap-example</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223382362211/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] groupcache<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223380532889/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] map의 구조<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

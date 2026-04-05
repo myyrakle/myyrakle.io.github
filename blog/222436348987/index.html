@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Elasticsearch] analyze | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222436348987/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Elasticsearch] analyze">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222436348987/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-07-18T00:00:00+00:00">
+    <meta property="article:tag" content="Elasticsearch">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222436348987/">[Elasticsearch] analyze</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-07-18T00:00:00+00:00"><time datetime="2021-07-18T00:00:00+00:00">2021.07.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="695 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/elasticsearch/">Elasticsearch</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222436348987" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>match 등의 텍스트 검색기능들은 기본적으로 analyze라는 전처리 단계를 거쳐간다고 했었다.<br />
+여기에 대해서 잠깐 다뤄보겠다.</p>
+<p><a rel="external" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-analyze.html">https://www.elastic.co/guide/en/elasticsearch/reference/current/indices-analyze.html</a><br />
+이 애널라이즈는 꼭 검색을 할때만 쓸수 있는건 아니고, 제공되는 API를 통해서 딱 그 전처리 단계만을 테스트해볼 수도 있다.</p>
+<p>호출형태는 다음과 같다.<br />
+기본 애널라이저를 쓰고 텍스트는 "시원한 샴푸"다.</p>
+<p><img src="/images/img_401db6d07e6a2dc0.png" alt="" />
+그럼 내부적으로 처리를 어떻게 하는지를 리스폰스로 찍어준다.<br />
+여기서는 "시원한"과 "샴푸"로 잘라줬다.<br />
+기본적으로 공백단위는 전부 자르기 때문이다.</p>
+<p>하지만 "시원한샴푸"를 입력한다면, 우리는 "시원한"과 "샴푸"의 2개 단어로 나뉨을 알지만, 애널라이저는 알지 못한다. 그래서 "시원한 샴푸"에 대한 검색은 이루어지지 않는다.</p>
+<p><img src="/images/img_3319e6cd79d0407a.png" alt="" />
+이런 것 때문에 애널라이저의 커스텀이 필요한 것이다.</p>
+<p>한국어 형태소분석기인 nori를 쓴다면 한국어에 대한 문장요소별 분리가 가능해진다.<br />
+이것도 제대로 쓰려면 설정할게 엄청 많은데, 일단 기본설정으로 날리면 다음과 같은 분석결과가 나온다.</p>
+<p><img src="/images/img_811b9b97998fc47a.png" alt="" />
+"시원"과 "샴푸"로 분리가 된 것을 볼 수 있다.</p>
+<p>그리고 이것도 explain을 켜면 분석법을 좀 볼 수 있다.</p>
+<p><img src="/images/img_91ed423541863e86.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="aeneolraijeoyi-gujo">애널라이저의 구조</h2>
+<p>애널라이저는 크게 3단계의 처리단계를 거친다.<br />
+캐릭터 필터, 토크나이저, 토큰 필터다.</p>
+<p><img src="/images/img_a1ad81abeb2d2774.png" alt="" />
+<a rel="external" href="https://esbook.kimjmin.net/06-text-analysis/6.2-text-analysis">https://esbook.kimjmin.net/06-text-analysis/6.2-text-analysis</a></p>
+<br>
+<br>
+<br>
+<h2 id="1-kaerigteo-pilteo">1. 캐릭터 필터</h2>
+<p>캐릭터 필터는 토크나이저로 넘어가기 전에 가벼운 전처리를 행하기 위한 기능이다.<br />
+토크나이저와 토큰 필터에 비해서는 그렇게 자주 쓰이지는 않는 것 같다.</p>
+<p>캐릭터 필터에는 기본적으로 HTML Strip, Mapping, Pattern Replace의 3가지 필터가 제공된다.<br />
+"char_filter" 옵션으로 지정 가능하다.</p>
+<p>html strip은 그냥 html 특수문자들을 읽어서 치환해주는 기능이다.<br />
+원래라면 제대로 읽지 못할 것을</p>
+<p><img src="/images/img_80d9670e5d9ad316.png" alt="" /></p>
+<p>char_filter로 적용해주면 html 특수문자 &amp;npsp를 공백으로서 인식하게 된다.</p>
+<p><img src="/images/img_cf93d3799b10fb16.png" alt="" /></p>
+<p>매핑 필터는 그냥 특정 단어를 다른 단어로 교체할 수 있게 해준다.<br />
+"대상 단어 =&gt; 바꿀 단어"의 형태로 지정해줄 수 있다.</p>
+<p><img src="/images/img_9d0abb51c88110da.png" alt="" /></p>
+<p>Pattern Replace는 그냥 정규표현식으로 치환을 해주는건데, 이건 복잡해서 일단 넘기겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="2-tokeunaijeo">2. 토크나이저</h2>
+<p>아까 위에서 다뤘던 nori라는 형태소 분석기가 사실 토크나이저였다.<br />
+토크나이저는 정의된 규칙에 따라서 텍스트를 토큰 단위로 잘라주는 녀석이다.</p>
+<p>"tokenizer" 옵션으로 지정 가능하며, 기본으로 제공하는 토크나이저로는 standard, letter, whiltespace 등이 있다.<br />
+이외에도 몇개 있긴 한데 굳이 여기서 다 다루지는 않겠다.</p>
+<p>standard는 그냥 공백으로 토큰을 자르면서 @ 같은 일부 특수문자만 지워준다.</p>
+<p><img src="/images/img_ceadb28c10d728da.png" alt="" /></p>
+<p>그리고 letter는 공백을 포함한 특수문자를 기준으로 토큰을 자른다.</p>
+<p><img src="/images/img_4330dccf2025e7fd.png" alt="" /></p>
+<p>whiltespace는 그냥 공백을 기준으로 토큰을 자르기만 한다.</p>
+<p><img src="/images/img_9a2d0e2cb80f9c1b.png" alt="" /></p>
+<p>nori 같은 전문화된 형태소 토크나이저는 별도 포스트로 다루겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="3-tokeun-pilteo">3. 토큰 필터</h2>
+<p>이건 토크나이저로 분리된 토큰을, 마지막으로 한번 더 치환해주는 기능이다.<br />
+"filter" 옵션으로 복수 지정 가능하며, lowercase, uppercase, stop, unique, synonym 등이 있다.</p>
+<p>이중에서 stopword와 synonym이 아마 제일 자주 쓰일 것이다.</p>
+<br>
+<br>
+<h4 id="tokeunpilteo-lowercase-uppercase">토큰필터 - lowercase, uppercase</h4>
+<p>lowercase, uppercase는 각각 전부 소문자, 대문자로 치환해주는 필터다.</p>
+<p><img src="/images/img_a10c914543fa0ab6.png" alt="" /></p>
+<p><img src="/images/img_ed1c946f1e099a4b.png" alt="" /></p>
+<p>stop은 특정 토큰들을 걸러내는 역할을 한다. stopword로 지정된 단어를 토큰 단위로 던져버린다.<br />
+이건 그냥 바로 테스트가 안돼서, 인덱스와 함께 만들어서 테스트를 했다.</p>
+<p><img src="/images/img_3ed2c918759d1a40.png" alt="" /></p>
+<p>이러면 이제 stopword로 지정된 단어 is가 자동으로 사라질 것이다.</p>
+<p><img src="/images/img_e9dcce0acbffeb4e.png" alt="" /></p>
+<br>
+<br>
+<h4 id="tokeunpilteo-unique">토큰필터 - unique</h4>
+<p>unique는 한 중복된 토큰을 잘라준다.</p>
+<p><img src="/images/img_8000a63b94807d94.png" alt="" /></p>
+<p>그럼 이제 중복단어 Happy가 하나만 전달될 것이다.</p>
+<p><img src="/images/img_7155940337bad392.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h4 id="tokeunpilteo-synonym">토큰필터 - synonym</h4>
+<p>synonym은 동의어를 처리해주는 기능이다.<br />
+고품질의 검색을 원한다면 적당히 넣어주는게 좋다.</p>
+<p><img src="/images/img_340d60e240131b18.png" alt="" />
+이런식으로 지정할 수 있는데, 여기선 동의어 목록을 synonyms로 박아놨지만 따로 파일 업로드해서 synonyms_path로 파일경로 지정해주는게 정석이다.<br />
+저러면 shampoo, 샴푸, 샴퓨 토큰을 만나면 전부 "샴푸"로 치환한다는 내용이다.</p>
+<p>이렇게 바꿔버린다.</p>
+<p><img src="/images/img_5efb8752eed2f7bf.png" alt="" />
+저건 일방적인 치환이고,</p>
+<p>서로 치환되게 하려면 그냥 이렇게 콤마로만 구분해서 던져주면 된다.</p>
+<p><img src="/images/img_6e9a070efdfd6475.png" alt="" /></p>
+<p>그러면 동의어 목록을 전부 토큰으로 넣어버린다.</p>
+<p><img src="/images/img_3e66dc6e9e34aeaa.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="indegseue-jeogyonghagi">인덱스에 적용하기</h2>
+<p>그런데 저렇게 테스트해보기만 하면 뭐하겠는가. 실제로 붙여서 써야 의미가 있지.<br />
+애널라이저는 다음과 같이 정의해서 인덱스에 추가할 수 있다.<br />
+settings.analysis 절이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>PUT test6</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;settings&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;analysis&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;analyzer&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;korean&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;custom&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;tokenizer&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;nori&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;filter&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;my_synonym&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;char_filter&quot;</span><span style="color: #94E2D5;">:</span><span> []</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;filter&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;my_synonym&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;synonym&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;synonyms&quot;</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;shampoo, 삼푸 =&gt; 샴퓨, 샴푸&quot;</span></span>
+<span class="giallo-l"><span>          ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;tokenizer&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;nori&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;decompound_mode&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;mixed&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;nori_tokenizer&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;user_dictionary&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;">&quot;user_dictionary.txt&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;mappings&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    ...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>analysis.filter 절로 토큰필터를 정의해두고, analysis.tokenizer 절로 토크나이저를 정의해서,<br />
+analysis.analyzer 절에 정의해둔 것들을 꼽아쓰는 식이다.</p>
+<p>위에서는 korean 절로 한국어에만 자동으로 애널라이저가 작동하게 해둔 것이고, 그냥 완전 디폴트로 하려면 키값을 default로 하면 된다.</p>
+<p><img src="/images/img_86e828519c9988c2.png" alt="" /></p>
+<p>애널라이저 이름을 "korean" 같은 언어명이나 default 등 예약된 이름으로 해두지 않으면 그냥 등록만 되고, 기본으로 사용이 되진 않는다.</p>
+<p>그렇다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://esbook.kimjmin.net/06-text-analysis/6.2-text-analysis">https://esbook.kimjmin.net/06-text-analysis/6.2-text-analysis</a><br />
+<a rel="external" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-custom-analyzer.html">https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-custom-analyzer.html</a><br />
+<a rel="external" href="https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-synonym-tokenfilter.html">https://www.elastic.co/guide/en/elasticsearch/reference/current/analysis-synonym-tokenfilter.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222435599715/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Elasticsearch] 점수와 부스트<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222436362931/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Elasticsearch] 위험 경보 설정하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

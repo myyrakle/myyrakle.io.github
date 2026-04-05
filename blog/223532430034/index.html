@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] SQS의 사용 구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223532430034/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] SQS의 사용 구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223532430034/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-08-01T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223532430034/">[AWS] SQS의 사용 구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-08-01T00:00:00+00:00"><time datetime="2024-08-01T00:00:00+00:00">2024.08.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="613 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223532430034" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>SQS는 AWS에서 제공하는 완전관리형 서버리스 큐 서비스다.<br />
+매우 저렴하며, 관리가 편리하다는게 장점이다.</p>
+<p>동작 구조를 잘 알고 활용한다면 가용성 높고 빠른 성능의 큐 기반 시스템을 구축할 수 있다.<br />
+여기서는 기본 형태인 SQS Standard를 위주로만 소개한다.</p>
+<br>
+<br>
+<br>
+<h2 id="sobi-hyeongtae">소비 형태</h2>
+<p>MQ나 Kafka 같은 큐 시스템들과는 사용 형태가 조금 다르다.<br />
+MQ는 대체적으로 메시지를 읽는 순간 증발되는 휘발성이고, Kafka는 만료시간 기반으로 저장은 하되, 오프셋 기반으로 이미 처리한 메시지를 건너뛰거나 한다.</p>
+<p>반면 SQS는 조금 특이한데, 특정 consumer가 메시지를 받으면 그건 다른 consumer가 "볼 수 없는" 메시지가 되어서 다른 consumer가 다시 Receive로 읽지 못한다.</p>
+<p><img src="/images/img_d4de4ea6f2df3eeb.png" alt="" />
+SQS에는 읽은 메세지를 자동으로 삭제하거나 하는 기능이 없다.<br />
+그래서 메시지를 읽어서 점유한 consumer가 처리를 완료했을때 메시지를 직접 삭제해야한다.</p>
+<p>만약 최초로 점유했던 consumer가 제대로 처리를 하지 못하고 특정 시간이 지나면 그 메시지의 "볼 수 없는" 상태가 해제된다. 다른 consumer가 읽어갈 수 있다는 것이다. 이 "볼 수 없는 상태"가 해제되기까지의 제한시간을 visibility timeout이라고 한다.<br />
+visibility timeout의 기본 설정은 30초다. 최대 12시간까지도 설정이 가능하다.</p>
+<p><img src="/images/img_136789abebf8ec19.png" alt="" />
+설정은 큐 단위에서 설정이 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="lambdawayi-tonghab">Lambda와의 통합</h2>
+<p>SQS는 Lambda와의 강력한 통합 기능을 제공한다.<br />
+SQS에 메세지가 쌓이면, 그걸 Lambda로 넘겨서 호출하는 것이다.</p>
+<p><a rel="external" href="https://docs.aws.amazon.com/ko_kr/lambda/latest/dg/with-sqs.html">https://docs.aws.amazon.com/ko_kr/lambda/latest/dg/with-sqs.html</a><br />
+편하긴 한데, 여기에 대해서도 유의할 점이 존재한다.</p>
+<p>SQS에서 Lambda를 트리거했을때 Lambda가 오류 없이 종료된다면, 시스템은 자동으로 SQS에서 메세지를 삭제해준다.<br />
+반면 Lambda에서 오류가 발생하면 메시지를 삭제하지 않는다. 이 상태에서 visibility timeout이 초과되면 다시 Lambda를 트리거할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="dead-letter-queue">Dead Letter Queue</h2>
+<p>SQS는 기본적으로 저장 기간(retention period)이 지나기까지는 실패하더라도 계속해서 재시도를 하면서 읽어올 수 있는 구조를 가지고 있다.<br />
+하지만 경우에 따라서는 실패한걸 겸허하게 포기할 줄도 알아야 한다. 지속적으로 실패하는 메세지가 계속 쌓인다면 시스템 전체의 병목이 될 수도 있다.</p>
+<p>Dead Letter Queue는 메시지들에 대해서 최대 읽기 제한(Maximum Receive)을 걸어놓고 한계에 도달하면 자동으로 Dead Letter Queue라는 별도의 큐에 옮기는 기능이다.</p>
+<p><img src="/images/img_9a8ed8c4a81f0148.png" alt="" />
+먼저 Dead Letter용으로 사용할 큐를 따로 만들어줘야 한다.<br />
+큐 타입은 동일해야 한다.</p>
+<p>그리고 원본 큐로 이동해서, 방금 만든 큐 정보를 넣어준다.</p>
+<p><img src="/images/img_22285e9d71618fe5.png" alt="" /></p>
+<p><img src="/images/img_4bd6632408ccb043.png" alt="" />
+이러면 읽기를 10번 하는 순간 저 Dead Letter 큐로 떠넘기는 것이다.</p>
+<br>
+<p><img src="/images/img_4bf7b4f82a649593.png" alt="" />
+그러면 Dead Letter 큐에서 바로 읽어서 확인할 수 있다.<br />
+여기서 처리하는 시스템을 따로 또 만들든, 그냥 로그용으로 보관만 하든 후처리를 어떻게 할지는 선택사항이다.</p>
+<br>
+<br>
+<br>
+<h2 id="dead-letter-redrive">Dead Letter Redrive</h2>
+<p>근데 실패해서 Dead Letter에 쌓인 쓰레기들을 다시 재시도하고 싶을 수도 있다.<br />
+Redrive는 그런 상황을 위해서 Dead Letter에 쌓인 메시지를 원본 큐로 다시 집어넣어주는 기능을 말한다.</p>
+<p>원본 큐에서 Redrive 옵션을 켜고,</p>
+<p><img src="/images/img_ad6ad1f7a4d03343.png" alt="" /></p>
+<p>Dead Letter 큐에서 "Start DLQ redrive"를 트리거하면</p>
+<p><img src="/images/img_c066c772cbbaaa4e.png" alt="" /></p>
+<p><img src="/images/img_4b43347358885d26.png" alt="" /></p>
+<p><img src="/images/img_3595d92e545e39cb.png" alt="" /></p>
+<p>실제로 다 옮겨져서 원본 큐에서 조회가 된다.</p>
+<p><img src="/images/img_0c99a8e43f783a83.png" alt="" />
+유의할 점은 이렇게 옮겨지는 메세지는 이전의 메세지와 다른 새로운 Copy가 들어가는 셈이란 것이다.<br />
+페이로드만 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="at-least-once">at least once</h2>
+<p>SQS의 메시지 시스템은 기본적으로 "최소 한번(at least once)"을 보장하도록 만들어져 있다. 정확히 한번(exactly once)는 보장하지 않는다.<br />
+그래서 이걸 쓸거라면 항상 consumer가 메세지를 2번 이상 수신할 수도 있다는 것을 감안하고 시스템을 멱등적으로 설계해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="sunseo-bojang-eobseum">순서 보장 없음</h2>
+<p>SQS는 보낸 순서대로 받는걸 보장하지 않는다.<br />
+그걸 원한다면 FIFO 버전을 사용해야 한다.<br />
+이건 별도 포스트로 정리해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="geureomedo-gangryeoghan-jangjeom">그럼에도 강력한 장점</h2>
+<p>TPS 제한이 없다. 거의 무한대로 메세지를 때려넣어도 버틴다는 것이고, 확장성이 뛰어나다.</p>
+<p>비용도 저렴한 편이다. 제로 베이스에 쓴 만큼만 비용을 과금하는데, 웬만해서는 비용이 별로 안나온다. 1일마다 수십-수백만 단위 요청을 쏴본 적이 있는데, 비용이 수십달러 정도밖에 안나왔던거같다.</p>
+<p>Kafka 같은 범용 큐들이 돈을 미친듯이 뜯어간다는걸 생각한다면... 엄격한 순서나 중복성 배제가 필요하지 않다는 전제 하에서는 상당히 합리적인 선택이 될 수 있다.</p>
+<br>
+<br>
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222343875937">https://blog.naver.com/sssang97/222343875937</a><br />
+<a rel="external" href="https://blog.naver.com/sssang97/223017245405">https://blog.naver.com/sssang97/223017245405</a></p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html">https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223534010503/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] SQS: 응용 사례 - 채널톡.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223531204143/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[SQL] 커버링 인덱스 (Covering Index)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

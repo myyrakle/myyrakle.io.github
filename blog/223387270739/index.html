@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Javascript] Array의 구조 (V8) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223387270739/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Javascript] Array의 구조 (V8)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223387270739/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-18T00:00:00+00:00">
+    <meta property="article:tag" content="Javascript">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223387270739/">[Javascript] Array의 구조 (V8)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-18T00:00:00+00:00"><time datetime="2024-03-18T00:00:00+00:00">2024.03.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="526 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/javascript/">Javascript</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223387270739" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>여기서는 V8의 동작만 정리한다. 브라우저마다 동작방식이나 구조는 크게 다르다.</p>
+<p>Javascript에서의 Array는 다른 언어들의 Array와 크게 다르다. 순수한 배열이 아니라 Object의 한 종류로서 취급되기 때문이다.</p>
+<p><img src="/images/img_adcdfb5c418fd23d.png" alt="" />
+위와 같이 Object가 딕셔너리 형태면 properties에 데이터를 저장하고, 키가 숫자인 배열 형태면 elements에 값을 저장한다. elements에 값이 들어있으면 이제 배열이 되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="baeyeol-taib-jeonhwan">배열 타입 전환</h2>
+<p>배열에는 아무 타입이나 막 들어가는 것처럼 보이지만, 사실 내부적으로는 굉장히 복잡한 타입과 상태를 변화무쌍하게 오간다.</p>
+<p>예를 들어, 다음과 같이 정수값을 포함하는 배열을 생성하면 PACKED_SMI_ELEMENTS라는 모드로 배열이 만들어진다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> array</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// elements kind: PACKED_SMI_ELEMENTS</span></span></code></pre>
+<p>SMI는 작은 정수를 뜻하는 단어인데, 보통 이게 가장 빠르게 최적화가 된다.</p>
+<p>물론 JS는 동적 타입 언어고, 언제든 실수나 문자열 같은 괴상망측한 값을 넣을 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> array</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// elements kind: PACKED_SMI_ELEMENTS</span></span>
+<span class="giallo-l"><span>array</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(</span><span style="color: #FAB387;">4.56</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// elements kind: PACKED_DOUBLE_ELEMENTS</span></span>
+<span class="giallo-l"><span>array</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(</span><span style="color: #A6E3A1;">&#39;x&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// elements kind: PACKED_ELEMENTS</span></span></code></pre>
+<p>타입의 일관성을 지키지 못할때마다 더 일반적인 형태의 배열타입으로 변경이 된다.<br />
+당연히 밑으로 갈수록 느려진다.</p>
+<p>여기서 유의할 점은 PACKED_ELEMENTS처럼 일반화된 타입으로 내려온 배열은, 그걸 다시 빼더라도 PACKED_SMI_ELEMENTS나 PACKED_DOUBLE_ELEMENTS 같은 보다 빠른 타입으로 돌아오지 못한다는 것이다. 되도록이면 타입의 일관성을 지켜주는 편이 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="gumeong-ddulhrin-baeyeol-holey">구멍 뚫린 배열 (HOLEY)</h2>
+<p>JS의 배열은 일반적인 언어들의 배열 구현과 다르게, 인덱스를 건너뛰어서 값을 할당하는 이상한 짓이 가능하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> array</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 4.56</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;x&#39;</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// elements kind: PACKED_ELEMENTS</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>array</span><span style="color: #94E2D5;">.</span><span>length</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 5</span></span>
+<span class="giallo-l"><span>array[</span><span style="color: #FAB387;">9</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // array[5] until array[8] are now holes</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// elements kind: HOLEY_ELEMENTS</span></span></code></pre>
+<p>5 인덱스를 건너뛰고 9 인덱스에 값을 박았음에도 놀랍게도 잘 동작한다.<br />
+이건 내부적으로 새로운 배열을 생성해서</p>
+<br>
+<p><img src="/images/img_0e3f2134a2300628.png" alt="" />
+실제로 길이도 10이 되었다. 중간의 요소들은 구멍(hole)이 된 것이다.<br />
+구멍 배열(holey)과 비교해서 구멍이 없는 배열을 PACKED라고 부르는데, 당연히 PACKED 배열이 최적화가 훨씬 잘 된다.</p>
+<p>아래는 배열 타입이 변경될 수 있는 루트를 그림으로 표현한 것이다.</p>
+<p><img src="/images/img_9b6a902cbeb53795.png" alt="" />
+지나온 길은 돌아올 수 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="baeyeolceoreom-saenggin-gaegce">배열처럼 생긴 객체</h2>
+<p>Javascript에서는 애초에 배열과 객체의 경계가 흐릿하다보니 객체로 초기화해서 배열처럼 쓸 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> arrayLike</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {};</span></span>
+<span class="giallo-l"><span>arrayLike[</span><span style="color: #FAB387;">0</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;a&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>arrayLike[</span><span style="color: #FAB387;">1</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;b&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>arrayLike[</span><span style="color: #FAB387;">2</span><span>]</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;c&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>arrayLike</span><span style="color: #9399B2;font-style: italic;"> // { &#39;0&#39;: &#39;a&#39;, &#39;1&#39;: &#39;b&#39;, &#39;2&#39;: &#39;c&#39; }</span></span></code></pre>
+<p><img src="/images/img_d2a7e82e7131369a.png" alt="" />
+이건 성능상 별로 좋은 사용법은 아니다. 더 느린 Object 형태로 동작하기 때문이다.<br />
+차라리 배열을 사용하는 것이 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="jonjaehaji-anhneun-yoso-jeobgeunhaji-malgi">존재하지 않는 요소 접근하지 말기</h2>
+<p>JS는 엄.격.한 다른 언어들과 다르게 존재하지 않는 요소에 접근해도 out of range 오류를 뱉지 않는다.</p>
+<p><img src="/images/img_cc2476ff3afba2ac.png" alt="" />
+undefined가 떨어질 뿐이다.</p>
+<p>이것도 의외로 성능상 악영향을 줄 수 있는 부분이다.<br />
+내부적으로 properties까지 참조해서 저게 있는지 없는지를 검사하기 때문이라고 한다. 심지어 저 영향은 휘발적인것도 아니다.<br />
+V8은 저 배열에 대해서 특수한 접근을 할 수 있다는 것을 기억하고 뭔가 더 느린 방식으로 처리를 하기 때문에, 저 배열 자체에 대한 접근 성능이 떨어진다.</p>
+<p>대표적으로 제이쿼리가 이런 안티패턴을 써서</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// Don’t do this!</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">for</span><span> (</span><span style="color: #CBA6F7;">let</span><span> i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span> item</span><span style="color: #9399B2;">;</span><span> (item</span><span style="color: #94E2D5;"> =</span><span> items[i])</span><span style="color: #94E2D5;"> !=</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  doSomething</span><span>(item)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>성능이 느린 부분이 있었다고 한다. 저러지는 말자.</p>
+<br>
+<br>
+<br>
+<h2 id="array-hamsuro-baeyeol-saengseong">Array() 함수로 배열 생성</h2>
+<p>이건 이견이 좀 갈릴 수도 있는 부분이다.<br />
+Array 생성자 함수는 배열의 길이를 받아서 해당 길이의 빈 배열을 생성할 수 있다.</p>
+<p><img src="/images/img_1ec1ac8ff01d4b68.png" alt="" />
+이건 push를 반복할때 생기는 생기는 growing 작업이 발생하지 않기 때문에, 할당 성능이 좀더 낫고 사이즈도 딱 슬림하게 만들어진다는 장점이 있다.<br />
+하지만 이 생성 방식은 배열을 PACKED가 아니라 HOLEY 배열로 생성한다는 단점도 동시에 존재한다. 공간을 아끼기 위해서인 것 같다.</p>
+<p>하지만 <a rel="external" href="https://stackoverflow.com/questions/54481918/how-does-v8-optimise-the-creation-of-very-large-arrays">V8 개발자인 jmrk의 의견에 따르면</a> 어차피 packed와 holey의 성능 차이는 거의 느끼기가 어렵고, push를 반복하면서 증가에서 발생하는 성능 부하가 훨씬 커서 그냥 생성 함수를 쓰는 것을 권장한다고 한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://v8.dev/blog/fast-properties?m=1">https://v8.dev/blog/fast-properties?m=1</a><br />
+<a rel="external" href="https://v8.dev/blog/elements-kinds">https://v8.dev/blog/elements-kinds</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/54481918/how-does-v8-optimise-the-creation-of-very-large-arrays">https://stackoverflow.com/questions/54481918/how-does-v8-optimise-the-creation-of-very-large-arrays</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223387168624/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Javascript] Object의 구조 (V8)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223387359335/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] gobreaker<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

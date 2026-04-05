@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Logical Replication에서 큰 텍스트 컬럼이 누락되는 문제 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224226895844/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Logical Replication에서 큰 텍스트 컬럼이 누락되는 문제">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224226895844/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-03-23T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224226895844/">[PostgreSQL] Logical Replication에서 큰 텍스트 컬럼이 누락되는 문제</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-23T00:00:00+00:00"><time datetime="2026-03-23T00:00:00+00:00">2026.03.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="189 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224226895844" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223926531588">https://blog.naver.com/sssang97/223926531588</a><br />
+만약 PostgreSQL에 CDC를 걸어서 쓴다면 WAL 기반의 복제를 기본적으로 쓸텐데, 그럴 때 생길 수 있는 문제점 중 하나다.</p>
+<p>PostgreSQL은 INSERT나 UPDATE가 발생하면, 거의 모든 컬럼의 값을 WAL에 기록한다.<br />
+가령, 매우 일부의 값을 수정하더라도 항상 전체 값을 WAL을 기록한다. MVCC 기반의 버전관리 시스템을 쓰기 때문이다.</p>
+<p>여기에도 예외가 있는데, 특정 컬럼의 크기가 매우 크다면 그건 WAL에 기록되지 않고 별도의 영역에 기록된다.<br />
+이걸 TOAST라고 부르는데, 보통 2K나 수십K가 되면 별도로 빠지는게 기본값이다.</p>
+<p>근데 문제는 그렇게 빠지면, WAL Replication 전송에서도 그 필드에 대한 값 전송이 빠진다는 것이다.</p>
+<p>모든 값이 크기에 상관없이 전송되길 원한다면, 다음 쿼리를 사용해서 특정 테이블에 대한 제한을 해제해야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER TABLE [table_name] REPLICA IDENTITY FULL</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>다만 이러면 PostgreSQL에서 쓰기 부하나 읽기 부하가 증가할 수 있으므로, 일반적으로 권장되는 옵션은 아니다.</p>
+<p>가능하다면 애플리케이션 수준에서 값이 안와도 기존 상태 기반으로 UPDATE하는 식으로 구현하는 것이 좋을 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.postgresql.org/docs/current/logical-replication-publication.html">https://www.postgresql.org/docs/current/logical-replication-publication.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/67977581/is-alter-table-mytable-replica-identity-full-a-safe-operation-for-a-high-volu">https://stackoverflow.com/questions/67977581/is-alter-table-mytable-replica-identity-full-a-safe-operation-for-a-high-volu</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224226368669/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] Vector Search<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224223425673/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>마이그레이션 노트: Atlas MongoDB =&gt; AWS DocumentDB<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

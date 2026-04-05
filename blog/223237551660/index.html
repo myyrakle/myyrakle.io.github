@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] pprof: 프로파일 시각화하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223237551660/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] pprof: 프로파일 시각화하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223237551660/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-10-15T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223237551660/">[Go] pprof: 프로파일 시각화하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-15T00:00:00+00:00"><time datetime="2023-10-15T00:00:00+00:00">2023.10.15</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="346 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223237551660" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/223176350882">https://m.blog.naver.com/sssang97/223176350882</a></p>
+<p>go의 내장모듈을 이용해서 프로파일 서버를 띄운다고 하더라도, 그걸로 바로 분석을 하기에는 무리가 있다.</p>
+<p><img src="/images/img_07d652dc046bcdb5.png" alt="" /></p>
+<p>이런걸 보고 해석할 수가 있을 것 같은가?</p>
+<p><img src="/images/img_6f084c962ac7470c.png" alt="" /></p>
+<p>다행히 google에서는 이에 대한 시각화 도구를 또 별도로 제공한다.<br />
+프로파일 데이터를 다운받으면, 그걸로 해당 프로파일 데이터에 대한 통계를 시각화해서 보여주는 식이다.</p>
+<p>근데 도구 이름을 또 내장모듈과 같은 pprof로 지어놨다. 제정신인가?<br />
+<a rel="external" href="https://github.com/google/pprof">https://github.com/google/pprof</a><br />
+나는 이름이 같길래 별도 레포로 먼저 관리하다가 내장모듈로 이식한건줄 알았다. 근데 보니까 아예 다른 놈이다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="graphbiz">Graphbiz</h2>
+<p>필수 의존성이다. 먼저 이걸 깔아줘야 한다.</p>
+<p>아래 페이지에 가서 가이드를 따르자.<br />
+<a rel="external" href="https://graphviz.org/download/">https://graphviz.org/download/</a></p>
+<p>환경변수에 추가하는 것을 잊지 말자.</p>
+<p><img src="/images/img_10a64370ee667be5.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="pprof-cli-seolci">pprof cli 설치</h2>
+<p>아래와 같이 설치하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>go install github</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>google</span><span style="color: #94E2D5;">/</span><span>pprof@latest</span></span></code></pre>
+<p><img src="/images/img_f178b6abf83c5083.png" alt="" /></p>
+<p><img src="/images/img_53883ca77db3b80e.png" alt="" />
+그래서 실행되면 설치는 된 것이다.</p>
+<p>이제 프로파일 데이터를 마련해보자.</p>
+<br>
+<br>
+<br>
+<h2 id="peuropail-deiteo-maryeon">프로파일 데이터 마련</h2>
+<p>그냥 로컬 pprof 페이지에 들어가서 프로파일 데이터를 직접 다운받아도 되고, 당근에서 하는것처럼 프로파일 데이터 전송을 자동화할 수도 있을 것이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223177695996">https://blog.naver.com/sssang97/223177695996</a><br />
+여기서는 능동적인 테스트를 위해 그냥 직접 다운받겠다.</p>
+<p>우선 아래와 같은 형태로 서버를 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;strconv&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	_</span><span style="color: #A6E3A1;"> &quot;net/http/pprof&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/labstack/echo/v4&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/labstack/echo/v4/middleware&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Echo instance</span></span>
+<span class="giallo-l"><span>	e</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> echo</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">New</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Middleware</span></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Use</span><span>(middleware</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Logger</span><span>())</span></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Use</span><span>(middleware</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Recover</span><span>())</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Routes</span></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GET</span><span>(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span> hello)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Routes</span></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GET</span><span>(</span><span style="color: #A6E3A1;">&quot;/heavy&quot;</span><span style="color: #9399B2;">,</span><span> heavyOperations)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GET</span><span>(</span><span style="color: #A6E3A1;">&quot;/debug/pprof&quot;</span><span style="color: #9399B2;">,</span><span> echo</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WrapHandler</span><span>(http</span><span style="color: #94E2D5;">.</span><span>DefaultServeMux))</span></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">GET</span><span>(</span><span style="color: #A6E3A1;">&quot;/debug/pprof/*&quot;</span><span style="color: #9399B2;">,</span><span> echo</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WrapHandler</span><span>(http</span><span style="color: #94E2D5;">.</span><span>DefaultServeMux))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Start server</span></span>
+<span class="giallo-l"><span>	e</span><span style="color: #94E2D5;">.</span><span>Logger</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatal</span><span>(e</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Start</span><span>(</span><span style="color: #A6E3A1;">&quot;:55555&quot;</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// Handler</span></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> hello</span><span>(c echo</span><span style="color: #94E2D5;">.</span><span>Context) error</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	name</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Param</span><span>(</span><span style="color: #A6E3A1;">&quot;name&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(name)</span></span>
+<span class="giallo-l"><span>	text</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &quot;Hello, &quot;</span><span style="color: #94E2D5;"> +</span><span> name</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusOK</span><span style="color: #9399B2;">,</span><span> text)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> heavyOperations</span><span>(c echo</span><span style="color: #94E2D5;">.</span><span>Context) error</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> i int</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// Some heavy stuff here</span></span>
+<span class="giallo-l"><span>	for i</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 100000000</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		_</span><span style="color: #94E2D5;"> =</span><span> i</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 2</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	return</span><span> c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">String</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusOK</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;Hello, : &quot;</span><span style="color: #94E2D5;">+</span><span>strconv</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Itoa</span><span>(i))</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>pprof를 활성화하고, API는 가벼운 것 하나, 무거운 것 하나를 구현해뒀다.<br />
+둘다 쏴보면서 얼마나 차이가 나나 모니터링을 해보겠다.</p>
+<p>그리고 아래는 k6로 작성한 부하테스트 스크립트다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> http</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &quot;k6/http&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span><span> sleep</span><span style="color: #9399B2;"> }</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &quot;k6&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">export const</span><span> options</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  vus</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 100</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  duration</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;3000s&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">export default function</span><span style="color: #9399B2;"> () {</span></span>
+<span class="giallo-l"><span>  http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(</span><span style="color: #A6E3A1;">&quot;http://localhost:55555&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>  http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(</span><span style="color: #A6E3A1;">&quot;http://localhost:55555/heavy&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  sleep</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>적당히 조지게 해놨다. 초당 100건 미만 정도로만 쏠 것이다.</p>
+<p>사용법에 대해서는 별도 포스트를 참고한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222941188944">https://blog.naver.com/sssang97/222941188944</a></p>
+<p>적당히 조진 후에 프로파일 데이터를 다운받으면 준비는 끝이다.</p>
+<p><img src="/images/img_050ed75e89575c8a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="pprof-sigaghwa-konsol-ddyiugi">pprof 시각화 콘솔 띄우기</h2>
+<p>이제 pprof-cli로 다운받은 프로파일 데이터를 던저셔 실행시키면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pprof</span><span style="color: #94E2D5;"> -</span><span>http</span><span style="color: #9399B2;"> :</span><span style="color: #FAB387;">8080</span><span style="color: #94E2D5;"> ./</span><span>profile</span></span></code></pre>
+<p><img src="/images/img_b9dc85ec300a5cab.png" alt="" /></p>
+<p>그럼 아래와 같은 형태로 좀 그럴듯한 페이지가 뜬다.</p>
+<p><img src="/images/img_3da99f4c57f143d8.png" alt="" /></p>
+<p>이런저런 옵션이 있는데</p>
+<p><img src="/images/img_9510a9a8e8c77ff7.png" alt="" /></p>
+<p>TOP은 정직하게 점유율순으로 오퍼레이션을 보여준다.</p>
+<p><img src="/images/img_27f61aeecde2e953.png" alt="" />
+의도한대로 heavy 함수가 가장 높게 나왔다.</p>
+<p>Graph 탭은 뭔가 널찍하게 펼쳐서 관계도와 점유율을 표시해준다.</p>
+<p><img src="/images/img_0432718b0740012a.png" alt="" /></p>
+<p>flame graph나 flame graph(old)란 것도 있는데,</p>
+<p><img src="/images/img_e23cad10b622c82c.png" alt="" /></p>
+<p><img src="/images/img_eded2208a884078f.png" alt="" />
+이건 좀 구린것같다.</p>
+<p>이건 Peek 탭</p>
+<p><img src="/images/img_0f5dda7eb5f64755.png" alt="" /></p>
+<p>source 탭은 소스코드까지 보여준다.</p>
+<p><img src="/images/img_ba71b99c1a11e1d1.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/google/pprof?ref=hackernoon.com">https://github.com/google/pprof?ref=hackernoon.com</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223236935823/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] password 변경<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223236218877/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>stack buffer overflow 취약점<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

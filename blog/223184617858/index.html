@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] data race와 mutex, atomic | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223184617858/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] data race와 mutex, atomic">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223184617858/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-08-16T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223184617858/">[Go] data race와 mutex, atomic</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-16T00:00:00+00:00"><time datetime="2023-08-16T00:00:00+00:00">2023.08.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="339 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223184617858" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Go는 고루틴을 기반으로 성능적으로 빼어난 비동기 시스템을 제공하기는 하지만, 동기화에 대한 안전성에 엄격하지는 않다. Rust처럼 빡세게 동시성을 검사하지는 않기 때문에 별 생각없이 짜다가는 동시성 버그가 나기 쉽다.</p>
+<p>이런 것에 대한 대표적인 사례 중 하나가 data race일것 같다.</p>
+<p>아래 코드는 data race가 발생하는 간단한 코드다.<br />
+고루틴 10개를 돌려서 단일 공유변수를 증가시키는 단순한 로직을 갖고 있다.</p>
+<p><img src="/images/img_7c11b1e3ae1e5264.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;sync&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> wg sync.WaitGroup</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> shared</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 고루틴 10개 띄우기</span></span>
+<span class="giallo-l"><span>	for i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Add</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span></span>
+<span class="giallo-l"><span>		go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			defer wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Done</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">			// 각 고루틴은 공유변수를 10000번씩 증가시킴</span></span>
+<span class="giallo-l"><span>			for j</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 10000</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>				shared</span><span style="color: #94E2D5;">++</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Wait</span><span>()</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(shared)</span><span style="color: #9399B2;font-style: italic;"> // 10 * 10000 = 100000가 나와야 하는데...?</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>우리의 기대대로라면 당연히 10만이 찍혀야 하건만</p>
+<p><img src="/images/img_1920140683656c52.png" alt="" />
+10만이 나오지도 않고, 일정한 값이 나오지도 않는다.<br />
+이걸 데이터 레이스라고 부르는데, 여러개의 스레드가 동시에 하나의 변수에 접근하니까, 각자의 읽기와 쓰기가 서로 충돌하면서 서로서로 덮어씌워버리는 것이다.</p>
+<p>이걸 해결하려면 동기화 개념들을 적용해야 한다.<br />
+사실 이에 대한 가장 간편한 해결책은 채널이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223176685609">https://blog.naver.com/sssang97/223176685609</a><br />
+하지만 채널은 수신자와 송신자가 명확하게 구분되는 케이스에만 적합하고, 각 스레드들이 읽기/쓰기를 능동적으로 해야 하는 경우에는 사용하기가 곤란하다. 이럴 때는 직접 락을 걸거나 해야 한다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="mutex">Mutex</h2>
+<p>Mutex는 언어를 초월해서 가장 일반적으로 사용되는 동기화 기술이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223131650074">https://blog.naver.com/sssang97/223131650074</a></p>
+<p>그냥 무식하게 락걸고 다른놈이 접근하지 못하게 하는게 다다.<br />
+간단하고 강력하지만, 너무 남발하면 성능 저하가 심할 수 있고, 데드락의 문제도 항상 고려해야 한다.</p>
+<p>아래 코드에서는 mutex를 적용해서 data race를 해결한다.</p>
+<p>우선 뮤텍스틀 공유용으로 선언한 다음에</p>
+<p><img src="/images/img_b1fb32edbd955727.png" alt="" /></p>
+<p>쓰기를 할때마다 락을 걸고 풀도록 했다.</p>
+<p><img src="/images/img_ed0103a028e307ea.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;sync&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> wg sync.WaitGroup</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> shared</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> mutex</span><span style="color: #94E2D5;"> =</span><span> sync</span><span style="color: #94E2D5;">.</span><span>Mutex</span><span style="color: #9399B2;">{}</span><span style="color: #9399B2;font-style: italic;"> // 공유변수를 보호할 뮤텍스 생성</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 고루틴 10개 띄우기</span></span>
+<span class="giallo-l"><span>	for i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Add</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span></span>
+<span class="giallo-l"><span>		go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			defer wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Done</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">			// 각 고루틴은 공유변수를 10000번씩 증가시킴</span></span>
+<span class="giallo-l"><span>			for j</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 10000</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>				mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Lock</span><span>()</span><span style="color: #9399B2;font-style: italic;"> // 공유변수 보호 시작</span></span>
+<span class="giallo-l"><span>				shared</span><span style="color: #94E2D5;">++</span></span>
+<span class="giallo-l"><span>				mutex</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Unlock</span><span>()</span><span style="color: #9399B2;font-style: italic;"> // 공유변수 보호 종료</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Wait</span><span>()</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(shared)</span><span style="color: #9399B2;font-style: italic;"> // 10 * 10000 = 100000가 나와야 하는데...?</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그럼 약간 느려지긴 하지만 의도대로 동작은 한다.</p>
+<p><img src="/images/img_4bd55f3b25702e5c.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="atomic">atomic</h2>
+<p>mutex lock으로 인한 성능 병목이 심각하게 우려될 경우에는, atomic 기능들을 응용하는게 좋을 수 있다.<br />
+이건 무식하게 락을 거는게 아니고, CPU 인스트럭션 수준에서 제공하는 특정 기술을 활용해서 충돌을 방지하는 기술이다.</p>
+<p>내가 알기로 내장 atomic 기능은 Compare And Swap을 기반으로 atomic을 제공한다. 확실하지는 않다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222721792446">https://blog.naver.com/sssang97/222721792446</a></p>
+<p>아래에서는 atomic을 활용해서 data race를 제거해봤다.</p>
+<p><img src="/images/img_808cba6ea28f4bf9.png" alt="" /></p>
+<p>그냥 덧셈이란 행위 자체를 atomic operation으로 처리하게 하는 것이다.</p>
+<p><img src="/images/img_503a841c69d9b760.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;sync&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;sync/atomic&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> wg sync.WaitGroup</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	var</span><span> shared int32 </span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 고루틴 10개 띄우기</span></span>
+<span class="giallo-l"><span>	for i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Add</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span></span>
+<span class="giallo-l"><span>		go</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>			defer wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Done</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">			// 각 고루틴은 공유변수를 10000번씩 증가시킴</span></span>
+<span class="giallo-l"><span>			for j</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 10000</span><span style="color: #9399B2;">;</span><span> j</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>				atomic</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">AddInt32</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>shared</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">			}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	wg</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Wait</span><span>()</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(shared)</span><span style="color: #9399B2;font-style: italic;"> // 10 * 10000 = 100000가 나와야 하는데...?</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그럼 기대하던대로 빠르게도 나오고, 성능도 충분히 나올 것이다.</p>
+<p><img src="/images/img_1b446e2bc88c03e1.png" alt="" />
+여기서는 그냥 쓰기만 무식하게 해서 atomic이 좋아보일 수도 있는데, 타입이 복잡하거나 읽기와 쓰기, 검증 등이 필요한 경우에는 atomic으로는 한계가 있을 수도 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://pkg.go.dev/sync/atomic">https://pkg.go.dev/sync/atomic</a><br />
+<a rel="external" href="https://ikcoo.tistory.com/m/214">https://ikcoo.tistory.com/m/214</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223187729894/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Cloud Spanner와 분산 합의, 시간<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223184628396/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] 다형적인 값에 대한 JSON 역직렬화<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

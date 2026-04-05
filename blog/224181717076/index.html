@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Nvidia GPU 리소스 사용하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224181717076/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Nvidia GPU 리소스 사용하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224181717076/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-02-12T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224181717076/">[k8s] Nvidia GPU 리소스 사용하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-12T00:00:00+00:00"><time datetime="2026-02-12T00:00:00+00:00">2026.02.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="510 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224181717076" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>쿠버네티스는 RuntimeClass 같은 리소스와 플러그인을 활용해서 특정 런타임 의존적인 프로비저닝을 구현할 수 있는데, 그 중 대표적인 사용사례가 GPU 장비에 대한 관리다.</p>
+<p>기실 GPU 같은 하드웨어 관리는 쿠버네티스 팀의 관리 소관은 아니다. 약간 서드파티 같은 느낌으로 제공될 뿐이며, 컨테이너 구현체마다도 다르다.</p>
+<p>여기서는 nvidia GPU 리소스를 서버로 띄우고 관리하는 방법을 다뤄본다.</p>
+<br>
+<br>
+<br>
+<h2 id="runtimeclass">RuntimeClass</h2>
+<p>RuntimeClass는 노드에 붙이는 일종의 태그값이다.<br />
+특정 노드가 이런 런타임 특성을 갖고 있음을 지정하고, 이를 통해 특정 Pod들이 해당 런타임에 속하는 노드에만 실행될 수 있도록 구성하는 것이다.</p>
+<p>RuntimeClass의 기본 값 목록은 쿠버 클러스터 구성에 따라 다를 수 있다.<br />
+k3s의 경우에는 이렇게 들어있다.</p>
+<p><img src="/images/img_3efef88b24c8c916.png" alt="" /></p>
+<p>만약 저 목록에 필요로 하는 클래스가 없다면 직접 추가해주면 된다.<br />
+만드는게 딱히 어렵지도 않다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>vim nvidia</span><span style="color: #94E2D5;">.</span><span>yaml</span></span>
+<span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> -</span><span>f nvidia</span><span style="color: #94E2D5;">.</span><span>yaml</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> node</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> RuntimeClass</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> nvidia</span></span>
+<span class="giallo-l"><span>handler</span><span style="color: #9399B2;">:</span><span> nvidia</span></span></code></pre>
+<p>어차피 단순 메타데이터에 속하는 리소스 단위이기 때문이다.</p>
+<br>
+<p><img src="/images/img_ddf0330b881ff025.png" alt="" />
+이게 k3s에서 사전 제공하는 엔비디아 클래스 구성이다.</p>
+<br>
+<br>
+<br>
+<h2 id="nvidia-neitibeu-deuraibeo-seolci-ubuntu">nvidia 네이티브 드라이버 설치 (Ubuntu)</h2>
+<p>먼저 호스트에서 nvidia 드라이버를 설치해야 한다.<br />
+일반 드라이버를 먼저 깔아서, nvidia-smi의 실행이 잘 되는지를 확인한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 우분투 전용</span></span>
+<span class="giallo-l"><span>sudo add</span><span style="color: #94E2D5;">-</span><span>apt</span><span style="color: #94E2D5;">-</span><span>repository ppa</span><span style="color: #9399B2;">:</span><span>graphics</span><span style="color: #94E2D5;">-</span><span>drivers</span><span style="color: #94E2D5;">/</span><span>ppa</span></span>
+<span class="giallo-l"><span>sudo apt update</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>sudo ubuntu</span><span style="color: #94E2D5;">-</span><span>drivers autoinstall</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>sudo reboot now</span></span></code></pre>
+<p><img src="/images/img_2f349889bccd950a.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="nvidia-keonteineo-deuraibeo-seolci">nvidia 컨테이너 드라이버 설치</h2>
+<p>뭐가 이것저것 많이 필요하다.<br />
+nvidia에서 제공하는 컨테이너용 플러그인이 있는데, 이걸 깔아야지 컨테이너 내에서도 nvidia 드라이버를 사용할 수 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223882298321">https://blog.naver.com/sssang97/223882298321</a></p>
+<p>그래서 이게 잘 실행되면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>nvidia</span><span style="color: #94E2D5;">-</span><span>container</span><span style="color: #94E2D5;">-</span><span>runtime</span><span style="color: #94E2D5;"> --</span><span>version</span></span></code></pre>
+<p><img src="/images/img_8cd0cef9b11a2631.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="kubeonetiseu-cnie-nvidia-container-deuraibeo-yeongyeol-contanerd">쿠버네티스 CNI에 nvidia container 드라이버 연결 (contanerd)</h2>
+<p>배포판에 따라서는 이게 자동으로 설정되어있을 수 있고, 컨테이너 런타임마다 구성법이 다르다. 여기서는 containerd를 기준으로 정리한다.</p>
+<p>GPU가 깔려있는 노드에서 containerd 설정파일을 수정하고 재시작한다.<br />
+nvidia 도구를 통해서 할 수도 있고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo nvidia</span><span style="color: #94E2D5;">-</span><span>ctk runtime configure</span><span style="color: #94E2D5;"> --</span><span>runtime</span><span style="color: #94E2D5;">=</span><span>containerd</span></span>
+<span class="giallo-l"><span>sudo systemctl restart containerd</span></span></code></pre>
+<p>직접 config 찾아서 수정할 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># 이 경로 아닐 수 있음</span></span>
+<span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>containerd</span><span style="color: #94E2D5;">/</span><span>config</span><span style="color: #94E2D5;">.</span><span>toml</span></span>
+<span class="giallo-l"><span>sudo systemctl restart containerd</span></span></code></pre>
+<p><img src="/images/img_f2e0abbcd5ee0d9f.png" alt="" />
+이렇게 nvidia 런타임을 참조하도록 구성하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="device-plugin-seolci">Device Plugin 설치</h2>
+<p>마스터 노드에서 nvidia용 컨테이너 플러그인을 설치한다.<br />
+이게 노드마다 GPU가 몇개 있고, 몇개를 쓰고 있는지 등을 추적하고 관리해주는 플러그인이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl create</span><span style="color: #94E2D5;"> -</span><span>f https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.14.5/nvidia-device-plugin.yml</span></span></code></pre>
+<p><img src="/images/img_8bfb05c81da9ec61.png" alt="" /></p>
+<p><img src="/images/img_fd56bbe50d3b674a.png" alt="" />
+그럼 노드마다 한대씩 뜬다.</p>
+<br>
+<br>
+<br>
+<h2 id="guseong-hwagin">구성 확인</h2>
+<p>이것저것 다 잘 세팅했고 문제가 없다면, 노드 정보에 nvidia 관련된 속성값들이 추가될 것이다.<br />
+노드를 describe해보면</p>
+<p><img src="/images/img_9751e072a13d7d68.png" alt="" /></p>
+<p><img src="/images/img_0047d083a757eb99.png" alt="" />
+gpu가 4개 있는게 나오고</p>
+<br>
+<p><img src="/images/img_d170117cd2dfc071.png" alt="" />
+현재 몇개나 쓰이고 있는지도 나온다.<br />
+이렇게 되면 세팅은 잘 된 것이다.</p>
+<p>다음 명령을 사용하면 각 노드가 gpu를 몇개씩 가지고 있는지 확인 가능하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get nodes</span><span style="color: #94E2D5;"> -</span><span>o custom</span><span style="color: #94E2D5;">-</span><span>columns</span><span style="color: #94E2D5;">=</span><span>NAME</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">.</span><span>metadata</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #9399B2;">,</span><span>GPU</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>allocatable</span><span style="color: #94E2D5;">.</span><span style="color: #A6E3A1;">&quot;nvidia</span><span style="color: #F5C2E7;">\.</span><span style="color: #A6E3A1;">com/gpu&quot;</span></span></code></pre>
+<p><img src="/images/img_0953388ef97b4bf0.png" alt="" />
+4개만 있는 것이 보일 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gpu-nodeue-pod-silhaenghagi">GPU 노드에 Pod 실행하기</h2>
+<p>이제는 준비가 끝났다.<br />
+pod spec에 runtimeClassName으로 nvidia 클래스를 넣으면, 해당 리소스가 있는 노드에만 Pod를 프로비저닝한다.</p>
+<p><img src="/images/img_1bf79b11dd5efe91.png" alt="" /></p>
+<p>혹은, GPU 리소스에 대한 LIMIT을 설정할 수도 있다.</p>
+<p><img src="/images/img_f93fbc83bec37964.png" alt="" /></p>
+<p>그러고 실행해보면</p>
+<p><img src="/images/img_351ae89b80c3ac68.png" alt="" />
+실제로 nvidia GPU가 구성된 노드에만 뜨는 것을 볼 수 있을 것이다.<br />
+그러면 이제는 저기에 적당히 모델만 올려서 쓰거나 하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="gpu-gibon-haldang-maekeonijeum">GPU 기본 할당 매커니즘</h2>
+<p>만약 GPU Limit을 설정한다면, 드라이버는 GPU에 대한 격리를 보장한다.<br />
+해당 노드에 GPU가 3개 있더라도, 1개만 잡아서 접근 가능하게 비가시화하는 것이다.</p>
+<p><img src="/images/img_71b9cd80e8e7724c.png" alt="" />
+이게 호스트고</p>
+<br>
+<p><img src="/images/img_05a312d57e6f33b5.png" alt="" />
+이게 컨테이너 내부에서의 조회 정보다. 0번이 할당되었다.</p>
+<p>특정 GPU를 명시적으로 할당하고 싶을 수도 있다.<br />
+CUDA_VISIBLE_DEVICES를 0-start index로 넣으면, 그 GPU가 할당된다.</p>
+<p><img src="/images/img_3219e135c29fd4ca.png" alt="" /></p>
+<p><img src="/images/img_fc1e49a876da2484.png" alt="" />
+그럼 실제로 할당한 1번 GPU가 잡힌다.</p>
+<p>다만, 저 값이 절대적이진 않다.<br />
+가령 replica로 2개를 띄울 경우에는 1개만 저 번호로 할당되고, 나머지는 랜덤으로 할당된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/containers/runtime-class/">https://kubernetes.io/ko/docs/concepts/containers/runtime-class/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224180833746/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>분산 트랜잭션: Percolator<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224179368971/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] helm chart 배포하기 (with Github Page)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

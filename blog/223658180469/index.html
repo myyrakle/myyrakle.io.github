@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] minio: 분산 스토리지 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223658180469/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] minio: 분산 스토리지 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223658180469/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-11-13T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223658180469/">[k8s] minio: 분산 스토리지 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-13T00:00:00+00:00"><time datetime="2024-11-13T00:00:00+00:00">2024.11.13</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="521 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223658180469" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_7aae903c05c4a3a2.png" alt="" />
+minio는 자체 클라우드 스토리지 구성을 지원하는 서버 시스템 중 하나다.</p>
+<p>AWS S3와의 호환 기능을 제공해서 일반 스토리지처럼 쓸 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gujo">구조</h2>
+<p>minio는 기본적으로 분산 노드 환경에서의 고가용성 구조를 지향한다.<br />
+그래서 2 노드 구성이 기본이다.</p>
+<p><img src="/images/img_2c9c052a8b79c4a2.png" alt="" />
+minio 시스템은 minio tenant라고 하는 관리 서버의 집합으로 구성된다.<br />
+tenant는 별도의 node에 하나씩 프로비저닝되고, minio operator는 이 tenant들을 관리하면서 필요에 따라서 파일을 할당하거나 하는 것이다.</p>
+<p>게다가 고가용성과 장애 대응을 위해서 리소스를 과도하게 분산해놓는 경향이 있다.<br />
+하나의 tenant에는 서버를 4개 이상 배치하는데, 각각의 서버는 또 4개 이상의 Volume을 들고 있어야 한다.<br />
+그러니까 하나의 tenant에 볼륨 16개를 깔아놓는게 권장사항이란 것이다. 그래서 파일 하나 올려도 볼륨 16개에 다 복제된다.</p>
+<p>이를 통해 부분적으로 문제가 생겼을 때도 안전하게 복구가 가능한게 장점이다.</p>
+<br>
+<br>
+<br>
+<h2 id="minio-operator-seolci">minio operator 설치</h2>
+<p>6.0.0 버전 기준이다. k8s v1.28.9 이상부터 사용 가능하다.</p>
+<p>다음과 같이 apply를 날리면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> -</span><span>k</span><span style="color: #A6E3A1;"> &quot;github.com/minio/operator?ref=v6.0.4&quot;</span></span></code></pre>
+<p><img src="/images/img_bc548ae8f6aaaba5.png" alt="" />
+바로 리소스들을 자동으로 만들어준다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get all</span><span style="color: #94E2D5;"> -</span><span>n minio</span><span style="color: #94E2D5;">-</span><span>operator</span></span></code></pre>
+<p><img src="/images/img_196f441efd0266fd.png" alt="" />
+근데 쓰고있는 클러스터가 단일노드라면, 하나만 되고 하나는 되지 않을 수 있다.<br />
+affinity 구성이 되어있어서 각각 별도 노드에 깔리게끔 해놨다.</p>
+<p>멀티노드라면 그냥 쓰면 되고, 아니라면 다음과 같이 레플리카 수를 조절한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl scale deployment minio</span><span style="color: #94E2D5;">-</span><span>operator</span><span style="color: #94E2D5;"> -</span><span>n minio</span><span style="color: #94E2D5;">-</span><span>operator</span><span style="color: #94E2D5;"> --</span><span>replicas</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span></span></code></pre>
+<p><img src="/images/img_cf9c2d3ba7326d5b.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="minio-tenant-guseonghagi">minio tenant 구성하기</h2>
+<p>minio operator는 전반적인 관리자일 뿐이고, minio의 실질적인 동작 구현은 tenant 수준에서 이루어진다.</p>
+<p>우선 tenant를 관리할 네임스페이스를 하나 만들었다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl create</span><span style="color: #CBA6F7;"> namespace</span><span style="color: #F9E2AF;font-style: italic;"> minio</span><span>-</span><span style="color: #F9E2AF;font-style: italic;">tenant</span></span></code></pre>
+<p><img src="/images/img_d59efb4303c6dc9c.png" alt="" /></p>
+<p>그리고 storageclass를 하나 만든다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> storage</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> StorageClass</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> minio</span></span>
+<span class="giallo-l"><span>provisioner</span><span style="color: #9399B2;">:</span><span> kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>no</span><span style="color: #94E2D5;">-</span><span>provisioner</span></span>
+<span class="giallo-l"><span>volumeBindingMode</span><span style="color: #9399B2;">:</span><span> WaitForFirstConsumer</span></span></code></pre>
+<p><img src="/images/img_2fca186500557ee8.png" alt="" />
+이걸 달았을때 자동으로 minio에 기반해서 마운트되도록 할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="pv-gwanrija-guseong-directpv">PV 관리자 구성 - directpv</h2>
+<p>minio는 동적으로 조정되고 멀티노드 환경에서의 유연한 관리가 필요한 경우에는 directpv를 권장한다.<br />
+krew를 통해서 설치할 수 있고, 드라이브를 선택한 뒤에 init 명령을 날리면 드라이브 하나를 통째로 들고서 스토리지를 나눠쓸 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl krew install directpv</span></span>
+<span class="giallo-l"><span>kubectl directpv install </span></span>
+<span class="giallo-l"><span>kubectl directpv discover</span></span></code></pre>
+<p>설치하면 관련 pod 구성들도 만들어지고</p>
+<p><img src="/images/img_80fcfa6704fb82ea.png" alt="" /></p>
+<p><img src="/images/img_cc77fde155a44aed.png" alt="" /></p>
+<p>drive 목록 골라서 적당히 선택할 수 있다.</p>
+<p><img src="/images/img_73dd06189edb97fd.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="pv-gwanrija-guseong-local-volume-giban">PV 관리자 구성 - local volume 기반</h2>
+<p>단일 노드 환경에 가벼운 개발환경으로만 쓸거라면 로컬 볼륨 구성이 간편할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">2</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">3</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">4</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">5</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">6</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">7</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">8</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">9</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">10</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">11</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">12</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">13</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">14</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">15</span></span>
+<span class="giallo-l"><span>sudo mkdir</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">16</span></span></code></pre>
+<p>마운트할 경로 만들고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> PersistentVolume</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> minio</span><span style="color: #94E2D5;">-</span><span>pv</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  capacity</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    storage</span><span style="color: #9399B2;">:</span><span> 20Gi</span></span>
+<span class="giallo-l"><span>  volumeMode</span><span style="color: #9399B2;">:</span><span> Filesystem</span></span>
+<span class="giallo-l"><span>  accessModes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> ReadWriteOnce</span></span>
+<span class="giallo-l"><span>  persistentVolumeReclaimPolicy</span><span style="color: #9399B2;">:</span><span> Retain</span></span>
+<span class="giallo-l"><span>  storageClassName</span><span style="color: #9399B2;">:</span><span> minio</span></span>
+<span class="giallo-l"><span>  local</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>mnt</span><span style="color: #94E2D5;">/</span><span>disks</span><span style="color: #94E2D5;">/</span><span>minio</span></span>
+<span class="giallo-l"><span>  nodeAffinity</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    required</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      nodeSelectorTerms</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> matchExpressions</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            -</span><span> key</span><span style="color: #9399B2;">:</span><span> kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>hostname</span></span>
+<span class="giallo-l"><span>              operator</span><span style="color: #9399B2;">:</span><span> In</span></span>
+<span class="giallo-l"><span>              values</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">                -</span><span> 노드명</span></span></code></pre>
+<p>각각에 대해서 16개의 PV를 만들어준다.</p>
+<p><img src="/images/img_f42379d43710d8d7.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="minio-tenant-guseong">minio tenant 구성 -</h2>
+<p>PV가 준비되었으면 이제 tenant 서버 세트를 띄우면 된다.<br />
+기본설정으로만 띄우고 싶다면 아래 명령만 돌리면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> -</span><span>k github</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>minio</span><span style="color: #94E2D5;">/</span><span>operator</span><span style="color: #94E2D5;">/</span><span>examples</span><span style="color: #94E2D5;">/</span><span>kustomization</span><span style="color: #94E2D5;">/</span><span>base</span></span></code></pre>
+<p><img src="/images/img_73aef01a9cc4c29f.png" alt="" />
+참고로 이건 directpv 전용이다.</p>
+<p>local로 마운트할거라면 해당 경로에 있는 파일들 받아다가 storageclass를 방금 만든 minio 등으로 조정해줘야 한다.</p>
+<p><img src="/images/img_6845632919dd45c6.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> -</span><span>k</span><span style="color: #94E2D5;"> ./</span><span>minio</span><span style="color: #94E2D5;">-</span><span>tenant</span></span></code></pre>
+<p>그리고 날린다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get all</span><span style="color: #94E2D5;"> -</span><span>n minio</span><span style="color: #94E2D5;">-</span><span>tenant</span></span></code></pre>
+<p><img src="/images/img_ad3a2cde71cbd383.png" alt="" /></p>
+<p><img src="/images/img_56a1d96d45feb64d.png" alt="" />
+그래서 모든 pod들, pvc들이 다 마운트되면 잘 된 것이다.</p>
+<p>console 서비스만 외부공개해서 적당히 열어놓고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl patch svc myminio</span><span style="color: #94E2D5;">-</span><span>console</span><span style="color: #94E2D5;"> -</span><span>n minio</span><span style="color: #94E2D5;">-</span><span>tenant</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #A6E3A1;"> &#39;{&quot;spec&quot;: {&quot;type&quot;: &quot;LoadBalancer&quot;}}&#39;</span></span></code></pre>
+<p><img src="/images/img_c0a7e2cbcae81e72.png" alt="" /></p>
+<p>들어가서 쓰면 된다.</p>
+<p><img src="/images/img_10c37e6738ac1445.png" alt="" /></p>
+<br>
+<br>
+<p>코드 참조<br />
+<a rel="external" href="https://github.com/myyrakle/infrastructures/tree/master/k8s/templates/onpremise/minio">https://github.com/myyrakle/infrastructures/tree/master/k8s/templates/onpremise/minio</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://min.io/docs/minio/kubernetes/upstream/operations/installation.html">https://min.io/docs/minio/kubernetes/upstream/operations/installation.html</a><br />
+<a rel="external" href="https://github.com/minio/operator">https://github.com/minio/operator</a><br />
+<a rel="external" href="https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant-helm.html#deploy-tenant-helm">https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant-helm.html#deploy-tenant-helm</a><br />
+<a rel="external" href="https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant.html#minio-k8s-deploy-minio-tenant">https://min.io/docs/minio/kubernetes/upstream/operations/install-deploy-manage/deploy-minio-tenant.html#minio-k8s-deploy-minio-tenant</a><br />
+<a rel="external" href="https://github.com/minio/operator/tree/master/examples/kustomization/base">https://github.com/minio/operator/tree/master/examples/kustomization/base</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223658096869/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] minio: 시작해보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223659469749/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] kubeadm: node 추가<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

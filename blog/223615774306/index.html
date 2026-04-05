@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Javascript] 메모리 누수 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223615774306/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Javascript] 메모리 누수">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223615774306/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-10-12T00:00:00+00:00">
+    <meta property="article:tag" content="Javascript">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223615774306/">[Javascript] 메모리 누수</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-12T00:00:00+00:00"><time datetime="2024-10-12T00:00:00+00:00">2024.10.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="742 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/javascript/">Javascript</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223615774306" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Javascript는 GC가 달려있는 언어지만, 좀 어지러운 사용 형태를 갖고 있어서 누수가 많이 발생하는 편이다.<br />
+장기실행형 프로그램이 아니다보니 티가 잘 안 날 뿐이다.</p>
+<p>물론 언어 자체의 문제는 아니고, 사용 형태에 따른 문제긴 하다. GC 자체는 제대로 달려있다.<br />
+GC 내부 구조에 대한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223584806455">https://blog.naver.com/sssang97/223584806455</a></p>
+<br>
+<br>
+<br>
+<h2 id="memori-nusuyi-weonin">메모리 누수의 원인</h2>
+<p>Javascript는 다른 언어에 비해서 누수가 발생할 수 있는 코드 패턴을 자주 사용하는 편이다.<br />
+그 중 첫번째가 전역변수 기반의 값 관리고, 두번째가 남발되는 클로저와 이벤트다.</p>
+<br>
+<br>
+<h4 id="a-jeonyeogbyeonsu">A. 전역변수</h4>
+<p>일단 뭐 이런 식으로 전역변수를 마구 뿌리는 경우도 적지 않게 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>window</span><span style="color: #94E2D5;">.</span><span>foo</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;bar&#39;</span><span style="color: #9399B2;font-style: italic;"> // 전역변수</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> boom</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 이것도 함수 밖에 있다면 전역변수</span></span></code></pre>
+<p>전역변수는 당연히 프로그램이 죽을때까지 GC 대상으로 잡히지 않기 때문에, 생각없이 할당하다가는 메모리가 줄줄 새는 문제가 발생할 수 있다.</p>
+<p>또, Javascript의 느슨한 문법 탓에 전역변수가 만들어지는 경우도 있다.<br />
+JS는 정의한적 없는 변수에 값을 할당하려 시도하면 그걸 그냥 전역변수로 만든다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>foo</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;nar&#39;</span></span></code></pre><br>
+<br>
+<h4 id="b-keulrojeowa-kaebcyeo">B. 클로저와 캡쳐</h4>
+<p>두번째는 클로저다.<br />
+그런데 알다시피, GC에 의한 메모리 해제는 "참조하는 대상이 없는" 객체의 경우에 대해서만 이루어진다.</p>
+<p>다음과 같은 코드의 경우에는</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">    function</span><span style="color: #89B4FA;font-style: italic;"> fn1</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> largeObj</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Array</span><span>(</span><span style="color: #FAB387;">100000</span><span>)</span><span style="color: #9399B2;font-style: italic;"> // 언제 해제될까?</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // Do Something</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        return</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span></code></pre>
+<p>largeObj가 저 함수가 거의 종료되자마자 쓰레기로 탐지되고 정리될 것이라 가정할 수 있다.<br />
+largeObj를 다른 곳에 참조로 넘기지만 않는다면 말이다.</p>
+<p>하지만 다음과 같은 코드 패턴에서는 해제될 도리가 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">    function</span><span style="color: #89B4FA;font-style: italic;"> fn1</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> largeObj</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Array</span><span>(</span><span style="color: #FAB387;">100000</span><span>)</span><span style="color: #9399B2;font-style: italic;"> // 언제 해제될까?</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        setInterval</span><span>(</span><span style="color: #9399B2;">()</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            let</span><span> myObj</span><span style="color: #94E2D5;"> =</span><span> largeObj</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">            // do something</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span><span style="color: #FAB387;"> 1000</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span></code></pre>
+<p>setInterval에 클로저를 넘겨서 1초마다 실행되게 했다.<br />
+이러면 클로저가 largeObj의 참조를 캡쳐해서 가져가는데, 클로저 객체가 생존한 채로 계속해서 실행되니 저 largeObj는 절대로 해제되지 않는다.</p>
+<p>그래서 setInterval를 계속해서 돌릴 필요가 없다면 clearInterval 등으로 처리가 끝나면 종료되게끔 하는 것이 꽤 중요하다.</p>
+<p>이건 비단 setInterval에만 해당되는 문제는 아니다. 클로저를 넘기고, 클로저에서 외부 변수를 캡쳐해서 쓴다면 그 지점을 유의하면서 작성해야 한다.<br />
+클로저에서의 캡쳐는 함수에 직접 파라미터로 넘기는 것에 비해 암시적으로 처리되고, 가볍게 넘어가는 경우가 많아서 누수 유발 가능성이 더 높다.</p>
+<br>
+<br>
+<h4 id="c-console-log">C. console.log</h4>
+<p>디버거나 프로파일러나 뭐 이것저것 있어도 디버깅의 기본은 항상 로깅이고, JS 환경에서도 당연히 로그를 찍으면서 쓴다.<br />
+그런데, console.log는 잠재적으로 메모리 누수의 가능성이 존재한다.</p>
+<p>다음과 같은 함수가 있다면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">    function</span><span style="color: #89B4FA;font-style: italic;"> foo</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> largeObj</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Array</span><span>(</span><span style="color: #FAB387;">100000</span><span>)</span><span style="color: #9399B2;font-style: italic;"> // 언제 해제될까?</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // Do Something</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(largeObj)</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 로깅</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        return</span><span style="color: #FAB387;"> true</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span></code></pre>
+<p>우리는 foo 함수가 종료되면 largeObj도 정리될 것이라 기대할 것이다.<br />
+그런데 실상은 그렇지 않다.</p>
+<p>놀랍게도 console.log는 콘솔에 로그만 찍고 끝나는게 아니라, 참조를 들고서 버리지 않을 수 있다.<br />
+개발자 도구에 지속적으로 객체의 정보를 보여줄 필요가 있기 때문이다.<br />
+console.log로 한번이라도 찍은 객체는 영원히 지워지지 않는 우주 쓰레기가 될 가능성이 다분하다.</p>
+<p>그래서 가급적 console.log는 디버깅 환경에서만 사용하는 것이 바람직하고, 프로덕션 환경에서는 사용을 최소화해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="memori-peuropailring">메모리 프로파일링</h2>
+<p>다행스럽게도 대부분의 브라우저들은 개발자도구를 통해 메모리 프로파일링 기능을 제공한다.</p>
+<p>예를 들어, Chrome와 Node.js의 경우에는 아래 방법을 사용할 수 있다.</p>
+<p><img src="/images/img_d3b16a94bb2ccb58.png" alt="" />
+메모리 탭으로 이동해서 "타임라인" 어쩌고를 시작한다.</p>
+<br>
+<p><img src="/images/img_ed6d49111748b4ec.png" alt="" />
+그러면 시작을 누른 시점부터 종료할때까지의 메모리 할당 정보를 기록해준다.<br />
+저기서 좌측 상단의 중지 버튼을 누르면 기록을 중단한다.</p>
+<br>
+<p><img src="/images/img_a9e75d26fc414d04.png" alt="" />
+그럼 프로파일러가 도는동안 할당됐던 값들을 쭉 볼 수 있다.</p>
+<p>할당 수집을 켜놓은 상태에서 의심되는 기능을 하나씩 돌려보고, 수집을 끄고 비교해보면 노가다를 하면 어지간한건 아마 찾을 수 있을 것이다.</p>
+<p>이걸로 잘 찾으려면 경험적인 노하우가 많이 필요할 것이다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="memori-nusu-tamji-dogu-memlab">메모리 누수 탐지 도구: memlab</h2>
+<p>memlab은 페북에서 만든 메모리 누수 탐지용 보조도구다.<br />
+puppeteer 기반이고, 브라우저 환경에서의 누수를 감지하기 위한 목적으로 만들어졌다.</p>
+<p>근데 이게 코드에서 누수지점을 딱 잡아주는 그런건 아니고, 그냥 메모리 할당 프로파일러인데 조금 더 보기 좋게 모아서 뿌려주고 스냅샷 좀 편하게 관리해주는 그런 정도다.</p>
+<p>npm으로 설치할 수 있다.</p>
+<p><img src="/images/img_9cb2f19d968bf0c0.png" alt="" /></p>
+<p>사용법은 그렇게 어렵진 않다.</p>
+<p><img src="/images/img_c6d36eda1007499c.png" alt="" />
+이런 지도 페이지에 대해서 프로파일러를 돌려보자.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// initial page load url: Google Maps</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">function</span><span style="color: #89B4FA;font-style: italic;"> url</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #A6E3A1;"> &#39;https://www.google.com/maps/@37.386427,-122.0428214,11z&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// action where we want to detect memory leaks: click the Hotels button</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> action</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">page</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // puppeteer page API</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> page</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">click</span><span>(</span><span style="color: #A6E3A1;">&#39;button[aria-label=&quot;Hotels&quot;]&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// action where we want to go back to the step before: click clear search</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> back</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">page</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // puppeteer page API</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> page</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">click</span><span>(</span><span style="color: #A6E3A1;">&#39;[aria-label=&quot;Close&quot;]&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">module</span><span style="color: #94E2D5;">.</span><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> action</span><span style="color: #9399B2;">,</span><span> back</span><span style="color: #9399B2;">,</span><span> url</span><span style="color: #9399B2;"> };</span></span></code></pre>
+<p>이런 형태로 검사 스크립트를 규격화된 형태로 작성해야 한다.<br />
+url이 대상 페이지 url. action은 메모리 패턴을 감지할 액션, back은 종료 액션이다.</p>
+<p>저렇게 하면 memlab은 퍼펫티어 켜서 action으로 버튼 누르고, back으로 행동을 종료하면서 그 시점에 할당되고 해제되는 메모리들을 추적한다.</p>
+<p>실행은 이렇게 할 수 있다.</p>
+<p><img src="/images/img_774a1fd7f702b651.png" alt="" /></p>
+<p><img src="/images/img_a3d2f32a12bcb09f.png" alt="" />
+테스트가 완료되어도 결과를 바로 보여주진 않고</p>
+<br>
+<p><img src="/images/img_d44aaa650cda4645.png" alt="" />
+결과물 모아두는 경로가 따로 있다.</p>
+<p>시나리오 파일 골라서 view-heap을 때리면</p>
+<p><img src="/images/img_f43e0a66c21e2501.png" alt="" /></p>
+<p><img src="/images/img_8c3573dc7b4bf68e.png" alt="" /></p>
+<p><img src="/images/img_764472860be5b9f7.png" alt="" />
+메모리 프로파일링 결과를 볼 수 있다.</p>
+<p>방향키 위아래로 item 고르면서 그것과 연관된 메모리 할당 정보를 함께 볼 수 있고, 1,2,3,4,5,6 버튼을 통해 섹션을 전환할 수 있다.<br />
+앞서 설명했듯 누수 지점을 찾아주는게 아니라 찾을 수 있게 모아주는 거라서, 눈이 빠지도록 봐야 한다.</p>
+<p>자세한 내용은 문서를 참조하길 바란다.<br />
+<a rel="external" href="https://facebook.github.io/memlab/docs/intro">https://facebook.github.io/memlab/docs/intro</a></p>
+<br>
+<br>
+<br>
+<h2 id="gita">기타</h2>
+<p>구글도 leak-finder-for-javascript란걸 만들었는데, 현재는 deprecated된것같다.<br />
+<a rel="external" href="https://code.google.com/archive/p/leak-finder-for-javascript/">https://code.google.com/archive/p/leak-finder-for-javascript/</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://owenjeon.medium.com/javascript-memory-leak-dom-tree-76e855d281c8">https://owenjeon.medium.com/javascript-memory-leak-dom-tree-76e855d281c8</a><br />
+<a rel="external" href="https://github.com/facebook/memlab">https://github.com/facebook/memlab</a><br />
+<a rel="external" href="https://facebook.github.io/memlab/docs/api/interfaces/core_src.IHeapSnapshot/">https://facebook.github.io/memlab/docs/api/interfaces/core_src.IHeapSnapshot/</a><br />
+<a rel="external" href="https://ui.toast.com/posts/ko_20210611">https://ui.toast.com/posts/ko_20210611</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/12996129/memory-leak-when-logging-complex-objects">https://stackoverflow.com/questions/12996129/memory-leak-when-logging-complex-objects</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223617798663/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] Vacuum 튜닝<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223614474993/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Java] synchronized와 Lock<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] RDS: RDS Proxy | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222576013561/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] RDS: RDS Proxy">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222576013561/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-11-23T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222576013561/">[AWS] RDS: RDS Proxy</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-11-23T00:00:00+00:00"><time datetime="2021-11-23T00:00:00+00:00">2021.11.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="512 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222576013561" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<br>
+<p><img src="/images/img_ee50d1650570207e.png" alt="" /></p>
+<p>RDS 프록시는 말 그대로 RDS 데이터베이스에 대한 프록시를 제공해주는 서비스다.<br />
+Aurora에만 사용 가능하다.</p>
+<p>2019년에 나온거라서 꽤 근래에 나온 서비스인데, 나올 때는 나름 각광을 받았다고 한다.</p>
+<p>이게 왜 필요했던 걸까?</p>
+<p>생각해보자.</p>
+<p>아마존에서 제공하는 AWS Lambda 같은 서버리스 서비스나, PHP 같은 단순무식한 페이지형 환경으로 서버를 구축하다 보면, 데이터베이스에 대한 커넥션을 지속적으로 들고 있지 않게 된다.</p>
+<p>요청이 들어오면 그때그때 프로세스가 하나씩 올라가면서, 프로세스 하나당 커넥션을 들고 있게 되는 것이다.</p>
+<p>이게 왜 문제가 되느냐?</p>
+<p><img src="/images/img_f7201f340644f2eb.png" alt="" />
+기본적으로 RDB들은 커넥션에 대한 한계치를 두고 있기 때문이다.<br />
+설정하기에 따라서 꽤 많이 늘릴 수도 있지만, 그래도 대체로 1000-20000개 사이가 적정선이다.</p>
+<p>요청이 미친듯이 들어와서 프로세스가 커넥션을 하나씩 다 들고 있으면, 커넥션이 한계치에 도달해서 더 이상의 커넥션 생성이 불가능해진다.<br />
+그렇다. 기존에 커넥션을 물고 있던 놈이 사라지지 않는다면, 새로 들어오는 프로세스는 커넥션을 받지 못하고 뻗게 되는 것이다.</p>
+<p>그래서 php에 커넥션풀도 달지 않은 야매식 사이트들을 보면, connection max에 도달했다고 서버가 터지는 일이 종종 보인다.</p>
+<p>이건 중간에 커넥션풀이나 프록시만 하나 달아도 해결할 수 있다.<br />
+RDS 프록시는 그런걸 관리형으로 제공해주는 것이다.</p>
+<p>요금은 아래 요금표를 참고하길 바란다.<br />
+<a rel="external" href="https://aws.amazon.com/ko/rds/proxy/pricing/">https://aws.amazon.com/ko/rds/proxy/pricing/</a><br />
+저렴하진 않다.</p>
+<p>이제 프록시를 만들어보자.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="peurogsi-saengseong">프록시 생성</h2>
+<p>RDS 탭에 들어가서 아래의 프록시로 이동, 프록시 생성을 클릭해서 생성창을 띄운다.</p>
+<p><img src="/images/img_f2151243ec07b1a3.png" alt="" /></p>
+<p><img src="/images/img_94701f9757a5fcb5.png" alt="" /></p>
+<p>생성 창에 들어가면 연동할 엔진 종류를 먼저 고르고</p>
+<p><img src="/images/img_46a86e97f73f0323.png" alt="" /></p>
+<p>가리킬 데이터베이스와, 최대 연결 수를 지정한다.</p>
+<p><img src="/images/img_5921e491d926a32e.png" alt="" />
+기본값은 100퍼센트로 되어있는데, 100퍼센트면 커넥션 한계치의 절반까지만 사용할 수 있다는 뜻이고, 50퍼센트면 절반만 쓸 수 있는 식이다.<br />
+근데 100퍼센트는 좀 아닌 것 같고, 필요에 따라서 잘 맞춰주면 되겠다.</p>
+<p>그리고 시크릿 매니저를 통해서 보안설정을 해줘야 한다.</p>
+<p><img src="/images/img_f87a640b4fecf113.png" alt="" />
+저기서 "새 보안 암호 생성"을 누르면 생성창으로 이동하는데</p>
+<br>
+<p><img src="/images/img_02f33737165c4d39.png" alt="" /></p>
+<p><img src="/images/img_3033262a0fcf8395.png" alt="" />
+적당히 패스워드 채워놓고 만들어서, 선택한 다음에 프록시를 만들어주면 된다.<br />
+사용자 이름과 패스워드는 기존 설정과 동일해야 함에 유의한다.<br />
+그리고 postgresql의 "postgres" 같은 기본 마스터 루트 계정을 넣으면 잘 동작하지 않는다. 왜인지는 모르겠다.</p>
+<br>
+<p><img src="/images/img_57e526de654934fd.png" alt="" />
+그럼 이런식으로 프록시가 만들어질 것이다.</p>
+<p>프록시에 설정된 보안그룹에 들어가서</p>
+<p><img src="/images/img_34743e8bb46e658f.png" alt="" />
+mysql 포트 열려있나 확인해보고 없으면 추가해주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="peurogsiyi-sayong-with-lambda">프록시의 사용 (with Lambda)</h2>
+<p>RDS 프록시는 public access가 불가능하고, 동일한 VPC 내에서만 직접 호출이 가능하다.<br />
+그래서 Lambda 같은 서비스에서 직접 호출하거나, ssh로 우회해서 사용하는 방식을 사용해야 한다.</p>
+<p>근데 사실 Lambda를 위한 서비스라 봐도 무방하다.</p>
+<p>함수를 먼저 만들어보자.<br />
+이름은 취향껏 짓고</p>
+<p><img src="/images/img_e1df111fe0b90f89.png" alt="" /></p>
+<p>먼저 EC2 권한을 붙여준다. VPC 연결에 사용된다.</p>
+<p><img src="/images/img_3b47635e14f7fed9.png" alt="" /></p>
+<p>그리고 VPC 탭에 들어가서 RDS Proxy와 동일한 VPC로 설정해준다.</p>
+<p><img src="/images/img_b4d85039fcb6b8a5.png" alt="" /></p>
+<p>그리고 데이터베이스 커넥션을 맺기 위해 사용할 라이브러리를 레이어에 올려서 람다에 연결한다.<br />
+나는 sequelize를 사용했다.</p>
+<p><img src="/images/img_3578476d6efd49b3.png" alt="" />
+그럼 이제 밑작업은 대강 끝난 것이다.</p>
+<p>테스트 코드는 다음과 같다.<br />
+그렇게 어려울 것은 없다.<br />
+rds proxy 엔드포인트를 호스트로 하고, 시크릿 매니저로 설정한 유저네임/패스워드로 로그인을 하기만 하면 된다.</p>
+<p><img src="/images/img_58031ff13cf01aa3.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> sequelize</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;sequelize&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> connection</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> sequelize</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sequelize</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &#39;test&#39;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>        process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">USER_NAME</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">PASSWORD</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span>            dialect</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;mysql&#39;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>            host</span><span style="color: #94E2D5;">:</span><span> process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">HOST</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            port</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3306</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> list</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span> connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">query</span><span>(</span><span style="color: #A6E3A1;">`</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        select * </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        from test.</span><span style="color: #F5C2E7;">\`</span><span style="color: #A6E3A1;">person</span><span style="color: #F5C2E7;">\`</span><span style="color: #A6E3A1;"> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `</span><span style="color: #9399B2;">, {</span></span>
+<span class="giallo-l"><span>            type</span><span style="color: #94E2D5;">:</span><span> sequelize</span><span style="color: #94E2D5;">.</span><span>QueryTypes</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">SELECT</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            logging</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;">false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    )</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(list)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // TODO implement</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        statusCode</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        body</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(list)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>그럼 잘 될 것이다.</p>
+<p><img src="/images/img_1eb9ec3d7c204ec8.png" alt="" /></p>
+<p>그렇다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/63278572/cant-connect-to-rds-postgresql-db-instance-through-an-rds-proxy">https://stackoverflow.com/questions/63278572/cant-connect-to-rds-postgresql-db-instance-through-an-rds-proxy</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/compute/using-amazon-rds-proxy-with-aws-lambda/">https://aws.amazon.com/ko/blogs/compute/using-amazon-rds-proxy-with-aws-lambda/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222575967423/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] RDS: 복제본 만들기 (Aurora)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222574263116/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[gRPC] proto (protocol buffer) 문법<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

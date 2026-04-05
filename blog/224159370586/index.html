@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] S3 미사용 파일 정리하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224159370586/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] S3 미사용 파일 정리하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224159370586/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-01-25T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224159370586/">[AWS] S3 미사용 파일 정리하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-01-25T00:00:00+00:00"><time datetime="2026-01-25T00:00:00+00:00">2026.01.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="510 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224159370586" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>S3를 비롯한 파일 스토리지들은 한번 관리가 어긋나기 시작하면 돌이킬 수 없을 정도로 꼬이기 쉽다. 뭔가 데이터는 잔뜩 들어있는데, 실질적으로 쓰이지 않는 쓰레기 데이터가 잔뜩 적재될 수 있는 것이다.</p>
+<p>이건 기실 Key-Value 구조를 가진 비정형 NoSQL DB들의 공통점이기도 하다. S3도 포장이야 어쨌든 Key(path), Value(file) DB의 일종이기 때문에 이러한 지점을 공유한다.</p>
+<p>내 경우에는 S3 공간이 50TB 쯤은 되었는데, 그 중에서 실질적으로 쓰이지 않는 파일들도 꽤 많았다. 하지만 최종적으로는 대략 15TB 정도의 미사용 파일을 정리할 수 있었다.</p>
+<p>목표를 달성한 방식에 대해서 대략 기록해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="bangbeobron-mark-and-sweep">방법론: Mark and Sweep</h2>
+<p>관리되지 않은 혼돈스런 상황에서 미사용 파일을 찾아서 지우는 방법은 사실 하나뿐이다.<br />
+사용하고 있는 파일을 전부 mark하고, mark되지 않은 파일을 제거하는 것이다. 흔히 말하는 GC의 논리와 같다.</p>
+<p>물론 세부적인 마이그레이션 방법은 조금 갈릴 수 있다.<br />
+unmark 파일들을 전부 버킷 내에서 그냥 바로 삭제해버릴 수도 있고, 새로운 버킷을 만들어서 mark된(사용중인) 파일을 전부 옮겨버릴 수도 있다. 내 경우에는 변화가 적은 전자를 택했다.</p>
+<br>
+<br>
+<br>
+<h2 id="step-1-pail-jeongbo-sujibhagi">STEP 1: 파일 정보 수집하기</h2>
+<p>사용/미사용 파일을 추려내려면, 일단 파일에 대한 전체 목록이 필요하다.<br />
+근데 S3는 이를 위한 직접적인 기능을 제공하지는 않으므로, 직접 긁어다가 분석을 해야 한다.</p>
+<p>내 경우에는 빠른 분석이 가능한 Clickhouse DB에다가 S3 객체 정보를 다 때려넣고 보는 방식을 선택했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">--</span><span> laboratory</span><span style="color: #94E2D5;">.</span><span>s3_bucket definition</span></span>
+<span class="giallo-l"><span>CREATE TABLE laboratory</span><span style="color: #94E2D5;">.</span><span>s3_bucket</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `bucket_name`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `key`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `storage_class`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `last_updated_at`</span><span> DateTime</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `file_bytes`</span><span> Int64</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `is_deletable`</span><span> Bool</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `is_deleted`</span><span> Bool</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `is_using`</span><span> Bool DEFAULT</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `feature`</span><span> String</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> ReplacingMergeTree</span></span>
+<span class="giallo-l"><span>ORDER</span><span style="color: #89B4FA;font-style: italic;"> BY</span><span> (bucket_name</span><span style="color: #9399B2;">,</span><span> key)</span></span>
+<span class="giallo-l"><span>SETTINGS index_granularity</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 8192</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> min_age_to_force_merge_seconds</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 60</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>테이블 세팅은 적당히 이렇게 하고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>AWS_ACCESS_KEY</span><span style="color: #94E2D5;">=...</span></span>
+<span class="giallo-l"><span>AWS_SECRET_KEY</span><span style="color: #94E2D5;">=...</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CLICKHOUSE_USERNAME</span><span style="color: #94E2D5;">=</span><span style="color: #CBA6F7;">default</span></span>
+<span class="giallo-l"><span>CLICKHOUSE_PASSWORD</span><span style="color: #94E2D5;">=...</span></span>
+<span class="giallo-l"><span>CLICKHOUSE_DBNAME</span><span style="color: #94E2D5;">=</span><span style="color: #CBA6F7;">default</span></span>
+<span class="giallo-l"><span>CLICKHOUSE_HOST</span><span style="color: #94E2D5;">=...</span></span>
+<span class="giallo-l"><span>CLICKHOUSE_PORT</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">8123</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">require</span><span>(</span><span style="color: #A6E3A1;">&quot;dotenv&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">config</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span style="color: #9399B2;"> {</span><span> S3Client</span><span style="color: #9399B2;">,</span><span> ListObjectsV2Command</span><span style="color: #9399B2;"> }</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;@aws-sdk/client-s3&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span style="color: #9399B2;"> {</span><span> createClient</span><span style="color: #9399B2;"> }</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;@clickhouse/client&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> fs</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;fs&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> path</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;path&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// S3 클라이언트 설정</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> s3Client</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> S3Client</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>  region</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;리전명&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  credentials</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    accessKeyId</span><span style="color: #94E2D5;">:</span><span> process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_ACCESS_KEY</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    secretAccessKey</span><span style="color: #94E2D5;">:</span><span> process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">AWS_SECRET_KEY</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// ClickHouse 클라이언트 설정</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> clickhouse</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> createClient</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>  host</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> `http://</span><span style="color: #9399B2;">${</span><span>process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">CLICKHOUSE_HOST</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">:</span><span style="color: #9399B2;">${</span><span>process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">CLICKHOUSE_PORT</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">`</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  username</span><span style="color: #94E2D5;">:</span><span> process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">CLICKHOUSE_USERNAME</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  password</span><span style="color: #94E2D5;">:</span><span> process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">CLICKHOUSE_PASSWORD</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  database</span><span style="color: #94E2D5;">:</span><span> process</span><span style="color: #94E2D5;">.</span><span>env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">CLICKHOUSE_DBNAME</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> CURSOR_LOG_FILE</span><span style="color: #94E2D5;"> =</span><span> path</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>(__dirname</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;cursor.log&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> PROGRESS_LOG_FILE</span><span style="color: #94E2D5;"> =</span><span> path</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>(__dirname</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;progress.log&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 저장된 커서 읽기</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">function</span><span style="color: #89B4FA;font-style: italic;"> loadLastCursor</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (fs</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">existsSync</span><span>(CURSOR_LOG_FILE))</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      const</span><span> cursor</span><span style="color: #94E2D5;"> =</span><span> fs</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">readFileSync</span><span>(CURSOR_LOG_FILE</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;utf8&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">trim</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>      console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">`이전 커서를 찾았습니다: </span><span style="color: #9399B2;">${</span><span>cursor</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">`</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      return</span><span> cursor</span><span style="color: #94E2D5;"> ||</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> catch</span><span> (error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(</span><span style="color: #A6E3A1;">&quot;커서 로드 실패:&quot;</span><span style="color: #9399B2;">,</span><span> error)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  return null</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 커서 저장</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">function</span><span style="color: #89B4FA;font-style: italic;"> saveCursor</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">cursor</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    fs</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">writeFileSync</span><span>(CURSOR_LOG_FILE</span><span style="color: #9399B2;">,</span><span> cursor</span><span style="color: #94E2D5;"> ||</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;utf8&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> catch</span><span> (error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(</span><span style="color: #A6E3A1;">&quot;커서 저장 실패:&quot;</span><span style="color: #9399B2;">,</span><span> error)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 진행 상황 로그</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">function</span><span style="color: #89B4FA;font-style: italic;"> logProgress</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">message</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> timestamp</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">toISOString</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> logMessage</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> `[</span><span style="color: #9399B2;">${</span><span>timestamp</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">] </span><span style="color: #9399B2;">${</span><span>message</span><span style="color: #9399B2;">}</span><span style="color: #F5C2E7;">\n</span><span style="color: #A6E3A1;">`</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>  console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(message)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    fs</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">appendFileSync</span><span>(PROGRESS_LOG_FILE</span><span style="color: #9399B2;">,</span><span> logMessage</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;utf8&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> catch</span><span> (error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(</span><span style="color: #A6E3A1;">&quot;로그 저장 실패:&quot;</span><span style="color: #9399B2;">,</span><span> error)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> processS3Objects</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">bucketName</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> startCursor</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  let</span><span> continuationToken</span><span style="color: #94E2D5;"> =</span><span> startCursor</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  let</span><span> totalProcessed</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  logProgress</span><span>(</span><span style="color: #A6E3A1;">`S3 버킷 </span><span style="color: #9399B2;">${</span><span>bucketName</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">의 파일 목록을 조회하고 저장하는 중...`</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  if</span><span> (startCursor)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    logProgress</span><span>(</span><span style="color: #A6E3A1;">`커서부터 재개: </span><span style="color: #9399B2;">${</span><span>startCursor</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">`</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  do</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> command</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> ListObjectsV2Command</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>      Bucket</span><span style="color: #94E2D5;">:</span><span> bucketName</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      ContinuationToken</span><span style="color: #94E2D5;">:</span><span> continuationToken</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span> s3Client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">send</span><span>(command)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (response</span><span style="color: #94E2D5;">.</span><span>Contents</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> response</span><span style="color: #94E2D5;">.</span><span>Contents</span><span style="color: #94E2D5;">.</span><span>length</span><span style="color: #94E2D5;"> &gt;</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">      // 조회한 데이터를 바로 ClickHouse에 저장</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      const</span><span> values</span><span style="color: #94E2D5;"> =</span><span> response</span><span style="color: #94E2D5;">.</span><span>Contents</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">map</span><span>(</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">obj</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span> (</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        bucket_name</span><span style="color: #94E2D5;">:</span><span> bucketName</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        key</span><span style="color: #94E2D5;">:</span><span> obj</span><span style="color: #94E2D5;">.</span><span>Key</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        storage_class</span><span style="color: #94E2D5;">:</span><span> obj</span><span style="color: #94E2D5;">.</span><span>StorageClass</span><span style="color: #94E2D5;"> ||</span><span style="color: #A6E3A1;"> &quot;STANDARD&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        last_updated_at</span><span style="color: #94E2D5;">:</span><span> obj</span><span style="color: #94E2D5;">.</span><span>LastModified</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">          ?</span><span> Math</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">floor</span><span>(</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #89B4FA;font-style: italic;"> Date</span><span>(obj</span><span style="color: #94E2D5;">.</span><span>LastModified)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">getTime</span><span>()</span><span style="color: #94E2D5;"> /</span><span style="color: #FAB387;"> 1000</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">          :</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        file_bytes</span><span style="color: #94E2D5;">:</span><span> obj</span><span style="color: #94E2D5;">.</span><span>Size</span><span style="color: #94E2D5;"> ||</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        is_deletable</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        is_deleted</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> false</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      }</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      await</span><span> clickhouse</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insert</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>        table</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;laboratory.s3_bucket&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        values</span><span style="color: #94E2D5;">:</span><span> values</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        format</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;JSONEachRow&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>      totalProcessed</span><span style="color: #94E2D5;"> +=</span><span> response</span><span style="color: #94E2D5;">.</span><span>Contents</span><span style="color: #94E2D5;">.</span><span>length</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">      logProgress</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        `</span><span style="color: #9399B2;">${</span><span>totalProcessed</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">개 처리 완료 (이번 배치: </span><span style="color: #9399B2;">${</span><span>response</span><span style="color: #94E2D5;">.</span><span>Contents</span><span style="color: #94E2D5;">.</span><span style="color: #A6E3A1;">length</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">개)`</span></span>
+<span class="giallo-l"><span>      )</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    continuationToken</span><span style="color: #94E2D5;"> =</span><span> response</span><span style="color: #94E2D5;">.</span><span>NextContinuationToken</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 다음 커서가 있으면 저장 (중단 시 재개 가능)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (continuationToken)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">      saveCursor</span><span>(continuationToken)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">      logProgress</span><span>(</span><span style="color: #A6E3A1;">`현재 커서: </span><span style="color: #9399B2;">${</span><span>continuationToken</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">`</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> while</span><span> (continuationToken)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">  // 완료되면 커서 파일 삭제</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  if</span><span> (fs</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">existsSync</span><span>(CURSOR_LOG_FILE))</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    fs</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unlinkSync</span><span>(CURSOR_LOG_FILE)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    logProgress</span><span>(</span><span style="color: #A6E3A1;">&quot;커서 파일 삭제 완료&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  logProgress</span><span>(</span><span style="color: #A6E3A1;">`총 </span><span style="color: #9399B2;">${</span><span>totalProcessed</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">개의 파일을 처리했습니다.`</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  return</span><span> totalProcessed</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> main</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> bucketName</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;버킷명&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 이전에 중단된 커서가 있는지 확인</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> lastCursor</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> loadLastCursor</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // S3 버킷의 파일을 조회하면서 바로 저장</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> totalProcessed</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span style="color: #89B4FA;font-style: italic;"> processS3Objects</span><span>(bucketName</span><span style="color: #9399B2;">,</span><span> lastCursor)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (totalProcessed</span><span style="color: #94E2D5;"> ===</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">      logProgress</span><span>(</span><span style="color: #A6E3A1;">&quot;버킷에 파일이 없습니다.&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      return</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    logProgress</span><span>(</span><span style="color: #A6E3A1;">&quot;작업이 성공적으로 완료되었습니다.&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> catch</span><span> (error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    logProgress</span><span>(</span><span style="color: #A6E3A1;">`오류 발생: </span><span style="color: #9399B2;">${</span><span>error</span><span style="color: #94E2D5;">.</span><span>message</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">`</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(</span><span style="color: #A6E3A1;">&quot;오류 상세:&quot;</span><span style="color: #9399B2;">,</span><span> error)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    process</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">exit</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span style="color: #CBA6F7;"> finally</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // ClickHouse 연결 종료</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span> clickhouse</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">close</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">main</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>자바스크립트로 읽어다가 밀어넣는 프로그램을 짜서 돌렸다.</p>
+<br>
+<p><img src="/images/img_c566553d5a0f27b2.png" alt="" />
+그러면 한번에 가져올 수 있는 객체 제한이 1000개라서 좀 걸리긴 하는데, 아무튼 가져올 수는 있다.</p>
+<br>
+<p><img src="/images/img_a2afceb53bd2726f.png" alt="" /></p>
+<p><img src="/images/img_ebe1274823c66e23.png" alt="" />
+많기도 하다.</p>
+<p>이렇게 수집이 되었다면 최소한의 시작점은 잡은 셈이다.</p>
+<br>
+<br>
+<br>
+<h2 id="step-2-sayongjungin-pail-markhagi">STEP 2: 사용중인 파일 Mark하기</h2>
+<p>이제 첫번째 스텝이다.<br />
+실제로 사용중인 파일들을 전부 MARK 표시를 해줘야 한다.</p>
+<p>데이터에서 URL로 참조를 하고 있는 것도 있을테고, 아니면 어딘가에 하드코딩된 URL/Key가 있을 수도 있다.<br />
+그걸 죄다 찾아서 mark를 해줘야 한다.</p>
+<p><img src="/images/img_c56ea8e1b2de53fb.png" alt="" />
+내 경우에는 운영 데이터 전체를 Clickhouse에 동기화해놓고 있는 상황이었기 때문에, 그걸 기반으로 이렇게 매칭을 시켰다.</p>
+<p>이 과정이 가장 중요하다. 참조중인 것이 있는데도 빼먹거나 잘못 mark를 한다면, 사용중인데도 삭제해버릴 수가 있기 때문이다. 가장 많은 공을 들이고 신경써야 한다.</p>
+<p>아무튼 실제 사용 카테고리별로 적당히 찍고, 참조 중인 것들 중에서도 삭제 가능한게 있다면 삭제 가능한 것으로 마킹해주고 그러면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">--</span><span> 참조대상이 없는 항목을 삭제 가능한 것으로 표시 </span></span>
+<span class="giallo-l"><span>alter table laboratory</span><span style="color: #94E2D5;">.</span><span>s3_bucket</span></span>
+<span class="giallo-l"><span>update is_deletable</span><span style="color: #94E2D5;">  =</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>where is_deleted</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span><span> and feature</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;&#39;</span><span> and is_using</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="step-3-sagje-jeon-baegeobhagi-for-safe">STEP 3: 삭제 전 백업하기 (for safe)</h2>
+<p>사람은 항상 실수를 한다.<br />
+그렇기 때문에 운영 환경에서는 언제든 돌이킬 수 있는 방법을 마련해두는 것이 중요하다.</p>
+<p>내 경우에는 백업 수단을 S3의 DEEP ARCHIVE 클래스로 선택했다.<br />
+직접 다운받아서 온프레미스 공간에 저장할 수도 있을 테지만, 이런 경우에 한해서는 딱히 그게 저렴하다는 보장까지는 없기 때문이다.</p>
+<p>일단 S3 DEEP ARCHIVE로의 COPY-백업은 데이터 전송 비용이 없다.<br />
+물론 API 호출당 개수나 약간의 저장 비용이 발생하긴 하지만, 이런 대형 데이터에서는 데이터 전송 비용이 그보다 훨씬 더 크다.<br />
+게다가 완전히 안전하다는 보장이 생기면 종국에는 삭제할 수 있으므로, 잠시동안의 저장 비용은 감수할만하다. 표준 클래스보다는 15배 정도는 싸니까 말이다.</p>
+<p>그래서 전용 백업 버킷을 만들고 삭제 전에 옮겨놓는 방식을 취했다.</p>
+<p><img src="/images/img_418c93f4109661bb.png" alt="" /></p>
+<p><img src="/images/img_694fe9d6567cdedc.png" alt="" /></p>
+<p>DEEP ARCHIVE의 비용이나 제약사항 등은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224155291740">https://blog.naver.com/sssang97/224155291740</a></p>
+<br>
+<br>
+<br>
+<h2 id="step-4-misayong-pail-nalrigi-sweep">STEP 4: 미사용 파일 날리기 - SWEEP</h2>
+<p>준비가 다 됐다면, 날릴 일만 남았다.</p>
+<p><img src="/images/img_4bd20d4e47885e0a.png" alt="" /></p>
+<p><img src="/images/img_ca67d48153c1b408.png" alt="" /></p>
+<p><img src="/images/img_101b4460a509a40b.png" alt="" /></p>
+<p><img src="/images/img_20bdf74728bf3e74.png" alt="" />
+적당히 짜서 백업-&gt;삭제를 수행토록 했다.<br />
+전체 코드는 길기도 하고, 뻔해서 굳이 올리진 않는다.</p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224159131431/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Double Dispatch<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224157750485/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 1.93.0 업데이트 발표 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>HashDos 취약점 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222890361982/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="HashDos 취약점">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222890361982/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-10-03T00:00:00+00:00">
+    <meta property="article:tag" content="보안">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222890361982/">HashDos 취약점</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-10-03T00:00:00+00:00"><time datetime="2022-10-03T00:00:00+00:00">2022.10.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="288 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/boan/">보안</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222890361982" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>HashDos는 해시테이블의 취약점을 이용한 Dos 공격법이다.</p>
+<p>이걸 이해하려면 먼저 해시테이블의 구조를 알아야 한다.</p>
+<br>
+<br>
+<h2 id="haesiteibeul">해시테이블</h2>
+<p>해시테이블은 키값을 해싱해서 키와 값을 매핑시키는 자료구조 형태다.</p>
+<p><img src="/images/img_f7dba7a5af1f03fe.png" alt="" />
+일반적인 케이스에서는 몹시 빠른 시간 내에 값을 꺼내올 수 있지만, 아닌 경우도 있다는 것이 문제다.</p>
+<p>해시테이블의 고질적인 문제 중 하나가 바로 해시 키 충돌(collision)이다.<br />
+해시테이블은 키값에 해싱을 수행해 키와 값을 매핑시키는데, 해시 알고리즘들은 정도의 차이는 있지만 다른 값을 넣더라도 같은 결과물이 나올 수가 있다.</p>
+<p>이럴때는 보통 내부에 리스트로 추가해서 선형검색을 하거나 해싱을 재귀적으로 또 한다만, 추가적인 부하는 필연적으로 발생한다.</p>
+<p>HashDos는 이러한 충돌을 발생시킬 수 있는 일련의 값들을 때려넣어서 고의적으로 성능 과부하를 일으키는 공격법이다.</p>
+<br>
+<br>
+<br>
+<h2 id="web-seobeoeseo">웹 서버에서</h2>
+<p>일반적으로 웹서버들은 http request를 받을때, query나 body 값들을 해시테이블의 형태로 관리한다.<br />
+바로 여기서 문제가 발생하는 것이다.</p>
+<p>공격자들은 body 파라미터 등에 해시충돌이 발생하는 키값을 잔뜩 우겨넣고 보낸다.</p>
+<p><img src="/images/img_fe0f8035eb699026.jpg" alt="" />
+이런식으로 말이다.</p>
+<p>그러면 당연히 해시충돌로 cpu 사용률이 치솟고.. 서버가 뻗게 되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="daeeungbeob-1-ibryeoggabs-jehan">대응법 1: 입력값 제한</h2>
+<p>해시테이블 자체의 본질적인 문제를 없앨 수는 없다.</p>
+<p>그래서 상식적인 한도로만 파라미터의 개수를 제한하는 미봉책을 사용하기도 한다. 아무리 충돌이 떠도 몇개 안되면 문제가 없으니 말이다.</p>
+<p>spring, php 등의 서버 환경들은 이에 대한 설정값을 제공한다.<br />
+예를 들어 톰캣에서는 max parameter count라는 옵션으로 파라미터 개수를 제한할 수 있다.</p>
+<p>다른 프레임워크들도 대부분 이러한 기능을 제공할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="daeeungbeob-2-raendeomhaesing">대응법 2: 랜덤해싱</h2>
+<p>이건 알고리즘을 일부 개선한 방법이다.</p>
+<p>공격자가 해시 충돌을 예상해서 값을 집어넣는 것도, 해싱의 결과값이 고정적이라 가능한 것이다.</p>
+<p>그래서 이걸 막기 위해 나온 해시 알고리즘 중 하나가 SipHash다.<br />
+이러한 알고리즘들은 난수에 기반해 해시값을 생성하니, 매번 해시값이 달라지고 해시충돌이 일어나는 조건도 달라진다.</p>
+<p>본인이 쓰고있는 시스템에서 어떤 해시 알고리즘을 사용하는지, 실행할때마다 해시값이 달라지는지를 확인해보면 되겠다.<br />
+달라진다면 거의 괜찮을 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://m.blog.naver.com/PostView.naver?blogId=wnrjsxo&amp;logNo=221360964753&amp;proxyReferer=">https://m.blog.naver.com/PostView.naver?blogId=wnrjsxo&amp;logNo=221360964753&amp;proxyReferer=</a></p>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222891058652/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Github] packages<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222890858802/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] 심볼릭 링크<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

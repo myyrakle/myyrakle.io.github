@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] 동시성과 함수의 색상(color) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224104247907/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] 동시성과 함수의 색상(color)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224104247907/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-12-10T00:00:00+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224104247907/">[Concurrency] 동시성과 함수의 색상(color)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-10T00:00:00+00:00"><time datetime="2025-12-10T00:00:00+00:00">2025.12.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="429 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224104247907" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>함수의 색상은 동시성 프로그램에서 꽤 떠들썩한 주제 중 하나다.<br />
+이른바 동시성이 함수 단위로 "전염"되고 강제되는 것에 대한 부정적 피드백이다.</p>
+<p>특히 Go 개발자들이 많이 주장하더라.</p>
+<br>
+<br>
+<br>
+<h2 id="hamsuyi-saegsanggwa-jeonyeomseong">함수의 색상과 전염성</h2>
+<p>색상 문제는 async/await 구조를 지원하는 언어들을 대상으로 지적할 수 있는 문제다.<br />
+대표적인 언어로는 Node.js, Rust, C#, Dart, Python 등이 있다.</p>
+<p>위 언어들은 현실적인 한계로 인해 다음과 같은 공통적인 제한을 갖고 있다.<br />
+"async 함수는 async 함수에서만 정상적으로 호출될 수 있다."</p>
+<p>그래서 javascript에서는 async 함수를 다른 곳에서 await하려고 하면 오류가 발생한다.</p>
+<p><img src="/images/img_2f1e21f91541e673.png" alt="" /></p>
+<p><img src="/images/img_b75b63d27fb5ee6f.png" alt="" />
+사실 이건 구현 관점에서 보면 타당한 제한이긴 하다.<br />
+await이라는 것이 결과 상태를 polling하거나 event tick 기반으로 대기를 하고 값을 받아오는 것인데, 호출스택 중간에 async가 끊겨있으면 그걸 처리할 방도가 없기 때문이다.</p>
+<p>아무튼 여기서 async 함수를 "빨간색" 함수라고 부르고, async가 아닌 함수를 "파란색" 함수라고 부른다.</p>
+<p>이런 구조 때문에 의도치 않은 전염성이 비효율성을 증대시킨다는 주장이다.</p>
+<p>예를 들어, 기존에 async가 필요하지 않아서 non-async로만 작성된 코드가 있다고 해보자.<br />
+여기에 하나의 async 함수만 필요해진다면 이 제한 때문에 전체 함수 호출 스택을 async로 재작성하는 강제 오염이 발생할 수 있는 것이다.</p>
+<p>이런 번거로움을 방지하는 가장 간단한 방법은, 특별한 이유가 없다면 처음부터 상위 호출 스택을 async 기반으로 잡는 것이다.</p>
+<p>그래서 go user들은 non-async와 async 함수가 전혀 구분되지 않는 go의 goroutine이 훨씬 간결하고 편리하다고 주장하곤 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="async-awaitneun-nabbeunga">async/await는 나쁜가?</h2>
+<p>세상 모든 것이 다 그렇지만, 이것도 trade-off다.</p>
+<p>async/await은 특유의 구조로 말미암아 "비동기 함수"와 "동기 함수"를 명확하게 구분할 수 있고, 비동기 함수의 대기(await)를 매우 명시적으로 지정할 수 있다.</p>
+<p>async/await 구문이 없는 언어에서 유사한 await 패턴을 구현하려면 매우 조잡하고 비직관적인 코드가 나오기가 쉽다. Go가 특히 그런 경향이 심하다.<br />
+async/await은 가독성과 직관성 측면에서 매우 강력한 지점이 존재한다.</p>
+<p>성능 면에서도 꽤 효율적인 부분이 존재할 수 있다. (Node.js, Python 제외)<br />
+언어마다 다르지만, C#과 Rust의 경우에는 async/await 흐름을 컴파일해서 최적화된 형태로 재구성한다. 때문에 스위칭에 따른 런타임 부하가 매우 적다.</p>
+<br>
+<br>
+<br>
+<h2 id="gita-dongsiseong-baggat">기타: 동시성 바깥</h2>
+<p>함수의 색상 이론은 동시성 구조에만 국한되는 것은 아니다.</p>
+<p>함수의 종류가 구분되고 상호간 호출에 제한이 생긴다면 그건 다 "색상"의 차이로 간주한다. 다 정도의 차이가 있을 뿐, 대부분의 언어들에는 함수의 색상이 존재한다.</p>
+<p>예를 들어 Rust의 unsafe 함수는 unsafe에서만 실행될 수 있다. 따라서 unsafe는 "빨간색" 함수다.</p>
+<p>Java의 경우에는 함수 서명에 throws를 붙일 수 있는데, 이러면 함수 자체에 예외처리에 대한 제한이 생긴다. 따라서 throws가 붙은 함수는 빨간색 함수다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/">https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/</a><br />
+<a rel="external" href="https://langdev.stackexchange.com/questions/3430/colored-vs-uncolored-functions">https://langdev.stackexchange.com/questions/3430/colored-vs-uncolored-functions</a><br />
+<a rel="external" href="https://www.danmailloux.com/blog/colored-functions-are-good-actually">https://www.danmailloux.com/blog/colored-functions-are-good-actually</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224105489531/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Dart] 멀티 플랫폼 컴파일<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224104258144/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Java] GraalVM으로 AOT 컴파일하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

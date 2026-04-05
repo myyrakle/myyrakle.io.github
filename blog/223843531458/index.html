@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Qdrant] 사전 필터링과 Payload Index | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223843531458/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Qdrant] 사전 필터링과 Payload Index">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223843531458/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-04-23T00:00:00+00:00">
+    <meta property="article:tag" content="qdrant">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223843531458/">[Qdrant] 사전 필터링과 Payload Index</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-04-23T00:00:00+00:00"><time datetime="2025-04-23T00:00:00+00:00">2025.04.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="322 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/qdrant/">qdrant</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223843531458" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>qdrant는 Payload 필드들에 대한 필터 연산도 꽤 괜찮은 성능을 제공한다.<br />
+아래는 데이터 1000만개에 대한 복합 필터 쿼리다.</p>
+<p><img src="/images/img_b2d98a466d06a4ff.png" alt="" />
+밀리초 단위로 꽤 빠르게 처리가 됐다.</p>
+<p>그리고 벡터 검색에 대해서도 필터링을 거는 것이 가능하다.</p>
+<p><img src="/images/img_7ebbb69b4bf68f50.png" alt="" />
+하지만 추가 인덱스 구성 없이는 좀 느릴 수 있다.<br />
+초 단위로 느리게 처리됐다.</p>
+<p>페이로드는 컬렉션에 추가 설정을 하지 않으면 RocksDB 기반으로 디스크 저장을 해서 그렇다.</p>
+<p>이 경우를 최적화하려면, 페이로드를 통째로 메모리에 띄우게 하거나, 필터링을 적용할 필드마다 인덱스를 구성해줘야 한다. 권장되는 것은 필요한 값에 대해서만 선택적으로 인덱스를 구성하는 것이다.</p>
+<p><img src="/images/img_e5f6760a72fbe03d.png" alt="" />
+복합 인덱스같은건 없고, column base 구조라서 필드마다 하나씩 만들어놓으면 서로 cross 인덱싱을 해서 적절히 처리한다.</p>
+<p>그리고 인덱스를 만들때마다 메모리 사용량이 증가한다. 마구잡이로 만드는것보단 필요한 것만 추가하는 것을 권장한다.</p>
+<p>그러고 다시 돌려보면</p>
+<p><img src="/images/img_c21650a4e4732bf5.png" alt="" />
+이제 다시 밀리초 단위 연산이 된다.</p>
+<p>참고로, 인덱스는 해당 필드에 분포한 값이 다양할 수록 - 카디널리티가 높을수록 좋은 성능을 보일 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="indegseu-taib">인덱스 타입</h2>
+<p>인덱스 타입에는 몇가지 변형이 있다.<br />
+현재 지원되는 인덱스 타입은 이 정도다.<br />
+keyword, integer, float, bool, geo, datetime, text, uuid</p>
+<p>대표적인 것 몇가지만 대략 정리해보겠다.</p>
+<p><strong>keyword</strong><br />
+위에서 사용했던 keyword는 가장 기본적인 인덱스 형태다.<br />
+a = 'asdf' 같은 동등 match에 대해 인덱스 최적화를 제공하며, 거의 모든 타입에 대해서 적용된다.<br />
+예외적으로 배열에 대해서도 인덱싱이 된다. [1,2,3,4]으로 넣어두면 각 요소에 대해서도 인덱싱이 되는 것이다. 그러니까 includes 연산이 된다.</p>
+<p><strong>integer</strong><br />
+정수 값에 최적화된 인덱스 구조다.<br />
+이건 일치 검색 외에도, 정수 값의 범위 검색에 대해서도 인덱싱을 제공한다.</p>
+<p><strong>float</strong><br />
+부동소수점에 최적화된 인덱스 구조다.<br />
+일치 검색 외에도 실수 값 범위 검색에 대한 인덱스를 제공한다.</p>
+<p><strong>datetime</strong><br />
+날짜 형식에 최적화된 인덱스 구조다.<br />
+일치 검색 외에도, 날짜 기반의 범위 검색에 대해서 인덱스를 제공한다.</p>
+<p><strong>text</strong><br />
+텍스트 형태에 최적화된 인덱스 구조다.<br />
+이건 tokenizer 설정을 할 수 있고, inverted index에 기반한 텍스트 포함 검색을 지원한다.<br />
+요구사항이 아주 복잡한게 아니라면, Elasticsearch의 텍스트 검색을 어느 정도 대체할 수 있다.<br />
+이 기능에 대한 상세는 추후 별도 포스트로 정리해보겠다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://qdrant.tech/documentation/concepts/indexing/">https://qdrant.tech/documentation/concepts/indexing/</a><br />
+<a rel="external" href="https://github.com/orgs/qdrant/discussions/4816">https://github.com/orgs/qdrant/discussions/4816</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223844468303/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Milvus] Entity<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223842085235/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Qdrant] Points<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

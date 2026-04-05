@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] Vector Search | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224226368669/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] Vector Search">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224226368669/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-03-23T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224226368669/">[MongoDB] Vector Search</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-23T00:00:00+00:00"><time datetime="2026-03-23T00:00:00+00:00">2026.03.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="437 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224226368669" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>MongoDB는 벡터 검색 기능을 공식적으로 지원한다.</p>
+<p>7.* 버전에서는 전용 클라우드에서만 사용 가능해서 포지션이 진짜 애매했는데, 8.*에서는 벡터 검색 기능이 오픈소스 버전에도 포함되어있다.</p>
+<br>
+<br>
+<br>
+<h2 id="jehan-mic-hohwanseong">제한 및 호환성</h2>
+<p>MongoDB Cloud를 쓴다면 7~8 버전에서 모두 사용할 수 있고, 오픈소스 버전으로 사용한다면 8 버전을 사용해야만 한다. Linux면 대충 다 된다.<br />
+<a rel="external" href="https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/compatibility-limitations/">https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/compatibility-limitations/</a></p>
+<br>
+<br>
+<br>
+<h2 id="teseuteu-deiteo-seting">테스트 데이터 세팅</h2>
+<p>먼저 데이터부터 깔아보자. 벡터 자체는 그냥 실수의 배열로 넣으면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span>products</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insertMany</span><span>([</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;빨간 원피스&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    category</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;드레스&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    description</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;여름용 플로럴 원피스&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    embedding</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">0.1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.8</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.5</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.2</span><span>]</span><span style="color: #9399B2;">,</span><span>  </span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;청바지&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    category</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;바지&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    description</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;슬림핏 데님 팬츠&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    embedding</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">0.9</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.7</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.4</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;흰 블라우스&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    category</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;상의&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    description</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;오피스룩 시스루 블라우스&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    embedding</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">0.3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.6</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.8</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.5</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;플리츠 스커트&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    category</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;스커트&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    description</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;미디 길이 주름 스커트&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    embedding</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">0.2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.7</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.4</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.6</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.3</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span>])</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_e7808f4d8d94e182.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="begteo-indegseu-saengseong">벡터 인덱스 생성</h2>
+<p>그럼 이제 인덱스를 만들어보자.<br />
+다음 스크립트는 카테고리에 대한 메타데이터 인덱스가 포함된 벡터 인덱스를 생성한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 2. Vector Search 인덱스 생성</span></span>
+<span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span>products</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">createSearchIndex</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;vector_index&quot;</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;"> // 이름</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;vectorSearch&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    fields</span><span style="color: #94E2D5;">:</span><span> [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 벡터 인덱스</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span>        type</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;vector&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        path</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;embedding&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        numDimensions</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        similarity</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;cosine&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">      // 필터링을 위한 카테고리 필드</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {</span></span>
+<span class="giallo-l"><span>        type</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;filter&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        path</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;category&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span>    ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_c8b12b849d0aff65.png" alt="" />
+차원은 5, 유사도 알고리즘은 코사인으로 넣었다.<br />
+유사도 타입은 euclidean, cosine, dotProduct가 지원된다.</p>
+<p>당연히 HNSW 기반의 근사치 검색 인덱스고,<br />
+동작이나 내부 구현 방식은 Elasticsearch/Opensearch과 거의 같다.</p>
+<p>세부적인 옵션은 다음 문서를 참조한다.<br />
+<a rel="external" href="https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/vector-search-type/?deployment-type=atlas&amp;embedding=byo&amp;interface=driver&amp;language=python#mongodb-vector-search-index-fields">https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/vector-search-type/?deployment-type=atlas&amp;embedding=byo&amp;interface=driver&amp;language=python#mongodb-vector-search-index-fields</a></p>
+<br>
+<br>
+<br>
+<h2 id="begteo-geomsaeg-kweori">벡터 검색 쿼리</h2>
+<p>벡터 검색은 일반 find로는 불가능하고, aggregate의 한 절로만 지원된다.<br />
+다음과 같이 $vectorSearch 절을 넣어서 검색을 돌리면 되는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span>products</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">aggregate</span><span>([</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    $vectorSearch</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>      index</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;vector_index&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      path</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;embedding&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      queryVector</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #FAB387;">0.2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.7</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.6</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0.4</span><span>]</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">  // 검색 쿼리 벡터</span></span>
+<span class="giallo-l"><span>      numCandidates</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">   // 후보군 (Candidates)</span></span>
+<span class="giallo-l"><span>      limit</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span><span style="color: #9399B2;font-style: italic;">            // 최종 반환 수 (K)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  {</span></span>
+<span class="giallo-l"><span>    $project</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>      _id</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      name</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      category</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      description</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      score</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span> $meta</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;vectorSearchScore&quot;</span><span style="color: #9399B2;"> },</span><span style="color: #9399B2;font-style: italic;">  // 유사도 점수</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span>])</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_5d3e224b15fbf422.png" alt="" />
+그럼 이런 식으로, 유사도 점수와 더불어 유사도로 정렬된 값을 받아올 수 있다.</p>
+<p>filter 절을 사용해서 벡터 검색에 적용할 필터를 추가하는 것도 가능하다.</p>
+<p><img src="/images/img_f52dbbbbf3b7bafa.png" alt="" />
+저기에 들어가는 필터 식의 필드는, 벡터 인덱스를 만들때 넣어준 filter 컬럼만 넣을 수 있다. 아니면 에러가 난다.</p>
+<p>pre-filtering의 스캔 방식은 Elasticsearch/Opensearch와 거의 비슷하다. 필터링으로 인해 많은 항목이 걸러져서 HNSW 스캔 범위 내에 충분한 K가 없다면, 충분한 K가 나올때까지 HNSW 스캔을 반복하는 방식이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/vector-search-overview/">https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/vector-search-overview/</a><br />
+<a rel="external" href="https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/tutorials/vector-search-quick-start/?deployment-type=atlas&amp;embedding=byo&amp;interface=driver&amp;language=python">https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/tutorials/vector-search-quick-start/?deployment-type=atlas&amp;embedding=byo&amp;interface=driver&amp;language=python</a><br />
+<a rel="external" href="https://www.mongodb.com/company/blog/product-release-announcements/supercharge-self-managed-apps-search-vector-search-capabilities">https://www.mongodb.com/company/blog/product-release-announcements/supercharge-self-managed-apps-search-vector-search-capabilities</a><br />
+<a rel="external" href="https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/vector-search-type/?deployment-type=atlas&amp;embedding=byo&amp;interface=driver&amp;language=python">https://www.mongodb.com/ko-kr/docs/atlas/atlas-vector-search/vector-search-type/?deployment-type=atlas&amp;embedding=byo&amp;interface=driver&amp;language=python</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224226198525/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Terraform] S3 백엔드로 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224226895844/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] Logical Replication에서 큰 텍스트 컬럼이 누락되는 문제<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

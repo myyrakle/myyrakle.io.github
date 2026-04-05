@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] HorizontalPodAutoscaler | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224200719515/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] HorizontalPodAutoscaler">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224200719515/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-03-02T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224200719515/">[k8s] HorizontalPodAutoscaler</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-02T00:00:00+00:00"><time datetime="2026-03-02T00:00:00+00:00">2026.03.02</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="495 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224200719515" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>HorizontalPodAutoscaler는 수평 자동 확장 - 오토스케일링을 위한 쿠버네티스의 기본 내장 도구다.<br />
+이걸 사용하면 실제 서버 부하에 맞춰서 Pod 개수를 동적으로 조정할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-weonri">기본 원리</h2>
+<p>HorizontalPodAutoscaler는 Statefulset과 Deployment에 대해서만 사용할 수 있다.</p>
+<p>HorizontalPodAutoscaler는 연결된 Deployment 서버들의 실제 메트릭 정보를 주기적으로 조절하면서 Deployment의 replica 개수를 조절한다.</p>
+<p><img src="/images/img_9bbf3b5230b8a252.png" alt="" /></p>
+<p>그리고 HorizontalPodAutoscaler는 쿠버네티스에 내장된 기본 메트릭 데이터를 참조한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get deployment metrics</span><span style="color: #94E2D5;">-</span><span>server</span><span style="color: #94E2D5;"> -</span><span>n kube</span><span style="color: #94E2D5;">-</span><span>system</span></span></code></pre>
+<p><img src="/images/img_f2db18f3dc498db3.png" alt="" />
+바로 이 녀석이다.<br />
+이 친구가 제공하는 cpu/메모리 사용량 메트릭을 약 15초마다 조회하면서, 목표 사용량(Utilization)와 비교하고 비슷하게 될 수 있게끔 Pod를 더 늘리거나 줄이는 것이다.</p>
+<p>여기서의 목표 사용량은 resources.requests.cpu, memory이 된다. 그래서 이걸 제대로 활용하려면 항상 requests을 붙여주는 것이 좋다.</p>
+<p>기본적으로는 자체 메트릭만 사용하지만, 실패율, 요청 개수 같은 특수한 형태의 스케일 조건을 원한다면 prometheus로 커스텀 메트릭을 구성해서 붙이는 것도 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayonghaebogi">사용해보기</h2>
+<p>적절한 Deployment 기반 서버를 하나 먼저 준비해보겠다.</p>
+<p><img src="/images/img_91751aab557f3a28.png" alt="" />
+replica는 1이고, 단순한 API 서버다.</p>
+<p>그럼 이제 HPA를 정의해보자.<br />
+사용법은 생각보다 간단하다. 다음 HPA는 CPU 사용량을 기준으로 스케일링을 트리거한다.</p>
+<p><img src="/images/img_7ab1d667d5635c73.png" alt="" />
+이건 CPU의 평균 사용량이 70% 미만이 될 수 있게 하는 스케일링 규칙이다.<br />
+다시 말해서, 모든 Pod의 CPU 사용량 평균이 70%를 초과하면 replica를 늘리고, 이하로 내려가면 replica를 줄인다. 그리고 그 개수의 최소값은 1, 최대값은 3이다.</p>
+<p>전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> apps</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>  selector</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    matchLabels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        app</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>    spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        -</span><span> name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>server</span></span>
+<span class="giallo-l"><span>          image</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;myyrakle/node-server-for-test:3&quot;</span></span>
+<span class="giallo-l"><span>          resources</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>            requests</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              cpu</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;100m&quot;</span></span>
+<span class="giallo-l"><span>              memory</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;128Mi&quot;</span></span>
+<span class="giallo-l"><span>            limits</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>              cpu</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;500m&quot;</span></span>
+<span class="giallo-l"><span>              memory</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;512Mi&quot;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">---</span></span>
+<span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> autoscaling</span><span style="color: #94E2D5;">/</span><span>v2</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> HorizontalPodAutoscaler</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>deploy</span><span style="color: #94E2D5;">-</span><span>hpa</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  scaleTargetRef</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    apiVersion</span><span style="color: #9399B2;">:</span><span> apps</span><span style="color: #94E2D5;">/</span><span>v1</span></span>
+<span class="giallo-l"><span>    kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #9399B2;">:</span><span> test</span><span style="color: #94E2D5;">-</span><span>deploy</span></span>
+<span class="giallo-l"><span>  minReplicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>  maxReplicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 3</span></span>
+<span class="giallo-l"><span>  metrics</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> type</span><span style="color: #9399B2;">:</span><span> Resource</span></span>
+<span class="giallo-l"><span>      resource</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        name</span><span style="color: #9399B2;">:</span><span> cpu</span></span>
+<span class="giallo-l"><span>        target</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>          type</span><span style="color: #9399B2;">:</span><span> Utilization</span></span>
+<span class="giallo-l"><span>          averageUtilization</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 70</span></span></code></pre>
+<p>그렇기 만들어서 보면</p>
+<p><img src="/images/img_bbe904b1dd7dd67d.png" alt="" /></p>
+<p><img src="/images/img_1274163f9c2462d6.png" alt="" />
+이렇게 hpa가 추가된 것을 볼 수 있다. 이것도 독립적인 리소스 단위다.</p>
+<br>
+<p><img src="/images/img_d0c64823ed619da0.png" alt="" />
+처음에는 pod가 하나일 것이다.</p>
+<p>이제 pod에 들어가서 CPU 압력을 줘보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">while</span><span> :</span><span style="color: #9399B2;">;</span><span style="color: #CBA6F7;"> do</span><span> :</span><span style="color: #9399B2;">;</span><span> done</span></span></code></pre>
+<p><img src="/images/img_9cf096a40689c233.png" alt="" /></p>
+<p>그러면 CPU 부하가 100% 이상으로 칠 것이고</p>
+<p><img src="/images/img_144a3aaf46e3dac8.png" alt="" /></p>
+<p><img src="/images/img_d74917954fdf939c.png" alt="" />
+그에 맞춰서 스케일링을 트리거할 것이다.</p>
+<p>그리고 CPU 압박을 중단하면 다시 replica를 줄인다.</p>
+<p><img src="/images/img_bbf1330ec0e5dd8e.png" alt="" /></p>
+<p><img src="/images/img_1ab68e96a8299033.png" alt="" />
+확장은 매우 빠르게 트리거하는 반면에, 축소는 훨씬 보수적으로 동작한다.<br />
+다시 순식간에 스파이크가 칠 수도 있으니, 최소 5분 정도의 유예기간을 더 두고 내린다.</p>
+<br>
+<br>
+<br>
+<h2 id="seukeilring-sogdo-jojeol">스케일링 속도 조절</h2>
+<p>behavior를 정의하면 pod가 얼마나 늘어나고 줄어들게 할지 설정할 수 있다.</p>
+<p><img src="/images/img_371b3ff125be0dc1.png" alt="" />
+Percent와 Pod라는 policy가 있는데, 이건 각각 한번에 늘리거나 줄일 pod 개수를 정의한다.</p>
+<ol>
+<li>percent의 value가 100라는 것은, 현재 pod 개수의 100% 만큼 증가시킨다는 뜻이다.</li>
+<li>pods의 value가 2이라는 것은 항상 2개씩 증가시킨다는 뜻이다.</li>
+</ol>
+<p>그리고 selectPolicy:Max는, 2개 중에 더 큰 개수를 선택한다는 뜻이 된다.<br />
+scaleup의 기본값은 보통 15초 간격 / Percent:100, Pods:4 정도다.</p>
+<p>stabilizationWindowSeconds는 확장/축소를 하기 전에 기다리는 유예시간이다.<br />
+0초면 지표에 맞춰서 즉시 대응하는 것이고, 좀 늘려놓으면 통계를 좀 쌓은 다음에 대응한다.</p>
+<p>상기했듯이, 보통 확장은 빠르게 하고 축소에는 유예시간을 적절히 둔다. 필요에 따라 잘 넣으면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="with-argocd-gitops">with ArgoCD (gitops)</h2>
+<p>만약 argocd 등의 형상관리 도구로 k8s 리소스를 관리한다면 HPA와 기능이 충돌할 위험이 매우 높다.</p>
+<p>만약 HPA가 replica를 3개로 트리거했더라도, git 코드에 1개로 고정되어있다면 argocd가 다시 1개로 강제 동기화를 걸어버릴 것이기 때문이다.</p>
+<p>이럴 때는 ArgoCD에서 replica 필드를 동기화 대상에서 제외하도록 특수한 예외처리를 해주는 것이 좋다.<br />
+ignoreDifferences를 다음과 같이 추가하면 모든 Deployment의 replica를 무시하도록 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> argoproj</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1alpha1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> Application</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> myapp</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span> argocd</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  project</span><span style="color: #9399B2;">:</span><span style="color: #CBA6F7;"> default</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  ...</span></span>
+<span class="giallo-l"><span>  ignoreDifferences</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> group</span><span style="color: #9399B2;">:</span><span> apps</span></span>
+<span class="giallo-l"><span>      kind</span><span style="color: #9399B2;">:</span><span> Deployment</span></span>
+<span class="giallo-l"><span>      jqPathExpressions</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        - .</span><span>spec</span><span style="color: #94E2D5;">.</span><span>replicas # 무시</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/tasks/run-application/horizontal-pod-autoscale/">https://kubernetes.io/ko/docs/tasks/run-application/horizontal-pod-autoscale/</a><br />
+<a rel="external" href="https://oneuptime.com/blog/post/2026-02-26-argocd-deploy-horizontalpodautoscalers/view">https://oneuptime.com/blog/post/2026-02-26-argocd-deploy-horizontalpodautoscalers/view</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224203378203/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] 리소스 제한: 디스크와 네트워크<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224200739335/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] Pod: Probe를 통한 헬스체크 관리<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

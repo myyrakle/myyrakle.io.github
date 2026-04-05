@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>분기 예측 (Branch Prediction) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223942222903/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="분기 예측 (Branch Prediction)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223942222903/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-07-22T00:00:00+00:00">
+    <meta property="article:tag" content="최적화">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223942222903/">분기 예측 (Branch Prediction)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-07-22T00:00:00+00:00"><time datetime="2025-07-22T00:00:00+00:00">2025.07.22</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="818 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/coejeoghwa/">최적화</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223942222903" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_5008038a49cbc58b.jpg" alt="" />
+분기 예측은 컴파일 및 최적화 과정에서 가장 중요한 부분 중 하나고, 동시에 가장 어려운 부분이기도 하다.</p>
+<p>파이프라인 구조와 연관이 깊다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223940931299">https://blog.naver.com/sssang97/223940931299</a></p>
+<p>CPU는 branch 명령어를 만나면, 예상 분기 지점을 추측해서 거기 있는 명령어를 미리 로드해서 실행 준비를 한다.<br />
+예측이 맞다면 굉장히 빠른 성능을 보일 수 있지만, 실패한다면 그 시점에 다 버리고 다른 분기의 코드를 다시 불러와야 하기 때문에 끔찍한 성능 저하가 발생할 수 있다.<br />
+대체로 예측이 실패했을 때는 최신 프로세스 기준으로 최소 10개 정도의 명령어 실행을 손해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="geuraeseo-jigeumeun">그래서 지금은</h2>
+<p>많은 현대 CPU 제조사들은 branch prediction 최적화 관련된 부분에서 많은 노력을 해왔고, 하고 있다.</p>
+<p>이건 지금에 이르러서도 완전히 해결되지 못한 문제이고, 하드웨어와 소프트웨어 양쪽에서 함께 최적화를 위해 힘을 쓰고 있다고 보면 된다.<br />
+CPU 제조사에서는 하드웨어 아키텍쳐 개선을 이어나가고 있고, 컴파일러 및 사용자는 branch prediction을 고려해서 어셈블리를 생성할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="cpuga-haneun-noryeog">CPU가 하는 노력</h2>
+<p>branch에 대한 예측은 순전히 확률을 따르고, 정확하게 일치한다는 보장이 없다.<br />
+그래도 CPU 제조사들은 어떻게든 branch 예측 적중률을 높이려고 애를 쓰고 있고, 그건 현재진행형이다.</p>
+<p>지난한 역사의 축적으로 인해서 최신 CPU들은 branch 예측 적중률이 꽤 좋고, 직접 branch prediction을 위해 사용자가 세부조정을 하지 않더라도 성능이 잘 나오는 편이다.<br />
+그래서 오히려 애매하게 건드리면 더 느려질 수도 있다.</p>
+<p>여기에는 굉장히 많은 접근법과 트릭들이 존재한다.</p>
+<p>공통적으로, 분기를 최적화하려면 분기 실행에 대한 기록을 남겨둬야 하기 때문에 내부적으로 Branch History Table(BHT)이라는 것을 둔다.</p>
+<br>
+<br>
+<br>
+<h4 id="one-level-branch-prediction-1biteu-kaunteo-last-time-prediction">One-level branch prediction - 1비트 카운터(Last time prediction)</h4>
+<p>비교적 단순한 축에 속하는 예측 방식이다.</p>
+<p><img src="/images/img_0a224168b9541554.png" alt="" />
+이게 뭐냐면, 마지막으로 탄 분기를 적합한 분기로 판단하고 예측한다는 것이다.<br />
+처음 실행할때 A/B 분기 중 A 경로를 탔다면, 다시 재진입했을 때도 A를 탈 것이라고 예측해서 명령어를 로드한다. 만약 그 다음에 B 분기를 탄다면 그 다음 재진입 시에는 B로 예측한다.</p>
+<p>실제 분기 실행 횟수와는 관계가 없고 지난번 실행을 기반으로만 예측을 하기 때문에, 분기가 한쪽으로만 오래 반복되는 경우에 효율적인 접근 방식이다.</p>
+<p>카운터 값은 1비트 값이다. 기다 아니다 밖에 없기 때문이다.</p>
+<p>이건 일반적인 상황에서 성능이 거의 좋지 못하기 때문에, 현대 구조에서는 잘 사용되지 않는다.<br />
+A 분기로 100번를 타다가 B 분기를 한번만 타더라도 바로 prediction이 망가지기 때문이다.</p>
+<p>그래서 나온 것이 이런 문제를 완화하는 2비트 카운터 방식이다.</p>
+<br>
+<br>
+<br>
+<h4 id="one-level-branch-prediction-2biteu-kaunteo">One-level branch prediction - 2비트 카운터</h4>
+<p>이건 그렇다/아니다 로 구분하는 것에서 더 나아가서, 강한 선호/강한 비선호/약한 선호/약한 비선호의 4가지로 상태를 관리한다.</p>
+<p><img src="/images/img_eecdf4b927585a45.png" alt="" />
+대단한 것은 아니다.<br />
+A/B 브랜치의 선호를 구분하고 교체하는 타이밍에 한번의 유예를 주는 것이다.</p>
+<p>그러니까, A 브랜치가 강하게 선택된 상태에서 B 브랜치가 실행되더라도, 한번은 봐주고 약한 선택 상태로 전환한다. 그 상태에서 또 B가 실행된다면 B로 넘어가겠지만, A가 실행된다면 예측이 유지되는 것이다.</p>
+<p>예측 유지율이 더 높아서 옛날에는 나름 한동안 꽤 쓰였다.</p>
+<br>
+<br>
+<br>
+<h4 id="two-level-adaptive-predictor">Two-level Adaptive Predictor</h4>
+<p>여기서는 단순 상태 플래그 처리 수준에서 벗어나서 적응형 개념을 도입한다.</p>
+<p>우선 브랜치별 실행 기록을 저장하기 위해 Global History Register(GHR)라는 것을 둔다. 여기까지는 기존 방식과 크게 다르지 않다.</p>
+<p>차이점이 생기는 부분은, 단순 브랜치별 히스토리 외에도 각 "실행 흐름", 패턴에 대한 예측 정보까지 관리한다는 것이다. 이걸 Pattern history table이라고 부른다.</p>
+<br>
+<p><img src="/images/img_6e4b2b479a4668c8.png" alt="" />
+이건 특정 실행 흐름, 분기의 집합마다 관리되는 일종의 해시테이블이다.<br />
+GHR의 패턴을 기반으로 해시를 추출하고 접근해서 예측 정보를 기록하고 읽어서 쓸 수 있는 구조로 응용된다.<br />
+"패턴"의 단위나 크기, 해시값을 어떻게 지정할지는 구현 세부사항에 따라 다르다.</p>
+<p>이 접근 방식의 가장 특징은, 예측이 개별 분기 단위에만 그치는 것이 아니라, 여러 분기 간의 상관관계까지 고려해서 예측을 짤 수 있다는 것이다.</p>
+<p>현존하는/최신 CPU들은 대부분 이 방식을 기반으로 설계되었거나, 이 방식의 변형 아키텍쳐들을 사용한다.<br />
+branch predictor 구조의 뼈대 그 자체라고 보면 된다.</p>
+<p>AMD의 최신 아키텍쳐인 Zen 5만 해도 Two-level Adaptive Predictor의 직접적인 변형 설계인 2-Ahead Branch Predictor라는 것을 사용한다.</p>
+<p>이것 외에도 변형 알고리즘/구조들이 상당히 많은데, 여기서 다 다루지는 않겠다. 이게 핵심이다.</p>
+<br>
+<br>
+<br>
+<h2 id="keompailreo-sujun-ceori">컴파일러 수준 처리</h2>
+<p>CPU도 많은 노력을 하고 있지만, 컴파일러도 분기로 인한 성능 저하를 막기 위해 노력을 한다.</p>
+<br>
+<br>
+<h4 id="bulpilyohan-bungi-jegeo">불필요한 분기 제거</h4>
+<p>컴파일러는 동일한 결과를 낼 수 있다면, 가급적 분기를 제거한 버전으로 코드를 생성하려고 노력한다.<br />
+혹은 사용자 수준에서도 시도를 해볼 수 있다.</p>
+<br>
+<br>
+<h4 id="branch-prediction-hinteu">branch prediction 힌트</h4>
+<p>GCC/Clang의 경우에는 __builtin_expect라는 컴파일러 확장을 통해서 branch prediction을 위한 힌트를 제공할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// 컴파일러 힌트 제공</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">if</span><span> (</span><span style="color: #89B4FA;font-style: italic;">__builtin_expect</span><span>(condition</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1</span><span>))</span><span style="color: #9399B2;"> {</span><span style="color: #9399B2;font-style: italic;">  // likely</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 자주 실행되는 코드</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span><span style="color: #9399B2;font-style: italic;">  // unlikely</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 드물게 실행되는 코드</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이러면 컴파일러는 "likely" 분기를 많이 탈 것이라고 가정하고 코드를 배치한다.</p>
+<br>
+<br>
+<h4 id="pgo">PGO</h4>
+<p>PGO는 Branch Prediction를 유도하는데에 가장 탁월한 컴파일러 수준 접근 방법 중 하나다.</p>
+<p>PGO를 사용한다면 컴파일러는 실행 기록을 기반으로 자주 걸리는 hot branch와 덜 걸리는 cold branch를 통계적으로 판단할 수 있다.<br />
+그래서 이를 기반으로 실행 빈도가 높은 hot branch를 가까이 배치해서 캐시에 타도록 하고, 실행 빈도가 낮은 cold branch를 멀리 배치해서 분기 예측률이 높아지도록 유도하는 것이다.</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223937776756">https://blog.naver.com/sssang97/223937776756</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://chrisfeilbach.com/2025/07/05/understand-cpu-branch-instructions-better/">https://chrisfeilbach.com/2025/07/05/understand-cpu-branch-instructions-better/</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Branch_predictor">https://en.wikipedia.org/wiki/Branch_predictor</a><br />
+<a rel="external" href="https://enesharman.medium.com/branch-prediction-algorithms-a7f8da1394b4">https://enesharman.medium.com/branch-prediction-algorithms-a7f8da1394b4</a><br />
+<a rel="external" href="https://www.slideserve.com/bracha/two-level-adaptive-branch-prediction">https://www.slideserve.com/bracha/two-level-adaptive-branch-prediction</a><br />
+<a rel="external" href="https://m.blog.naver.com/ektjf731/223053617175">https://m.blog.naver.com/ektjf731/223053617175</a><br />
+<a rel="external" href="https://enesharman.medium.com/branch-prediction-algorithms-a7f8da1394b4">https://enesharman.medium.com/branch-prediction-algorithms-a7f8da1394b4</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223944791282/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] S3: Vector bucket<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223940931299/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>파이프라인, 파이프라이닝<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

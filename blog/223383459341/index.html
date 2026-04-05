@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] 디스크 사용량과 compact | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223383459341/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] 디스크 사용량과 compact">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223383459341/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-14T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223383459341/">[MongoDB] 디스크 사용량과 compact</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-14T00:00:00+00:00"><time datetime="2024-03-14T00:00:00+00:00">2024.03.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="293 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223383459341" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>MongoDB는 디스크 사용량에 있어서 꽤나 특이한 입장을 취하고 있다.<br />
+"한 번 사용한 디스크 공간은 반환하지 않는다"는 것이다.</p>
+<p>그래서 delete를 날려서 데이터를 삭제하더라도 실제로를 삭제하지 않고 여분의 재사용 가능한 공간으로 남겨놓기만 한다. "아무도 쓰지 않고 비어있지만 1TB를 점유하고 있는 테이블"이 존재할 수 있다는 것이다.<br />
+RDB들의 경우에는 자동으로 로그 파일을 삭제해서 컴팩트하게 관리되지만 몽고는 그렇지 않다.</p>
+<p>얼마나 끔찍한 짓인가...?</p>
+<br>
+<br>
+<br>
+<h2 id="sayongryang-hwaginhaebogi">사용량 확인해보기</h2>
+<p>예를 들어서 내 경우에는 -dev 환경이 5기가를 넘게 먹고 있었는데</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>show dbs</span></span></code></pre>
+<p><img src="/images/img_7a2b91f53fe29c33.png" alt="" /></p>
+<p>상세히 보면 사용량 패턴이 좀 이상하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stats</span><span>()</span></span></code></pre>
+<p><img src="/images/img_abd710f534757448.png" alt="" />
+dataSize는 실제 데이터가 차지하고 있는 영역이고, storageSize가 실제로 차지하고 있는 디스크 영역이다.<br />
+실제로 쓰고 있는 공간은 1.5기가 뿐인데 5.6기가를 점유하고 있다는 것이다.</p>
+<p>이걸 해결하려면 컬렉션, 데이터베이스를 삭제 후 재생성하거나 compact 명령을 사용해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="compact-myeongryeong">compact 명령</h2>
+<p>compact는 일종의 디스크 조각 모음을 실행해주는 명령이다. 쓰지 않고 있는 영역을 다 정리하고, 인덱스를 재정렬한다. 하지만 이건 용량을 줄이지 않을 수도 있고, 오히려 공간이 늘어날 수도 있다.<br />
+그래서 가장 확실한건 DB를 날리고 옮기는 것이다...</p>
+<p>프로덕션 라이브 환경에서는 사용하는게 위험할 수도 있다.<br />
+4.4 버전 미만에서는 전체를 차단한 상태에서 실행된다. 4.4 이후의 버전에서도 스키마를 변경하는 동작들은 차단한다.</p>
+<p>명령의 사용법은 아래와 같다. 컬렉션명만 넣어주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">runCommand</span><span>(</span><span style="color: #9399B2;">{</span><span> compact</span><span style="color: #94E2D5;">:</span><span> 컬렉션명</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_0b39e4bfeba69a6f.png" alt="" />
+근데 보통 컬렉션 단일로 정리를 할 경우는 많지 않을 것이다.</p>
+<p>아래 스크립트는 컬렉션을 전체조회해서 다 compact를 때린다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">getCollectionNames</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">filter</span><span>(</span><span style="color: #EBA0AC;font-style: italic;">v</span><span style="color: #CBA6F7;"> =&gt;</span><span> v</span><span style="color: #94E2D5;"> !=</span><span style="color: #A6E3A1;"> &#39;system.views&#39;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">forEach</span><span>(</span><span style="color: #CBA6F7;">function</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">collectionName</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    print</span><span>(</span><span style="color: #A6E3A1;">&#39;Compacting: &#39;</span><span style="color: #94E2D5;"> +</span><span> collectionName)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">runCommand</span><span>(</span><span style="color: #9399B2;">{</span><span> compact</span><span style="color: #94E2D5;">:</span><span> collectionName</span><span style="color: #9399B2;">,</span><span> force</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;">true</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_d3d09e71ed82bdf8.png" alt="" /></p>
+<p>참 뭐시기한 정책이 아닐 수 없다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/57604139/the-storage-space-isnt-decreased-after-deleting-doc-from-db-why">https://stackoverflow.com/questions/57604139/the-storage-space-isnt-decreased-after-deleting-doc-from-db-why</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/reference/command/compact/">https://www.mongodb.com/docs/manual/reference/command/compact/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/7565290/compact-command-not-freeing-up-space-in-mongodb-2-0?rq=4">https://stackoverflow.com/questions/7565290/compact-command-not-freeing-up-space-in-mongodb-2-0?rq=4</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223383411701/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] TTL<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223381620061/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] PostGIS: 설치<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

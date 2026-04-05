@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] async&#x2F;await: Future를 바닥부터 구현해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223097354723/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] async/await: Future를 바닥부터 구현해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223097354723/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-09T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223097354723/">[Rust] async&#x2F;await: Future를 바닥부터 구현해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-09T00:00:00+00:00"><time datetime="2023-05-09T00:00:00+00:00">2023.05.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="873 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223097354723" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_cda5bd8bbd8ad7f5.png" alt="" />
+Rust의 동시성 매커니즘을 가리켜 "fearless concurrency(두려움 없는 동시성)"이라고 부르곤 한다.<br />
+안전하고 효율적으로 비동기 구조를 구현했다는 점을 자축하는 의미에서 사용하는 표현이다.</p>
+<p>하지만 그 이면에는 생각보다 복잡한 구조가 숨어있고, low-level 개발자라면 시스템이 어떻게 동작하는지 알아야 한다.</p>
+<p>이번 포스트에서는 Future를 직접 구현해보면서 Rust의 async/await을 이해해보는 시간을 갖도록 하겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="future-trait">Future trait</h2>
+<p>Future 자체는 매우 간단한 구조를 갖고 있다.<br />
+완료 상태를 확인하는 poll이라는 메서드 하나뿐이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pub trait Future</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    type</span><span style="color: #F9E2AF;font-style: italic;"> Output</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> poll</span><span>(self: Pin</span><span style="color: #94E2D5;">&lt;&amp;</span><span>mut Self</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span><span> cx: </span><span style="color: #94E2D5;">&amp;</span><span>mut Context</span><span style="color: #94E2D5;">&lt;</span><span style="color: #A6E3A1;">&#39;_&gt;) -&gt; Poll&lt;Self::Output&gt;;</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>저 Pin이니 context니 하는 것까지 파고들면 머리가 아파지지만.. 일단 최대한 단순하게 접근해보겠다.<br />
+Pin은 우선 Rust의 빡빡한 소유권 검사를 회피하는 용도로 감싼 박싱이고,<br />
+Context는 executor와 future가 서로 상호작용할 수 있게 해주는 오작교다.</p>
+<p>Rust의 Executor를 통한 async/await은 기본적으로 다음과 같은 라이프사이클을 가진다.<br />
+tokio.rs 같은 Executor들이 그렇다.</p>
+<p><img src="/images/img_bfc5e0a45f358452.png" alt="" /></p>
+<p>하나씩 짚어보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> foo</span><span>() </span></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span><span> </span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">   ...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">foo</span><span>()</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 이 부분에서 발생하는 일</span></span></code></pre>
+<ol>
+<li>await을 걸면 async/await 시스템은 내부적으로 poll 메서드를 호출한다. (보통 poll을 최초 호출하는 이 시점에서 Future 내부의 스레드가 시작된다. 다만 구현하기 나름인 부분이라, 아닐 수도 있다.)</li>
+<li>최초 poll의 결과가 Ready라면 Ready를 통해 전달된 값을 await을 한 시점으로 return한다.</li>
+<li>최초 poll의 결과가 Pending이라면, 아직 끝나지 않은 것이다. Executor는 리소스를 낭비하지 않기 위해, await 컨텍스트를 Sleep 상태로 전환한다.</li>
+<li>내부의 Future 스레드에서 작업을 완료했다면, Context를 통해서 Executor에게 wake 명령을 보낸다.</li>
+<li>Executor가 wake 명령을 받았다면, 다시 일어나서 poll 메서드를 호출한다. 이 때 Ready가 오면 끝난 것으로 간주하고 Ready의 리턴값을 await을 한 시점으로 return한다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="settimeout-guhyeonhaebogi">SetTimeout 구현해보기</h2>
+<p>보통 자바스크립트에서 많이들 사용하는 SetTimeout을 Rust로 구현해보겠다. 시간 제한을 걸고, 시간이 지나면 특정 콜백을 수행하는 기능이다.</p>
+<p>일단 최대한 단순하게 가겠다.<br />
+일반적인 async Executor들의 구조도 고려하지 않는다. 그러면 너무 복잡해진다...</p>
+<p>우선 Future를 구현할 구조체를 먼저 정의했다.</p>
+<p><img src="/images/img_302f2693b92e23cb.png" alt="" />
+당장 필요한 것은 많지 않다.<br />
+Future가 완료됐는지 여부를 관리할 상태값 필드를 하나 추가했고, 멀티스레드 간에도 문제없이 동작하도록 Atomic 타입으로 넣어놨다.</p>
+<p>그리고 Future 생성 기능을 구현한다.</p>
+<p><img src="/images/img_341e71dcefe9f0b9.png" alt="" />
+Future 객체가 생성되자마자 바로 스레드를 띄워서 타임아웃 동작을 수행하도록 했다.</p>
+<p>그런데 tokio 같은 대중적인 Executor 구현체들은 보통 poll 시점에서 스레드를 띄우는 것을 선호하더라.<br />
+아마 기술적인 문제나 디자인적인 문제가 좀 있는 것 같은데, 바로 띄운다고 해서 대단한 문제가 생기지는 않는다.</p>
+<p>그리고 Future 트레잇을 본격적으로 구현했다.</p>
+<p><img src="/images/img_c9aa3ee4f01f82c1.png" alt="" />
+완료가 됐다면 Ready로 끝냈다고 알려주고, 아니라면 Pending을 반환한다.</p>
+<p>전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    future</span><span style="color: #94E2D5;">:</span><span>:Future</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    sync</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>atomic</span><span style="color: #94E2D5;">:</span><span>:AtomicBool</span><span style="color: #9399B2;">,</span><span> Arc</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span>    thread</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Clone)]</span></span>
+<span class="giallo-l"><span>pub struct SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub done</span><span style="color: #9399B2;">:</span><span> Arc</span><span style="color: #94E2D5;">&lt;</span><span>AtomicBool</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub fn</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">F</span><span style="color: #89DCEB;">&gt;</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">delay</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> callback</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> F</span><span style="color: #9399B2;">)</span><span> -&gt; Self</span></span>
+<span class="giallo-l"><span>    where</span></span>
+<span class="giallo-l"><span>        F: FnOnce</span><span style="color: #9399B2;">()</span><span> + Send + &#39;static,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        let _done</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">AtomicBool</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">false</span><span style="color: #9399B2;">))</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let done</span><span style="color: #94E2D5;"> =</span><span> _done</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>();</span></span>
+<span class="giallo-l"><span>        thread</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(move</span><span style="color: #94E2D5;"> ||</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            thread</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(std::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_millis</span><span>(delay</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> u64</span><span>));</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            callback</span><span>();</span></span>
+<span class="giallo-l"><span>            done</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">store</span><span>(</span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">,</span><span> std::sync::atomic::Ordering::Relaxed);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            done</span><span style="color: #94E2D5;">:</span><span> _done</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl Future for SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    type</span><span style="color: #F9E2AF;font-style: italic;"> Output</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> ();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> poll</span><span>(</span></span>
+<span class="giallo-l"><span>        self: std::pin::Pin</span><span style="color: #94E2D5;">&lt;&amp;</span><span>mut Self</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        _context: </span><span style="color: #94E2D5;">&amp;</span><span>mut std::task::Context</span><span style="color: #94E2D5;">&lt;</span><span style="color: #A6E3A1;">&#39;_&gt;,</span></span>
+<span class="giallo-l"><span>    )</span><span style="color: #94E2D5;"> -&gt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:task</span><span style="color: #9399B2;">:</span><span>:Poll</span><span style="color: #94E2D5;">&lt;</span><span>Self</span><span style="color: #9399B2;">:</span><span>:Output</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        if self.done.load(std</span><span style="color: #94E2D5;">:</span><span>:sync::atomic::Ordering::Relaxed) </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            std</span><span style="color: #94E2D5;">:</span><span>:task::Poll::</span><span style="color: #89B4FA;font-style: italic;">Ready</span><span>(())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            std</span><span style="color: #94E2D5;">:</span><span>:task::Poll::Pending</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이러면 일단 간단하게나마 사용을 해볼 수는 있다.</p>
+<p><img src="/images/img_641d0d5eeea9696d.png" alt="" />
+2를 찍는 함수가 1000밀리초 후에 실행되게 했으니, 딱 기대한대로 동작했다.</p>
+<p>그러면... 저 Future가 다 끝나기 전까지 기다리게 하려면 어떻게 해야할까?<br />
+한번 수동으로 무식하게 await을 해보자</p>
+<p><img src="/images/img_7c8de9abb77b56eb.png" alt="" />
+윽.. 뭐가 이상한게 잔뜩 늘었다.<br />
+poll 메서드에는 context라는 것을 전달해줘야 하는데, 이게 요구사항이 좀 복잡하기 때문이다. 저것도 야매로 채워둔 것이다.</p>
+<p>일단 잡스러운 걸 빼고 보면</p>
+<p><img src="/images/img_ea34491803290fab.png" alt="" />
+이정도다.<br />
+Future를 Pin으로 고정하고, poll을 계속 호출해서 끝날때까지 무한루프를 돌도록 했다.</p>
+<p>실제 Executor들은 저렇게 무식하게 무한루프를 돌리는 구조는 아니지만..</p>
+<p>아무튼 실행하면 기대한대로 동작하긴 할 것이다.</p>
+<p><img src="/images/img_0d6d3898384c7f2f.png" alt="" /></p>
+<p>아래는 테스트코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// ...</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:task</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Context</span><span style="color: #9399B2;">,</span><span> RawWakerVTable</span><span style="color: #9399B2;">,</span><span> Waker</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> VTABLE</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> RawWakerVTable</span><span style="color: #94E2D5;"> =</span><span> RawWakerVTable::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        |</span><span>s</span><span style="color: #94E2D5;">|</span><span> std::task::RawWaker::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(s</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> &amp;</span><span>VTABLE)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        |</span><span>s</span><span style="color: #94E2D5;">|</span><span style="color: #89B4FA;font-style: italic;"> println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;wake&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        |</span><span>s</span><span style="color: #94E2D5;">|</span><span style="color: #89B4FA;font-style: italic;"> println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;wake by ref&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        |</span><span>s</span><span style="color: #94E2D5;">|</span><span style="color: #89B4FA;font-style: italic;"> println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;drop&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    )</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> raw_waker</span><span style="color: #94E2D5;"> =</span><span> std::task::RawWaker::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">std</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">ptr</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">null</span><span style="color: #9399B2;">(),</span><span> &amp;</span><span style="color: #EBA0AC;font-style: italic;">VTABLE</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"><span>    let waker</span><span style="color: #94E2D5;"> =</span><span> unsafe</span><span style="color: #9399B2;"> {</span><span> Waker</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_raw</span><span>(raw_waker)</span><span style="color: #9399B2;"> };</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut context </span><span style="color: #94E2D5;">=</span><span> Context::</span><span style="color: #89B4FA;font-style: italic;">from_waker</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>waker)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> future_object</span><span style="color: #94E2D5;"> =</span><span> SetTimeout::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(</span><span style="color: #FAB387;">1000</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> ||</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;2&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>    });</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut pinned = std</span><span style="color: #94E2D5;">:</span><span>:pin::</span><span style="color: #89B4FA;font-style: italic;">pin</span><span style="color: #94E2D5;">!</span><span>(future_object);</span></span>
+<span class="giallo-l"><span>    loop</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        if let std</span><span style="color: #94E2D5;">:</span><span>:task::Poll::</span><span style="color: #89B4FA;font-style: italic;">Ready</span><span>(_)</span><span style="color: #94E2D5;"> =</span><span> pinned</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_mut</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">poll</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>mut context)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            break;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            continue;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;1&quot;</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    loop</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="contextwa-waker">Context와 Waker</h2>
+<p>앞서 말했듯이, 일반적인 async Executor 구현들은 Sleep-Wake의 프로세스를 거친다고 했다.<br />
+위에서 우리는 그건 무시하고 구현을 했었다.</p>
+<p>이번에는 Waker를 직접 구현해서 전체 프로세스를 완성하고, "await"을 사용할 수 있도록 재구성해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="futuree-waker-jeogyong">Future에 Waker 적용</h2>
+<p>우선 기존 future 구현에 Waker를 위한 설정을 좀 추가해야 한다.</p>
+<p><img src="/images/img_94a0b7653ebf6254.png" alt="" />
+waker를 주고받을 상태 타입을 추가하고</p>
+<br>
+<p><img src="/images/img_4acb09fefa926a91.png" alt="" />
+그걸 메인 Future 구현체에 임베딩한다.</p>
+<br>
+<p><img src="/images/img_fdd93a6c1ff8d4e5.png" alt="" />
+스레드가 끝났을때 waker로 알려주게끔 하고</p>
+<br>
+<p><img src="/images/img_81ad879e2b8378a4.png" alt="" />
+polling한 시점에서 waker를 주입해주게 한다.</p>
+<p>사실 여기까지는 어려울게 없다.<br />
+머리아픈건 저기에 context를 전달해주고, wake 이벤트도 받아주고, 이런저런 잡다한 노가다를 대신해줄 Executor를 구현하는 것이다.</p>
+<p>아래는 여기까지의 future 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    future</span><span style="color: #94E2D5;">:</span><span>:Future</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    sync</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>atomic</span><span style="color: #94E2D5;">:</span><span>:AtomicBool</span><span style="color: #9399B2;">,</span><span> Arc</span><span style="color: #9399B2;">,</span><span> Mutex</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span>    thread</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>pub struct SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub shared_state</span><span style="color: #9399B2;">:</span><span> Arc</span><span style="color: #94E2D5;">&lt;</span><span>Mutex</span><span style="color: #94E2D5;">&lt;</span><span>SharedState</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    pub done</span><span style="color: #9399B2;">:</span><span> Arc</span><span style="color: #94E2D5;">&lt;</span><span>AtomicBool</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>pub struct SharedState</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub waker</span><span style="color: #9399B2;">:</span><span> Option</span><span style="color: #94E2D5;">&lt;</span><span>Waker</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub fn</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">F</span><span style="color: #89DCEB;">&gt;</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">delay</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> callback</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> F</span><span style="color: #9399B2;">)</span><span> -&gt; Self</span></span>
+<span class="giallo-l"><span>    where</span></span>
+<span class="giallo-l"><span>        F: FnOnce</span><span style="color: #9399B2;">()</span><span> + Send + &#39;static + Clone,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span>        let _shared_state</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">Mutex</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">SharedState</span><span style="color: #9399B2;"> {</span><span style="font-style: italic;"> waker</span><span style="color: #9399B2;">:</span><span style="color: #EBA0AC;font-style: italic;"> None</span><span style="color: #9399B2;"> }))</span><span>;</span></span>
+<span class="giallo-l"><span>        let _done</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">AtomicBool</span><span style="color: #94E2D5;">::</span><span style="color: #CBA6F7;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">false</span><span style="color: #9399B2;">))</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        let done</span><span style="color: #94E2D5;"> =</span><span> _done</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>();</span></span>
+<span class="giallo-l"><span>        let shared_state</span><span style="color: #94E2D5;"> =</span><span> _shared_state</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        thread</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(move</span><span style="color: #94E2D5;"> ||</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            thread</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(std::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_millis</span><span>(delay</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> u64</span><span>));</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            callback</span><span>();</span></span>
+<span class="giallo-l"><span>            done</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">store</span><span>(</span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">,</span><span> std::sync::atomic::Ordering::Relaxed);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            if let</span><span style="color: #89B4FA;font-style: italic;"> Some</span><span>(waker)</span><span style="color: #94E2D5;"> =</span><span> shared_state</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span>waker</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">take</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                // 아빠! 일어나!</span></span>
+<span class="giallo-l"><span>                waker.wake();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            done</span><span style="color: #94E2D5;">:</span><span> _done</span><span style="color: #9399B2;"> ,</span></span>
+<span class="giallo-l"><span>            shared_state</span><span style="color: #94E2D5;">:</span><span> _shared_state</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl Future for SetTimeout</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    type</span><span style="color: #F9E2AF;font-style: italic;"> Output</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> ();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> poll</span><span>(</span></span>
+<span class="giallo-l"><span>        self: std::pin::Pin</span><span style="color: #94E2D5;">&lt;&amp;</span><span>mut Self</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        context: </span><span style="color: #94E2D5;">&amp;</span><span>mut std::task::Context</span><span style="color: #94E2D5;">&lt;</span><span style="color: #A6E3A1;">&#39;_&gt;,</span></span>
+<span class="giallo-l"><span>    )</span><span style="color: #94E2D5;"> -&gt;</span><span> std</span><span style="color: #9399B2;">:</span><span>:task</span><span style="color: #9399B2;">:</span><span>:Poll</span><span style="color: #94E2D5;">&lt;</span><span>Self</span><span style="color: #9399B2;">:</span><span>:Output</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        if self.done.load(std</span><span style="color: #94E2D5;">:</span><span>:sync::atomic::Ordering::Relaxed) </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>            std</span><span style="color: #94E2D5;">:</span><span>:task::Poll::</span><span style="color: #89B4FA;font-style: italic;">Ready</span><span>(())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> mut shared_state </span><span style="color: #94E2D5;">=</span><span> self</span><span style="color: #94E2D5;">.</span><span>shared_state</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>                shared_state</span><span style="color: #94E2D5;">.</span><span>waker</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> Some</span><span>(context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">waker</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>())</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> // 여기서 주입</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            std</span><span style="color: #94E2D5;">:</span><span>:task::Poll::Pending</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="executor-guhyeonhaebogi">Executor 구현해보기</h2>
+<p>직접 만들면서 tokio 같은 executor들이 어떤 식으로 구성되어있는지 한번 헤집어보자.<br />
+우선 futures 크레이트를 추가한다.</p>
+<p><img src="/images/img_0404e69ec690b650.png" alt="" />
+이게 없으면 보일러플레이트들이 어마무시하게 늘어나고 머리가 아파질 것이다.</p>
+<br>
+<p><img src="/images/img_c12698f1b0250690.png" alt="" />
+적당히 import하고</p>
+<br>
+<p><img src="/images/img_66b60de324d5fec3.png" alt="" />
+우선 Executor는 Task를 받을 수 있는 queue의 형태로 구현한다.<br />
+동시에 여러 컨텍스트에서 await을 걸고 Task가 날라올 수 있으니, mpsc 채널을 사용했다.</p>
+<br>
+<p><img src="/images/img_79e0e95283d5102e.png" alt="" />
+Spawner는 Task Queue에 태스크를 집어넣어주는 역할을 한다.<br />
+tokio::spawn 같은 기능을 여기에서 구현하는 것이다.</p>
+<br>
+<p><img src="/images/img_389dcde5ac2af536.png" alt="" />
+그리고 task queue 초기화 함수다.</p>
+<p>Arc<Task>에서 Waker가 생성되고 wake()가 호출되면 Arc의 복사본이 task channel로 전송된다.<br />
+그러면 executor는 task을 선택하고 polling해야 한다.<br />
+아래는 그에 대한 구현이다.</p>
+<p><img src="/images/img_11eebe96bddbb341.png" alt="" /></p>
+<p>spawn은 그에 비해 구현이 간단하다.<br />
+future가 넘어오면 벅당히 박싱해서 새로운 Arc<Task>로 채널에 넘긴다.</p>
+<p><img src="/images/img_f8cbcf4738e89b65.png" alt="" /></p>
+<p>Task는 future에 대한 래퍼 타입이다.</p>
+<p><img src="/images/img_9bc05bd2ce135c60.png" alt="" /></p>
+<p><img src="/images/img_68a3654294db8b89.png" alt="" />
+여기서 조금 복잡한 제어가 추가됐다.</p>
+<p>Waker는 wake가 호출되면 다시 polling될 태스크를 예약하는 일을 담당한다. ArcWake trait을 구현하면 Task에 futures의 waker_ref를 써서 Arc<impl ArcWake>를 Waker로 바꾸는 것이 가능해진다.</p>
+<p>다시 Executor로 돌아가서 보면</p>
+<p><img src="/images/img_982e539dcddab516.png" alt="" />
+이 호출을 위해 구현했다고 보면 된다.</p>
+<p>아래는 executor에 대한 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use futures</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    future</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>BoxFuture</span><span style="color: #9399B2;">,</span><span> FutureExt</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span>    task</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>waker_ref</span><span style="color: #9399B2;">,</span><span> ArcWake</span><span style="color: #9399B2;">},</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:sync</span><span style="color: #9399B2;">:</span><span>:mpsc</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>sync_channel</span><span style="color: #9399B2;">,</span><span> Receiver</span><span style="color: #9399B2;">,</span><span> SyncSender</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:task</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>Context</span><span style="color: #9399B2;">,</span><span> Waker</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">/// executor는 채널에서 Task를 받아 실행하는 프로그램입니다.</span></span>
+<span class="giallo-l"><span>pub struct Executor</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    ready_queue</span><span style="color: #9399B2;">:</span><span> Receiver</span><span style="color: #94E2D5;">&lt;</span><span>Arc</span><span style="color: #94E2D5;">&lt;</span><span>Task</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl Executor</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    pub fn</span><span style="color: #89B4FA;font-style: italic;"> run</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        while let</span><span> Ok(task) </span><span style="color: #94E2D5;">=</span><span> self</span><span style="color: #94E2D5;">.</span><span>ready_queue</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">recv</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">            // future를 꺼내와서 아직 완료되지 않은 경우, 완료를 재촉하기 위해 poll을 날립니다.</span></span>
+<span class="giallo-l"><span>            let mut future_slot</span><span style="color: #94E2D5;"> =</span><span> task</span><span style="color: #94E2D5;">.</span><span>future</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span>            if let </span><span style="color: #89B4FA;font-style: italic;">Some</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">mut future</span><span style="color: #9399B2;">)</span><span> = future_slot.</span><span style="color: #89B4FA;font-style: italic;">take</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                // task 자체를 통해 LocalWaker를 만듭니다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> waker</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> waker_ref</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>task)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                let</span><span> context</span><span style="color: #94E2D5;"> = &amp;</span><span>mut Context::</span><span style="color: #89B4FA;font-style: italic;">from_waker</span><span>(</span><span style="color: #94E2D5;">&amp;*</span><span>waker)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                // `BoxFuture&lt;T&gt;`는 `Pin&lt;Box&lt;dyn Future&lt;Output = T&gt; + Send + &#39;static&gt;&gt;`에 대한 alias</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">                if let</span><span> std</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">task</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">Poll</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">Pending</span><span style="color: #94E2D5;"> =</span><span> future</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_mut</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">poll</span><span>(context)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">                    // future 완료되지 않았다면 다시 task에 돌려둡니다.</span></span>
+<span class="giallo-l"><span>                    *future_slot</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> Some</span><span>(future);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">                }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">            }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">/// Spawner는 새로운 future들을 task channel에 생성합니다.</span></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">derive</span><span>(Clone)]</span></span>
+<span class="giallo-l"><span>pub struct Spawner</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    task_sender</span><span style="color: #9399B2;">:</span><span> SyncSender</span><span style="color: #94E2D5;">&lt;</span><span>Arc</span><span style="color: #94E2D5;">&lt;</span><span>Task</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl Spawner</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    fn</span><span style="color: #89B4FA;font-style: italic;"> spawn</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>self</span><span style="color: #9399B2;">,</span><span> future: impl Future</span><span style="color: #94E2D5;">&lt;</span><span>Output</span><span style="color: #94E2D5;"> =</span><span> ()</span><span style="color: #94E2D5;">&gt; +</span><span style="color: #A6E3A1;"> &#39;static + Send) {</span></span>
+<span class="giallo-l"><span>        let future</span><span style="color: #94E2D5;"> =</span><span> future</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">boxed</span><span>();</span></span>
+<span class="giallo-l"><span>        let task</span><span style="color: #94E2D5;"> =</span><span> Arc::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(Task</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            future</span><span style="color: #94E2D5;">:</span><span> Mutex::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(</span><span style="color: #89B4FA;font-style: italic;">Some</span><span>(future))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>            task_sender</span><span style="color: #94E2D5;">:</span><span> self</span><span style="color: #94E2D5;">.</span><span>task_sender</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>);</span></span>
+<span class="giallo-l"><span>        self</span><span style="color: #94E2D5;">.</span><span>task_sender</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">send</span><span>(task)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;too many tasks queued&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> new_executor_and_spawner</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> (Executor</span><span style="color: #9399B2;">,</span><span> Spawner)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 한 번에 큐에 허용되는 최대 작업 수.</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // sync_channel을 단순하기 위해 만든거고, 상용 코드에서는 하지 않습니다.</span></span>
+<span class="giallo-l"><span>    const MAX_QUEUED_TASKS</span><span style="color: #94E2D5;">:</span><span> usize</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10_000</span><span>;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    let</span><span> (task_sender</span><span style="color: #9399B2;">,</span><span> ready_queue)</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> sync_channel</span><span>(MAX_QUEUED_TASKS);</span></span>
+<span class="giallo-l"><span>    (Executor</span><span style="color: #9399B2;"> {</span><span> ready_queue</span><span style="color: #9399B2;"> },</span><span> Spawner</span><span style="color: #9399B2;"> {</span><span> task_sender</span><span style="color: #9399B2;"> }</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">/// &quot;Executor&quot;에게 polling되기 위해 스스로를 reschedule할 수 있는 &quot;Future&quot;입니다.</span></span>
+<span class="giallo-l"><span>pub struct Task</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 진행 중인 futures들.</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // Mutex는 싱글스레드라서 꼭 필요하지는 않습니다. 문법을 회피하기 위해 넣었고, 대신 UnsafeCell을 써도 됩니다.</span></span>
+<span class="giallo-l"><span>    future</span><span style="color: #94E2D5;">:</span><span> Mutex</span><span style="color: #94E2D5;">&lt;</span><span>Option</span><span style="color: #94E2D5;">&lt;</span><span>BoxFuture</span><span style="color: #94E2D5;">&lt;</span><span style="color: #A6E3A1;">&#39;static, ()&gt;&gt;&gt;,</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    /// 스스로를 task queue에 넣는 Handle (다른 작업을 위해 일시중지할때 사용)</span></span>
+<span class="giallo-l"><span>    task_sender: SyncSender</span><span style="color: #94E2D5;">&lt;</span><span>Arc</span><span style="color: #94E2D5;">&lt;</span><span>Task</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>impl ArcWake for Task</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    fn </span><span style="color: #89B4FA;font-style: italic;">wake_by_ref</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">arc_self</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">Arc</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">Self</span><span style="color: #89DCEB;">&gt;</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">        // 이 task를 다시 task channel로 전송하여 executor에 의해 다시 폴링되도록 &#39;wake&#39;를 구현한다.</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> cloned</span><span style="color: #94E2D5;"> =</span><span> arc_self</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>        arc_self</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span>task_sender</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">send</span><span>(cloned)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            .</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;too many tasks queued&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>그러면 이제 이런 식으로 사용할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> (executor</span><span style="color: #9399B2;">,</span><span> spawner) </span><span style="color: #94E2D5;">=</span><span style="color: #89B4FA;font-style: italic;"> new_executor_and_spawner</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    spawner</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        let future</span><span style="color: #94E2D5;"> =</span><span> SetTimeout::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>(</span><span style="color: #FAB387;">1000</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> ||</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            println!(</span><span style="color: #A6E3A1;">&quot;2&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>        });</span></span>
+<span class="giallo-l"><span>        future.await;</span></span>
+<span class="giallo-l"><span>        println!(</span><span style="color: #A6E3A1;">&quot;1&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>    });</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // &quot;spawner&quot;를 삭제하여 executor가 더 이상 실행할 작업이 없음을 알고 더 이상 들어오는 작업을 받지 않도록 합니다.</span></span>
+<span class="giallo-l"><span>    drop(spawner);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 이 executor는 작업 큐가 비어 있을 때까지 실행됩니다. 이렇게하면 &quot;howdy!&quot;를 인쇄하고 일시 중지 한 다음 &quot;done!&quot;을 인쇄합니다.</span></span>
+<span class="giallo-l"><span>    executor.run();</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p><img src="/images/img_5bf228e7d0ccfc2b.png" alt="" />
+executor를 만들고 적당히 실행하도록 했다.<br />
+실제로 실행되는 시점은 .run()부터다.</p>
+<p>이제 저렇게 돌리면</p>
+<p><img src="/images/img_33c2277d175e8e1c.png" alt="" />
+기대한 순서대로 await을 기다리고 동작할 것이다.</p>
+<p>근데 매번 저렇게 보일러플레이트를 만드는 것도 꽤 불편한 짓이다.<br />
+그래서 보통 executor들은 block_on 같은 함수를 만들어서 쓰거나, 매크로로 흑마법을 써서 좀더 간단해 보이게끔 저걸 숨긴다.</p>
+<p><img src="/images/img_3111a8e94a9798a1.png" alt="" /></p>
+<p><img src="/images/img_802f419ccd8bc3a8.png" alt="" />
+이런식으로 말이다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://bertptrs.nl/2023/04/27/how-does-async-rust-work.html">https://bertptrs.nl/2023/04/27/how-does-async-rust-work.html</a><br />
+<a rel="external" href="https://github.com/cfsamson/examples-futures/blob/master/src/main.rs">https://github.com/cfsamson/examples-futures/blob/master/src/main.rs</a><br />
+<a rel="external" href="https://namsoocho.github.io/async-book/02_execution/03_wakeups.html">https://namsoocho.github.io/async-book/02_execution/03_wakeups.html</a><br />
+<a rel="external" href="https://docs.rs/futures/latest/futures/task/trait.ArcWake.html">https://docs.rs/futures/latest/futures/task/trait.ArcWake.html</a><br />
+<a rel="external" href="https://rust-lang.github.io/async-book/02_execution/04_executor.html">https://rust-lang.github.io/async-book/02_execution/04_executor.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223096927913/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] Persistent Volume<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223097714739/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>APM이란<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

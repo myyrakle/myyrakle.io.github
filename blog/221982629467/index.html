@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Node.js] PM2와 무중단 배포 2 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221982629467/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Node.js] PM2와 무중단 배포 2">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221982629467/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2020-05-29T00:00:00+00:00">
+    <meta property="article:tag" content="Javascript">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221982629467/">[Node.js] PM2와 무중단 배포 2</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2020-05-29T00:00:00+00:00"><time datetime="2020-05-29T00:00:00+00:00">2020.05.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="315 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/javascript/">Javascript</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221982629467" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://blog.naver.com/sssang97/221981962293">https://blog.naver.com/sssang97/221981962293</a><br />
+이전 포스트에서 이어진다.</p>
+<p>무중단 배포를 하고 싶다면 pm2로 reload를 하면 된다고 했었다.<br />
+reload의 무중단 배포는 다음과 같은 과정으로 이루어진다.</p>
+<ol>
+<li>기존에 존재하던 프로세스를 old_app으로 이동시킨다. 일단은 계속 동작한다.</li>
+<li>새로 적용된 코드로 새 프로세스 new_app을 올린다. (ready)</li>
+<li>이제부터 들어오는 요청은 new_app으로만 들어온다.</li>
+<li>하지만 old_app도 남은 처리를 하긴 해야 서비스가 끊기지 않는다. 그래서 일단은 동작한다.</li>
+<li>근데 old_app도 죽이긴 죽여야 한다. 그래서 시간이 충분히 지난 것 같으면 old_app에 SIGINT라는 신호를 준다.</li>
+<li>old_app은 SIGINT 신호를 받으면 재량껏 자살한다.</li>
+<li>근데 SIGINT를 보내고 일정 시간이 지났는데도 old_app이 죽지 않는다면, SIGKILL 신호를 보내서 강제로 죽게 한다.</li>
+</ol>
+<p>근데 이게, 간단한 상황에서는 알아서 잘 처리해주긴 하지만, 꼼꼼하게 설정하지 않는다면 언제 어떤 끊김 현상이 일어날지 모른다.</p>
+<br>
+<br>
+<h2 id="juyijeom1-sae-aebi-wanjeonhi-dongjaghagi-jeone-olragaseo-yoceongeul-badeul-gyeongu">주의점1: 새 앱이 완전히 동작하기 전에 올라가서 요청을 받을 경우</h2>
+<p>갱신된 앱을 new_app으로 올리더라도, new_app이 완전하게 실행되기 전에는 잠깐 서비스가 끊길 수도 있다.<br />
+new_app이라는 별개의 프로세스가 언제 제대로 동작할지 pm2가 어떻게 알겠는가?<br />
+다행히 그걸 해결하기 위한 설정값으로 wait_ready란 것이 있다. 해당 앱에서 ready라는 메세지를 보낼때까지는 old_app에 요청을 보내는 것이다.</p>
+<p>이렇게 true로 설정해놓고</p>
+<p><img src="/images/img_8b7722a7b0d31a36.png" alt="" /></p>
+<p>동작이 완료될때 process.send로 ready 메세지를 찍어주면 된다.</p>
+<p><img src="/images/img_6af9c7edcafb31f7.png" alt="" />
+그럼 된다.</p>
+<br>
+<br>
+<h2 id="juyijeom2-old-appi-yoceong-ceori-junge-jugeul-gyeongu">주의점2: old_app이 요청 처리 중에 죽을 경우</h2>
+<p>위에서 old_app은 일정한 시간이 지난 후엔 SIGKILL을 받고 죽게 된다고 했었다.<br />
+근데 처리작업이 좀 길어져서 SIGKILL을 받을때까지 처리를 완료하지 못한다면?? 이 또한 서비스의 구멍이 될 수 있다.</p>
+<p>이런 상황을 방지하고 싶다면, SIGKILL을 보내기까지의 딜레이를 좀 넉넉하게 잡고, 코드에서는 SIGINT를 받으면 바로 종료할 수 있도록 해주면 된다.</p>
+<p>딜레이부터 늘려보자.<br />
+속성은 kill_timeout이다. 디폴트 값은 1600이라고 한다.</p>
+<p><img src="/images/img_900ab0cec1543c23.png" alt="" /></p>
+<p>그리고 이렇게 이벤트를 걸어준다.</p>
+<p><img src="/images/img_c8bbb1997564531b.png" alt="" />
+그럼 된다.</p>
+<br>
+<br>
+<h2 id="juyijeom3-http-keep-alivega-sayongdoel-gyeongu">주의점3: Http Keep-Alive가 사용될 경우</h2>
+<p>고려할게 참 많다.<br />
+Keep-Alive가 사용중일 때는 app.close만으로 클라이언트와의 연결이 완전히 해제되지 않는다.<br />
+그래서 다음과 같이 추가적인 처리를 해줘야 한다.</p>
+<p><img src="/images/img_540356982dd33c59.png" alt="" />
+SIGINT에서 잘못썼는데, false가 아니라 true값을 넣어야 한다.</p>
+<br>
+<p>참조<br />
+<a rel="external" href="https://engineering.linecorp.com/ko/blog/pm2-nodejs/">https://engineering.linecorp.com/ko/blog/pm2-nodejs/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221985865202/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Node.js] mqtt 다루기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221982790645/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 타임스탬프 형식화하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] SQS - 비용 최적화: 롱 폴링 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223697117528/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] SQS - 비용 최적화: 롱 폴링">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223697117528/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-12-18T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223697117528/">[AWS] SQS - 비용 최적화: 롱 폴링</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-12-18T00:00:00+00:00"><time datetime="2024-12-18T00:00:00+00:00">2024.12.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="393 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223697117528" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>SQS는 저렴하면서도 강력한 AWS의 관리형 서비스다.</p>
+<p>근데 이것도 consume 형태에 따라서 좀 신중하게 쓸 필요는 있다.</p>
+<p>그냥 Lambda 같은걸 트리거로 달아서 consume하는 형태라면 상관없는데, 직접 루프를 돌려서 api로 consume하는 것이라면 폴링 정책을 어떻게 하느냐에 따라서 비용 폭주가 발생할 수도, 적당히 나올 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="syospolringgwa-biyong-munje">숏폴링과 비용 문제</h2>
+<p>별다른 구성 없이 ReceiveMessage를 사용해서 Consume을 한다면, short polling으로 동작한다.</p>
+<p><img src="/images/img_1cda1f47ee0109fb.png" alt="" /></p>
+<p><img src="/images/img_12d83389b979a736.png" alt="" />
+이게 무슨 말이냐면, 메시지가 없을때 그냥 API가 종료된다는 것이다.</p>
+<p>이건 메세지가 많을 때는 문제가 없지만, 메세지가 없는 대기상태가 많을 경우에는 극심한 비효율을 낳을 수 있다.<br />
+보통 Queue의 Consume은 무한루프를 기반으로 이루어지고, SQS는 데이터 크기나 사용 시간이 아니라, 요청 횟수로 비용을 과금하기 때문이다.</p>
+<p>그래서 메세지가 없을때 Consume 루프를 돌리면 뱅글뱅글 돌면서 API 요금을 과다하게 갉아먹는 문제가 발생할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="rong-polring">롱 폴링</h2>
+<p>다행히도 SQS에서는 이에 대한 개선안을 제공한다.<br />
+그게 "WaitTimeSeconds"라는 이름으로 제공되는 롱 폴링 옵션이다.</p>
+<p><img src="/images/img_141d7bb1aa281aaa.png" alt="" />
+WaitTimeSeconds은 초 단위의 시간값을 받고, 최대 20초까지 지정할 수 있다.<br />
+이걸 걸어두면 메세지가 들어오지 않았을 때는 API 연결을 끊지 않고 저 시간까지를 대기할 수 있다는 뜻이다.</p>
+<p>연결이 길어진다고 해서 딱히 요금이 발생한다거나 하지는 않는다. 그냥 API를 연결한 채로 대기만 하는 것이다.</p>
+<p>그 상태에서 메세지가 들어오면</p>
+<p><img src="/images/img_f4b97b9d94d9dcec.png" alt="" /></p>
+<p><img src="/images/img_c81feb471fdaef90.png" alt="" />
+그제서야 API가 종료되고 값이 반환된다.</p>
+<br>
+<p><strong>참고: SQS 기본값</strong></p>
+<p>롱 폴링 대기시간은 API 호출에서만 줄 수 있는게 아니라, SQS 큐 설정 수준에서도 관리할 수 있다.</p>
+<p><img src="/images/img_208a766dc2025b3e.png" alt="" />
+이런 식으로 직접 넣어주면, API에서 WaitTimeSeconds를 지정하지 않았을 경우에 저 값을 사용한다.<br />
+WaitTimeSeconds를 직접 지정해서 API를 호출한다면 저 SQS 설정은 무시된다. 그래서 기본값에 불과하다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="maxnumberofmessagesro-baeci-ceori">MaxNumberOfMessages로 배치 처리</h2>
+<p>MaxNumberOfMessages는 한번에 메세지를 몇개까지 가져올 수 있는지를 뜻하는 옵션이다.<br />
+1-10까지 설정 가능하다.</p>
+<p><img src="/images/img_058a64c5cedf4ee0.png" alt="" />
+SQS 요금 산정 방식은 메세지를 가져오는 개수가 아니라 순수한 API 호출 횟수이므로, 가급적이면 메세지를 한번에 많이 받아와서 처리해버리는게 비용적으로 유리하다.</p>
+<br>
+<p><strong>롱 폴링과 MaxNumberOfMessages</strong></p>
+<p>근데 문제는 MaxNumberOfMessages이라는 옵션 자체가, 좀 느슨한 형태로 구현되어있다는 것이다.<br />
+그래서 "숏 폴링을 사용한다면" 한번에 10, 20, 30개의 메세지가 들어오더라도, 10개가 한번에 들어오지 않을 확률이 있다. 그냥 빠르고 비용효율적으로(AWS 관점에서) 가져올 수 있도록 분산된 그룹에서 일부 하위 집합만 읽어들일 수 있기 때문이다.</p>
+<p>롱 폴링을 적용하면 이런 유실 문제가 줄어들 수 있다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-short-and-long-polling.html">https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-short-and-long-polling.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/60208266/sqs-maxnumberofmessages">https://stackoverflow.com/questions/60208266/sqs-maxnumberofmessages</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html">https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223700820162/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>로드밸런서와 웹<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223695895330/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] timestream - LiveAnalytics<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] Partial Index | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223498028986/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] Partial Index">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223498028986/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-07-01T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223498028986/">[PostgreSQL] Partial Index</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-07-01T00:00:00+00:00"><time datetime="2024-07-01T00:00:00+00:00">2024.07.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="403 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223498028986" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Partial 인덱스는 PostgreSQL에서 제공하는 강력한 인덱스의 확장기능 중 하나다.</p>
+<p>인덱스에 대해서 특정 조건을 부여해서, 조건에 부합하는 데이터만 인덱스에 포함되도록 하는 것이다.<br />
+그래서 부분(Partial) 인덱스다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>Create Index 인덱스명 on</span><span style="color: #89B4FA;font-style: italic;"> 테이블명</span><span>(컬럼</span><span style="color: #94E2D5;">...</span><span>) where 조건식</span></span></code></pre>
+<p>저 조건식에 포함되는 Query는 인덱스에 걸려서 잘 인덱싱되고, 포함되지 않는 데이터는 인덱싱이 되지 않는다.</p>
+<p>false인 데이터는 애초부터 인덱스 트리에 저장을 하지도 않고, 그렇기 때문에 SELECT 쿼리 플랜 도중에 조건에 걸려있지 않다면 인덱스 스캔을 시도하지도 않는 것이다.</p>
+<p>이 기능의 장점은, 조정하기에 따라서 인덱스 저장공간을 더 아낄 수 있고, Update 시의 인덱스 수정 비용도 줄일 수 있다는 것이다.<br />
+근데 아마 이 이유만으로 쓰는 사람은 몇 없을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="eungyong-partial-unique-index">응용: Partial Unique Index</h2>
+<p>사실 이 기능의 가장 유용한 응용 방법은, 조건에 따른 선택적 Unique를 설정하는 것이다.</p>
+<p>예를 들어, 이메일을 유일키로 잡는 계정 정보 테이블이 있다고 가정해보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>Create Table</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span> (</span></span>
+<span class="giallo-l"><span>    id SERIAL PRIMARY KEY</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>    email</span><span style="color: #89B4FA;font-style: italic;"> VARCHAR</span><span>(</span><span style="color: #FAB387;">100</span><span>) NOT NULL</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>    password</span><span style="color: #89B4FA;font-style: italic;"> VARCHAR</span><span>(</span><span style="color: #FAB387;">200</span><span>) NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #89B4FA;font-style: italic;"> VARCHAR</span><span>(</span><span style="color: #FAB387;">100</span><span>) NOT NULL</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>    leftAt TIMESTAMPTZ</span><span style="color: #94E2D5;"> --</span><span> 탈퇴 시점</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>INSERT INTO</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span> (email</span><span style="color: #9399B2;">,</span><span> password</span><span style="color: #9399B2;">,</span><span> name</span><span style="color: #9399B2;">,</span><span> leftAt) VALUES</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;asdf@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;John&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;qert@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Tom&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;foo.bar@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Anna&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;buldak@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Alice Four&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;gang@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;jonathan&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;kimchi@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;kim&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;do@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;doe&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_fb4b97e7e92ae221.png" alt="" /></p>
+<p><img src="/images/img_821d68a267bb2c1a.png" alt="" />
+뻔한 구성이다.<br />
+이메일이 있고, 탈퇴 시점을 기록하는 leftat 필드도 있다.<br />
+저게 null이 아니면 탈퇴한 회원인 것이다.</p>
+<p>여기에 대해서 이메일 제약을 건다면, 가장 단순하면서도 강력한 방법은 Unique 인덱스를 꽂아버리는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>Create Unique Index email_unique on</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span>(email)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>INSERT INTO</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span> (email</span><span style="color: #9399B2;">,</span><span> password</span><span style="color: #9399B2;">,</span><span> name</span><span style="color: #9399B2;">,</span><span> leftAt) VALUES</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;asdf@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Other People&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_f6b8fd847e675043.png" alt="" />
+서버에다가 직접 구현하면 동시성 문제로 유일성이 깨질 확률도 높고, 강력한 일관성을 보장하려면 결국에는 단일 락이 필요하다.<br />
+근데 RDB 자체가 강력한 원자성을 보장하는 단일 스토리지이니, 유일성 보장에 이만큼 효율적이고 완벽한 솔루션은 거의 없다고 봐도 될 것이다.</p>
+<p>하지만 좀 응용을 하다보면 문제가 생길 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>update</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span> </span></span>
+<span class="giallo-l"><span>set leftAt</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>()</span></span>
+<span class="giallo-l"><span>where email</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;asdf@example.com&#39;</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_e6e4128f2a4fdeee.png" alt="" />
+예를 들면, 탈퇴한 회원이 있을때, 동일한 이메일로 재가입을 하고 싶을 수도 있는 것이다.<br />
+그럼 어떻게 해야할까?<br />
+email+leftat을 묶어서 Unique를 만든다고 해도, null이 포함되면 Unique 제약에서 벗어나기 때문에 요구사항을 만족할 수 없다.</p>
+<p>여기에 대해서 가장 명쾌한 구현 방법은 Partial Unique 인덱스로 부분적인 제약을 가하는 것이다.<br />
+예를 들면, 이런 식이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>Drop Index email_unique</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>Create Unique Index email_unique on</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span>(email) where leftAt IS NULL</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_8d177b869ee2d56f.png" alt="" /></p>
+<p><img src="/images/img_07d02f2f1e1e15bc.png" alt="" />
+이러면 leftAt IS NULL을 만족하는 데이터에 대해서만 email 유일성을 보장하도록 인덱스가 구성된다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSERT INTO</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span> (email</span><span style="color: #9399B2;">,</span><span> password</span><span style="color: #9399B2;">,</span><span> name</span><span style="color: #9399B2;">,</span><span> leftAt) VALUES</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;asdf@example.com&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;q1w2e3r4&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Other People&#39;</span><span style="color: #9399B2;">,</span><span> NULL)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_f0d88656c59188e8.png" alt="" />
+그러면 leftat=null이 아닌 데이터는 유일성 제약에서 벗어나고</p>
+<br>
+<p><img src="/images/img_bc611ece44c6cd6c.png" alt="" />
+또 넣으려고 하면 의도대로 잘 막힐 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="indegsing-goryeo">인덱싱 고려</h2>
+<p>partial index는 실제로 부분적으로만 인덱스가 생성되는만큼, 그 부분 조건에 일치하지 않으면 인덱스를 타지 않는다.</p>
+<p>한번 실험해보자.</p>
+<p>일단 데이터가 몇개 이상은 되어야 인덱스로 플랜을 잡기 떄문에, 쓰레기 데이터를 적당히 넣어준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>Insert Into</span><span style="color: #A6E3A1;"> &quot;user&quot;</span><span>(email</span><span style="color: #9399B2;">,</span><span> password</span><span style="color: #9399B2;">,</span><span> name</span><span style="color: #9399B2;">,</span><span> leftAt) </span></span>
+<span class="giallo-l"><span>select t</span><span style="color: #94E2D5;">.</span><span>n::text</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;auto generated&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;auto&#39;</span><span style="color: #9399B2;">,</span><span style="color: #CBA6F7;"> null</span><span style="color: #89B4FA;font-style: italic;"> from</span><span> (</span></span>
+<span class="giallo-l"><span>  select</span><span style="color: #89B4FA;font-style: italic;"> generate_series</span><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 10000</span><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> n</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> t</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_7891b8b36023d007.png" alt="" /></p>
+<p>그리고 그냥 email로만 조건을 걸거나</p>
+<p><img src="/images/img_ed251b0703d7f9a7.png" alt="" /></p>
+<p><img src="/images/img_9437c33f90da0299.png" alt="" />
+leftAt IS NOT NULL을 걸면 인덱스를 절대 타지 않는다. 없기 때문이다.</p>
+<br>
+<p><img src="/images/img_5146d43e42c1605f.png" alt="" />
+인덱스를 타려면 무조건 Partial Index에서 정의된 조건이 명시되어야만 한다.</p>
+<p>그래서 Partial Unique Index로 유일성을 구현한다고 하더라도, 실질적으로 인덱싱에 사용할 실제 전체 범위의 인덱스는 따로 마련해주는 편이 좋다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://medium.com/little-programming-joys/unique-partial-indexes-with-postgresql-86e137905c12">https://medium.com/little-programming-joys/unique-partial-indexes-with-postgresql-86e137905c12</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223498126428/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Unix] Fish Shell<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223495801532/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] NFS로 온프레미스 Persistent Volume 구성하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 러스트노미콘: Borrow 분할 (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222275500902/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 러스트노미콘: Borrow 분할 (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222275500902/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-03-14T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222275500902/">[Rust] 러스트노미콘: Borrow 분할 (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-03-14T00:00:00+00:00"><time datetime="2021-03-14T00:00:00+00:00">2021.03.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1063 words"><time datetime="PT6M">6 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222275500902" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://doc.rust-lang.org/nomicon/borrow-splitting.html">https://doc.rust-lang.org/nomicon/borrow-splitting.html</a></p>
+<br>
+<p>가변 참조들의 상호 배제 속성은 복합적인 구조체를 작업할때 한계가 있을 수 있습니다.</p>
+<p>borrow 체커는 몇가지 기본적인 사항은 이해를 하고 있어요. 그래서 간단한건 꽤 쉽게 넘어갈 겁니다.</p>
+<p>요즘의 borrow 체커는 구조체의 분리된 필드를 동시에 빌릴 수 있다는 것을 잘 알고 있습니다.</p>
+<p>그래서 오늘날에는 이게 동작합니다.</p>
+<br>
+<p>**struct Foo { **<br />
+**    a: i32, **<br />
+**    b: i32, **<br />
+**    c: i32, **<br />
+<strong>} ㅤ</strong></p>
+<p>**let mut x = Foo {a: 0, b: 0, c: 0}; **<br />
+**let a = &amp;mut x.a; **<br />
+**let b = &amp;mut x.b; **<br />
+**let c = &amp;x.c; **<br />
+***b += 1; **<br />
+**let c2 = &amp;x.c; **<br />
+***a += 10; **</p>
+<p>**println!("{} {} {} {}", a, b, c, c2); **</p>
+<br>
+<p>하지만 배열이나 슬라이스에 대해서는 잘 동작하지 않을 거에요.</p>
+<br>
+<p>**let mut x = [1, 2, 3]; **<br />
+**let a = &amp;mut x[0]; **<br />
+**let b = &amp;mut x[1]; **<br />
+**println!("{} {}", a, b); **</p>
+<p>**error[E0499]: cannot borrow <code>x[..]</code> as mutable more than once at a time --&gt; <strong><a rel="external" href="http://src/lib.rs:4:18">src/lib.rs:4:18</a></strong> | 3 | let a = &amp;mut x[0]; | ---- first mutable borrow occurs here 4 | let b = &amp;mut x[1]; | ^^^^ second mutable borrow occurs here 5 | println!("{} {}", a, b); 6 | } | - first borrow ends here error: aborting due to previous error **</p>
+<br>
+<p>borrow 체커가 이런 간단한 경우를 이해하는건 그럴듯하죠. 그런데 트리 같은 일반적인 컨테이너 타입들을 보면... 좀 절망적입니다. 불연속적이고, 컴파일타임에 확인하기가 어렵죠.</p>
+<br>
+<p>이런 경우 borrow 체커에게 우리가 하는게 괜찮다는 것을 가르쳐주려면, unsafe 코드로 내려갈 필요가 있습니디.</p>
+<p>예를 들어 가변 슬라이스는 슬라이스를 전달받고(consume) 두 개의 가변 슬라이스를 반환하는 split_at_mut 함수를 제공합니다.</p>
+<p>하나는 인덱스 왼쪽의 모든 항목에 대한 것이고, 다른 하나는 오른쪽의 모든 항목에 대한 것입니다.</p>
+<p>직관적으로 우리는 슬라이스가 겹치지 않기 때문에 안전하다는 것을 알고 있죠.</p>
+<p>하지만 구현은 일부의 unsafe함을 요구합니다.</p>
+<br>
+<p>**pub fn split_at_mut(&amp;mut self, mid: usize) -&gt; (&amp;mut [T], &amp;mut [T]) { **<br />
+**    let len = <strong><a rel="external" href="http://self.len">self.len</a></strong>(); **<br />
+**    let ptr = self.as_mut_ptr(); **</p>
+<p>**    <strong><strong>unsafe</strong></strong> { **<br />
+**        assert!(mid &lt;= len); **<br />
+**        (from_raw_parts_mut(ptr, mid), <strong>[from_raw_parts_mut(ptr.add](http://from_raw_parts_mut(ptr.add)</strong>(mid), len - mid)) **<br />
+**    } **<br />
+**} **</p>
+<br>
+<p>이건 실제로 약간 미묘합니다.<br />
+두 개의 &amp;mut을 동일한 값으로 만드는 것을 피하기 위해 생포인터로 새 슬라이스를 명시적으로 생성합니다.</p>
+<br>
+<p>그런데 더 미묘한 것은 가변 참조를 생성하는 반복자가 작동하는 방식입니다.<br />
+반복자 trait은 다음과 같이 정의됩니다.</p>
+<br>
+<p>**trait Iterator { **<br />
+**    type Item; **<br />
+**    fn next(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a>; **<br />
+**} **</p>
+<br>
+<p>주어진 정의대로라면, Self::Item은 self와의 연결이 없죠.</p>
+<p>즉, 연속으로 여러 번 호출해 모든 결과를 동시에 보관할 수 있다는 겁니다.<br />
+이는 명확히 이러한 의미를 갖는 값별 반복자에 대해 완전히 괜찮습니다. </p>
+<p>공유된 참조의 경우에도 실제로 괜찮습니다.<br />
+동일한 항목에 대해서 임의의 많은 참조를 허용하기 때문입니다. 이때 반복자는 공유되는 항목과 별도의 객체여야 해요.</p>
+<p>그런데 가변 참조는 이걸 엉망으로 만듭니다.  언뜻보기에는 동일한 객체에 대한 여러 가변 참조를 생성하기 때문에 이 API와 완전히 호환되지 않는 것처럼 보일 수 있습니다!</p>
+<p>하지만 반복자가 원샷(one-shot) 객체이기 때문에 실제로 작동합니다.<br />
+IterMut이 산출하는 모든 것은 최대 한 번만 산출되므로, 실제로 동일한 데이터에 대해 여러 개의 가변 참조를 산출하지는 않습니다.</p>
+<p>놀랍게도 가변 반복자는 여러 타입에 대해 unsafe 코드를 구현할 필요가 없습니다!</p>
+<p>예를 하나 들어볼까요?<br />
+여기에 단일 연결리스트가 있습니다.</p>
+<br>
+<p>**type Link<T> = Option&lt;Box&lt;Node<T>&gt;&gt;; **</p>
+<p>**struct Node<T> { **<br />
+**    elem: T, **<br />
+**    next: Link<T>, **<br />
+**} **</p>
+<p>**pub struct LinkedList<T> { **<br />
+**    head: Link<T>, **<br />
+**} **</p>
+<p>**pub struct IterMut&lt;'a, T: 'a&gt;(Option&lt;&amp;'a mut Node<T>&gt;); **</p>
+<p>**impl<T> LinkedList<T> { **<br />
+**    fn iter_mut(&amp;mut self) -&gt; IterMut<T> { **<br />
+**        <strong>[IterMut(self.head.as_mut().map](http://IterMut(self.head.as_mut().map)</strong>(|node| &amp;mut **node)) **<br />
+**    } **<br />
+**} **</p>
+<p>**impl&lt;'a, T&gt; Iterator for IterMut&lt;'a, T&gt; { **<br />
+**    type Item = &amp;'a mut T; **<br />
+**    fn next(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a> { **<br />
+**        <strong><a rel="external" href="http://self.0.take().map">self.0.take().map</a></strong>(|node| { self.0 = <strong><a rel="external" href="http://node.next.as_mut().map">node.next.as_mut().map</a></strong>(|node| &amp;mut **node); &amp;mut <strong><a rel="external" href="http://node.elem">node.elem</a></strong> }) **<br />
+**    } **<br />
+**} **</p>
+<br>
+<p>이제 이건 가변 슬라이스입니다.</p>
+<br>
+<p>**use std::mem; **</p>
+<p>**pub struct IterMut&lt;'a, T: 'a&gt;(&amp;'a mut[T]); **</p>
+<p>**impl&lt;'a, T&gt; Iterator for IterMut&lt;'a, T&gt; { **<br />
+**    type Item = &amp;'a mut T; **<br />
+**    fn next(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a> { **<br />
+**        let slice = mem::replace(&amp;mut self.0, &amp;mut []); **<br />
+**        if slice.is_empty() { **<br />
+**            return None; **<br />
+**        } **</p>
+<p>**        let (l, r) = slice.split_at_mut(1); **</p>
+<p>**        self.0 = r; l.get_mut(0) **<br />
+**    } **<br />
+**} **</p>
+<p>**impl&lt;'a, T&gt; DoubleEndedIterator for IterMut&lt;'a, T&gt; { **<br />
+**    fn next_back(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a> { **<br />
+**        let slice = mem::replace(&amp;mut self.0, &amp;mut []); **<br />
+**        if slice.is_empty() { **<br />
+**            return None; **<br />
+**        } **<br />
+**        let new_len = <strong><a rel="external" href="http://slice.len">slice.len</a></strong>() - 1; **<br />
+**        let (l, r) = slice.split_at_mut(new_len); **<br />
+**        self.0 = l; r.get_mut(0) **<br />
+**    } **<br />
+**} **</p>
+<br>
+<p>이건 이진트리고요.</p>
+<br>
+<p>**use std::collections::VecDeque; **</p>
+<p>**type Link<T> = Option&lt;Box&lt;Node<T>&gt;&gt;; **</p>
+<p>**struct Node<T> { **<br />
+**    elem: T, **<br />
+**    left: Link<T>, **<br />
+**    right: Link<T>, **<br />
+**} **</p>
+<p>**pub struct Tree<T> { **<br />
+**    root: Link<T>, **<br />
+**} **</p>
+<p>**struct NodeIterMut&lt;'a, T: 'a&gt; { **<br />
+**    elem: Option&lt;&amp;'a mut T&gt;, **<br />
+**    left: Option&lt;&amp;'a mut Node<T>&gt;, **<br />
+**    right: Option&lt;&amp;'a mut Node<T>&gt;, **<br />
+**} **</p>
+<p>**enum State&lt;'a, T: 'a&gt; { **<br />
+**    Elem(&amp;'a mut T), **<br />
+**    Node(&amp;'a mut Node<T>), **<br />
+**} **</p>
+<p>**pub struct IterMut&lt;'a, T: 'a&gt;(VecDeque&lt;NodeIterMut&lt;'a, T&gt;&gt;); **</p>
+<p>**impl<T> Tree<T> { **<br />
+**    pub fn iter_mut(&amp;mut self) -&gt; IterMut<T> { **<br />
+**        let mut deque = VecDeque::new(); **<br />
+**        <strong><a rel="external" href="http://self.root.as_mut().map">self.root.as_mut().map</a></strong>(|root| deque.push_front(root.iter_mut())); **<br />
+**        IterMut(deque) **<br />
+**    } **<br />
+**} **</p>
+<p>**impl<T> Node<T> { **<br />
+**    pub fn iter_mut(&amp;mut self) -&gt; NodeIterMut<T> { **<br />
+**        NodeIterMut { **<br />
+**            elem: Some(&amp;mut <strong><a rel="external" href="http://self.elem">self.elem</a></strong>), **<br />
+**            left: <strong><a rel="external" href="http://self.left.as_mut().map">self.left.as_mut().map</a></strong>(|node| &amp;mut **node), **<br />
+**            right: <strong><a rel="external" href="http://self.right.as_mut().map">self.right.as_mut().map</a></strong>(|node| &amp;mut **node), **<br />
+**        } **<br />
+**    } **<br />
+**} **</p>
+<p>**impl&lt;'a, T&gt; Iterator for NodeIterMut&lt;'a, T&gt; { **<br />
+**    type Item = State&lt;'a, T&gt;; **<br />
+**    fn next(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a> { **<br />
+**        match <strong><a rel="external" href="http://self.left.take">self.left.take</a></strong>() { **<br />
+**            Some(node) =&gt; Some(State::Node(node)), **<br />
+**            None =&gt; match <strong><a rel="external" href="http://self.elem.take">self.elem.take</a></strong>() { **<br />
+**                Some(elem) =&gt; Some(State::Elem(elem)), **<br />
+**                None =&gt; match <strong><a rel="external" href="http://self.right.take">self.right.take</a></strong>() { **<br />
+**                    Some(node) =&gt; Some(State::Node(node)), **<br />
+**                    None =&gt; None, **<br />
+**                } **<br />
+**            } **<br />
+**        } **<br />
+**    } **<br />
+**} **</p>
+<p>**impl&lt;'a, T&gt; DoubleEndedIterator for NodeIterMut&lt;'a, T&gt; { **<br />
+**    fn next_back(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a> { **<br />
+**        match <strong><a rel="external" href="http://self.right.take">self.right.take</a></strong>() { **<br />
+**            Some(node) =&gt; Some(State::Node(node)), **<br />
+**            None =&gt; match <strong><a rel="external" href="http://self.elem.take">self.elem.take</a></strong>() { **<br />
+**                Some(elem) =&gt; Some(State::Elem(elem)), **<br />
+**                None =&gt; match <strong><a rel="external" href="http://self.left.take">self.left.take</a></strong>() { **<br />
+**                    Some(node) =&gt; Some(State::Node(node)), **<br />
+**                    None =&gt; None, **<br />
+**                } **<br />
+**            } **<br />
+**        } **<br />
+**    } **<br />
+**} **</p>
+<p>**impl&lt;'a, T&gt; Iterator for IterMut&lt;'a, T&gt; { **<br />
+**    type Item = &amp;'a mut T; **<br />
+**    fn next(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a> { **<br />
+**        loop { **<br />
+**            match self.0.front_mut().and_then(|node_it| <strong><a rel="external" href="http://node_it.next">node_it.next</a></strong>()) { **<br />
+**                Some(State::Elem(elem)) =&gt; return Some(elem), **<br />
+**                Some(State::Node(node)) =&gt; self.0.push_front(node.iter_mut()), **<br />
+**                None =&gt; if let None = self.0.pop_front() { **<br />
+**                    return None **<br />
+**                }, **<br />
+**            } **<br />
+**        } **<br />
+**    } **<br />
+**} **</p>
+<p>**impl&lt;'a, T&gt; DoubleEndedIterator for IterMut&lt;'a, T&gt; { **<br />
+**    fn next_back(&amp;mut self) -&gt; Option<a href="Self::Item">Self::Item</a> { **<br />
+**        loop { **<br />
+**            match self.0.back_mut().and_then(|node_it| node_it.next_back()) { **<br />
+**                Some(State::Elem(elem)) =&gt; return Some(elem), **<br />
+**                Some(State::Node(node)) =&gt; self.0.push_back(node.iter_mut()), **<br />
+**                None =&gt; if let None = self.0.pop_back() { **<br />
+**                    return None **<br />
+**                }, **<br />
+**            } **<br />
+**        } **<br />
+**    } **<br />
+**} **</p>
+<br>
+<p>위 코드들은 모두 완전히 safe하고 stable rust에서 잘 동작해요!</p>
+<p>이건 궁극적으로 이전에 보았던 단순한 구조체 케이스에서 빠져나왔습니다.<br />
+Rust는 하위 필드로 가변 참조를 안전하게 분할할 수 있음을 이해합니다.</p>
+<p>그런 다음 Option을 통해 참조를 영구적으로 사용하도록 인코딩할 수 있습니다.<br />
+또는 슬라이스의 경우 빈 슬라이스로 대체하는 방법을 쓸 수도 있죠.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222275298165/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>JWT를 이용한 로그인 구현 (with Rust)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222273951379/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>통신 기술, 기법들<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

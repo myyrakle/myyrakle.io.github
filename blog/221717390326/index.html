@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] Q: 고루틴은 어떻게 동작하나요? (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221717390326/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] Q: 고루틴은 어떻게 동작하나요? (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221717390326/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-11-25T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221717390326/">[Go] Q: 고루틴은 어떻게 동작하나요? (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-11-25T00:00:00+00:00"><time datetime="2019-11-25T00:00:00+00:00">2019.11.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="338 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221717390326" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://stackoverflow.com/questions/24599645/how-do-goroutines-work-or-goroutines-and-os-threads-relation">https://stackoverflow.com/questions/24599645/how-do-goroutines-work-or-goroutines-and-os-threads-relation</a></p>
+<br>
+<p><strong>질문</strong><br />
+고루틴은 syscall을 호출하는 동안 실행을 어떻게 유지하나요? GOMAXPROCS=1일때 말이에요.<br />
+제가 깨달은 것에 의하면, 스레드가 syscall을 호출하면 그 스레드는 syscall이 반환될 때까지 제어권을 포기할텐데요.<br />
+Go는 어떻게 syscall로 블럭되는(<em>blocking-on-syscall</em>) 고루틴마다 시스템 스레드를 생성하지 않고 병행성을 달성하나요?</p>
+<p>문서를 보면 이렇다네요.<br />
+<strong>고루틴</strong><br />
+고루틴은 왜 고루틴이라 부르는가? 기존의 명칭인 스레드나 코루틴, 프로세스 등과 완전히 부합하지 않기 때문이다.<br />
+고루틴은 아주 간단한 모델을 가진다. 그냥 같은 주소공간에서 다른 고루틴들과 함께 병행적으로 실행되는 함수인 것이다. 게다가 고루틴은 함수를 따로 스택 공간에 할당하는 것보다 더 가볍고, 비용도 적다.<br />
+고루틴의 스택은 아주 작게 시작해서, 저렴한 비용을 가진다. 필요하다면 힙을 할당해서 확장하기도 한다.<br />
+고루틴은 여러개의 OS 스레드로 다중화된다. 그래서 만약 고루틴 하나가 I/O를 기다리는 등의 행동으로 블럭되더라도, 다른 고루틴들은 그래도 실행을 지속한다.<br />
+그래서 사실 고루틴의 디자인 뒤편에는 스레드의 생성이나 관리에 대한 이런저런 난장판이 펼쳐져있다.</p>
+<br>
+<br>
+<p><strong>답1</strong><br />
+고루틴이 블럭된다면, Go의 런타임은 다른 고루틴을 핸들링하기 위해 새로운 OS 스레드를 생성합니다. 그 블럭된 고루틴이 살아날 때까지만요.</p>
+<p>이걸 참조하세요: <a rel="external" href="https://groups.google.com/forum/#">https://groups.google.com/forum/#</a><a rel="external" href="https://groups.google.com/forum/#!topic/golang-nuts/2IdA34yR8gQ">!topic/golang-nuts/2IdA34yR8gQ</a></p>
+<br>
+<br>
+<p><strong>답2</strong><br />
+오! 이건 제가 배웠던 거네요.<br />
+생(raw) syscall을 호출하면 Go는 블럭된 고루틴마다 스레드를 생성합니다.</p>
+<p>예제를 한번 봐보세요.</p>
+<p>package main<br />
+import ( "fmt" "syscall" )</p>
+<p>func block(c chan bool) {<br />
+    fmt.Println("block() enter")<br />
+    buf := make([]byte, 1024)<br />
+    _, _ = syscall.Read(0, buf)<br />
+ㅤ// STDIN에서 읽어올때까지 블럭<br />
+    fmt.Println("block() exit")<br />
+    c &lt;- true // main()은 이미 끝남<br />
+}</p>
+<p>func main() {<br />
+    c := make(chan bool)<br />
+    for i := 0; i &lt; 1000; i++ {<br />
+        go block(c)<br />
+    }<br />
+    for i := 0; i &lt; 1000; i++ {<br />
+        _ = &lt;-c<br />
+    }<br />
+}</p>
+<p>이걸 실행해보면, 우분투 12.04는 저 프로세스에 1004개의 스레드를 생성합니다.</p>
+<p>반면에, Go의 Http 서버를 사용해서 1000개의 소켓을 열어봤는데요. 이건 4개의 os 스레드만을 생성했습니다.</p>
+<p>package main<br />
+import ( "fmt" "net/http" )</p>
+<p>func handler(w http.ResponseWriter, r *http.Request) {<br />
+    fmt.Fprintf(w, "Hi there, I love %s!", r.URL.Path[1:])<br />
+}</p>
+<p>func main() {<br />
+    http.HandleFunc("/", handler)<br />
+    http.ListenAndServe(":8080", nil)<br />
+}</p>
+<p>이건 블럭되는 syscall 마다 IO 루프와 스레드가 섞입니다.</p>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221718643151/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[디자인 패턴] GoF의 디자인 패턴 분류<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221717391725/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>구조체 패딩 문제.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

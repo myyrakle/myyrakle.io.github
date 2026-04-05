@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] cargo 사설 저장소 만들기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222904399354/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] cargo 사설 저장소 만들기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222904399354/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2022-10-19T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222904399354/">[Rust] cargo 사설 저장소 만들기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2022-10-19T00:00:00+00:00"><time datetime="2022-10-19T00:00:00+00:00">2022.10.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="383 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222904399354" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>crates io의 아쉬운 점 중 하나는, private crate 기능을 제공하지 않는다는 것이다.<br />
+npm이 유료 플랜을 기반으로 private 패키지 기능을 제공하는 것과 대조적이다.</p>
+<p>그래서 crates io에다가 체계적으로 크레이트를 쌓고 싶은데 비공개로 관리를 해야한다면, 직접 사설 서버를 구축해서 사용해야 한다.</p>
+<p>하루빨리 github package에서 지원해주기를 소망한다...</p>
+<br>
+<br>
+<br>
+<h2 id="crates-seobeo-gucughagi">crates 서버 구축하기</h2>
+<p>우선, 리눅스가 필요하다. 윈도우즈는 잘 지원이 되지 않는다.<br />
+내 경우에는 EC2 Ubuntu 20을 사용했다.</p>
+<p>crates 레포지토리를 먼저 클론받는다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>git clone https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/rust-lang/crates.io.git</span></span></code></pre>
+<p><img src="/images/img_de76158686d146bb.png" alt="" />
+꽤 크다.<br />
+백엔드와 프론트 소스가 다 섞여있다.</p>
+<p>그리고 또 별도로 필요한 종속성들은 이렇다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get gcc install pkg</span><span style="color: #94E2D5;">-</span><span>config libssl</span><span style="color: #94E2D5;">-</span><span>dev make</span></span></code></pre>
+<p>깔아주자.</p>
+<br>
+<br>
+<h2 id="baegendeu-gucug">백엔드 구축</h2>
+<p>먼저 디비로 Postgres를 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get install postgresql postgresql</span><span style="color: #94E2D5;">-</span><span>contrib libpq</span><span style="color: #94E2D5;">-</span><span>dev</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>sudo service postgresql start</span></span></code></pre>
+<p>됐으면 계정과 스키마를 추가해주고, 패스워드 깔고, 권한도 이어주자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo</span><span style="color: #94E2D5;"> -</span><span>u postgres psql</span></span>
+<span class="giallo-l"><span>create user myyrakle</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>create database myyrakle</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER USER myyrakle WITH PASSWORD</span><span style="color: #A6E3A1;"> &#39;패스워드&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>GRANT ALL PRIVILEGES ON DATABASE myyrakle TO myyrakle</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_3607db3e096d963c.png" alt="" /></p>
+<p>아마 기본 설정으로는 패스워드 접속이 안될 것이다.<br />
+설정파일에 들어가 암호화 방식을 md5로 바꿔준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>postgresql</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">14</span><span style="color: #94E2D5;">/</span><span>main</span><span style="color: #94E2D5;">/</span><span>pg_hba</span><span style="color: #94E2D5;">.</span><span>conf</span></span></code></pre>
+<p><img src="/images/img_37850504c8e900f1.png" alt="" /></p>
+<p>그리고 재시작해서 동작을 확인한다.</p>
+<p><img src="/images/img_3d129d1df62b291f.png" alt="" /></p>
+<p>그다음엔 crates에서 쓰는 orm인 디젤을 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo install diesel_cli</span><span style="color: #94E2D5;"> --</span><span>no</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;">default</span><span style="color: #94E2D5;">-</span><span>features</span><span style="color: #94E2D5;"> --</span><span>features postgres</span><span style="color: #94E2D5;"> --</span><span>version</span><span style="color: #94E2D5;"> ^</span><span style="color: #FAB387;">1</span><span style="color: #94E2D5;"> --</span><span>force</span></span></code></pre>
+<p>2버전에서 호환성이 깨져서 1 버전을 받아야 한다.</p>
+<p>그다음엔 서버에서 db에 접근이 가능하도록 접근정보를 넣어줘야 한다.<br />
+환경변수 sample 파일 복사해서 databade_url과 test_database_url을 채워준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cp</span><span style="color: #94E2D5;"> .</span><span style="color: #F5C2E7;">/.</span><span style="color: #A6E3A1;">env</span><span style="color: #F5C2E7;">.</span><span style="color: #A6E3A1;">sample </span><span style="color: #F5C2E7;">./</span><span style="color: #94E2D5;">.</span><span>env</span></span>
+<span class="giallo-l"><span>vim</span><span style="color: #94E2D5;"> ./.</span><span>env</span></span></code></pre>
+<p><img src="/images/img_67dec9768befbadc.png" alt="" /></p>
+<p><img src="/images/img_feaaf1337c0c476c.jpg" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>postgres</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//myyrakle:[password]@[localhost]:[5432]/[database_name]</span></span></code></pre>
+<p>디젤을 돌려서 마이그레이션을 수행한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>diesel migration run</span></span></code></pre>
+<p><img src="/images/img_095bec8ecf61f4dd.png" alt="" /></p>
+<p>그 다음엔 로컬인덱스란걸 초기화해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">./</span><span>script</span><span style="color: #94E2D5;">/</span><span>init</span><span style="color: #94E2D5;">-</span><span>local</span><span style="color: #94E2D5;">-</span><span>index</span><span style="color: #94E2D5;">.</span><span>sh</span></span></code></pre>
+<p><img src="/images/img_84fc2e9cf929e423.png" alt="" />
+이건 뭔지 잘 모르겠다.</p>
+<p>그럼 이제 실행만 하면 된다.</p>
+<p><img src="/images/img_93f482c222e22a6d.png" alt="" /></p>
+<p>백그라운드로 돌리고 싶다면 이렇게 넣어주자</p>
+<p><img src="/images/img_fdeb311f087db3c2.png" alt="" /></p>
+<br>
+<br>
+<h2 id="peuronteuendeu-gucug">프론트엔드 구축</h2>
+<p>프론트엔드는 nodejs와 npm, pnpm이 필요하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get install nodejs npm</span><span style="color: #94E2D5;"> -</span><span>y</span></span>
+<span class="giallo-l"><span>sudo npm install</span><span style="color: #94E2D5;"> -</span><span>g pnpm</span></span></code></pre>
+<p><img src="/images/img_b0da7f5b5e2fc0d4.png" alt="" /></p>
+<p>그리고 실행해주면 되는데</p>
+<p><img src="/images/img_92680f5bb3f4230b.png" alt="" />
+노드 버전이 낮으면 pnpm이 안돌기도 한다.</p>
+<p>그럼 이렇게 올려준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo npm cache clean</span><span style="color: #94E2D5;"> -</span><span>f</span></span>
+<span class="giallo-l"><span>sudo npm install</span><span style="color: #94E2D5;"> -</span><span>g n</span></span>
+<span class="giallo-l"><span>sudo n stable</span></span></code></pre>
+<p>종속성 받고</p>
+<p><img src="/images/img_35f191e173154e38.png" alt="" /></p>
+<p>다시 실행해주면 된다.</p>
+<p><img src="/images/img_0a951543dc74ea6f.png" alt="" /></p>
+<p>그럼 이렇게 접속이 가능해질 것이다.</p>
+<p><img src="/images/img_511d4069cd4eabad.png" alt="" /></p>
+<p><img src="/images/img_ddabd0121046ce5e.png" alt="" /></p>
+<br>
+<br>
+<h2 id="github-rogeuin-yeondong">Github 로그인 연동</h2>
+<p>crates는 로그인 방식이 github 뿐이라서 인증을 사용하려면 연동을 따로 해줘야 한다.</p>
+<p>깃헙 개발자세팅 -&gt; Oauth로 가서, 앱 등록을 해준다.</p>
+<p><img src="/images/img_4876fe8ec70523ed.png" alt="" />
+이런식으로 넣어주면 된다.</p>
+<br>
+<p><img src="/images/img_33db81ca5e658af8.png" alt="" />
+그리고 만들어지는 클라이언트 ID와, 시크릿을 새로 만들어서</p>
+<br>
+<p><img src="/images/img_dd5332765997d36c.png" alt="" />
+서버 env에 넣어준다.</p>
+<br>
+<p><img src="/images/img_9c889f87fb518e8c.png" alt="" />
+그럼 이렇게 연동이 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="saseol-seobeo-sayonghagi">사설 서버 사용하기</h2>
+<p>프로젝트나 전역 경로에 .cargo/config.toml 파일을 만들어서 url을 집어넣는다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[registries]</span></span>
+<span class="giallo-l"><span>my</span><span style="color: #94E2D5;">-</span><span>registry</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> index</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;http://...:8080/git/index&quot;</span><span style="color: #9399B2;"> }</span></span></code></pre>
+<p><img src="/images/img_59f6697386e56233.png" alt="" /></p>
+<p>그리고 땡겨쓸때는 이렇게 위에서 등록한 레지스트리명을 써주면 끝이다.</p>
+<p><img src="/images/img_7e611ec7569069d3.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://doc.rust-lang.org/cargo/reference/registries.html">https://doc.rust-lang.org/cargo/reference/registries.html</a><br />
+<a rel="external" href="https://www.reddit.com/r/rust/comments/l0bcmz/whats_the_best_way_to_run_a_private_cargo_registry/">https://www.reddit.com/r/rust/comments/l0bcmz/whats_the_best_way_to_run_a_private_cargo_registry/</a><br />
+<a rel="external" href="https://github.com/caeg-industries/crates.io-terraform">https://github.com/caeg-industries/crates.io-terraform</a><br />
+<a rel="external" href="https://github.com/rust-lang/crates.io">https://github.com/rust-lang/crates.io</a><br />
+<a rel="external" href="https://github.com/rust-lang/crates.io/blob/master/docs/CONTRIBUTING.md">https://github.com/rust-lang/crates.io/blob/master/docs/CONTRIBUTING.md</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222904069240/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[SEO] 미리보기 띄우기 (Open Graph)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222903866042/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>왜 러스트인가?.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

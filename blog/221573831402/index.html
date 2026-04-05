@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C] 인라인 어셈블리 사용 in gcc | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221573831402/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C] 인라인 어셈블리 사용 in gcc">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221573831402/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-06-29T00:00:00+00:00">
+    <meta property="article:tag" content="C">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221573831402/">[C] 인라인 어셈블리 사용 in gcc</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-06-29T00:00:00+00:00"><time datetime="2019-06-29T00:00:00+00:00">2019.06.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="327 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221573831402" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>다른건 모르겠는데 일단 gcc에서 asm 구문은 다음과 같은 형식을 가진다.</p>
+<p><strong>asm</strong><br />
+(<br />
+    "어셈블리 구문;"<br />
+    "어셈블리 구문2;"<br />
+    "어셈블리 구문3"...<br />
+    : "출력변수 명시"(변수), "출력 명시2"(변수2)...<br />
+    : "입력변수 명시"(변수), "입력 명시2"(변수2)...<br />
+    : "사용 레지스터 명시"<br />
+)</p>
+<p>어셈블리 구문에는 말 그대로 어셈블리 명령어를 쓰면 된다. 유의할점은, eax같은 범용레지스터엔 %를 두개 붙여서 %%eax로 표시해야한단거다. 포맷문자때문이다.</p>
+<p>출력변수에는 쓰기 작업의 대상이 될 C 프로그램의 변수를 명시한다.<br />
+비슷하게 입력변수는 읽기전용 변수를 명시한다.</p>
+<p>그리고 마지막 부분에는 어셈 구문에서 eax 같은 특수 레지스터를 사용했을 경우, 그걸 명시해서 충돌을 방지하도록 한다. 여긴 % 하나만 붙여도 되고, 여러개일 경우 문자열 내에서 콤마로 구문한다.</p>
+<p>from이라는 정수형 변수의 값을 to라는 변수로 이동시키는 간단한 인라인 구문을 작성해보도록 하겠다.<br />
+ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ<br />
+#include &lt;stdio.h&gt;<br />
+#include &lt;stdlib.h&gt;</p>
+<p>int main()<br />
+{<br />
+int from = 1234;<br />
+int to;</p>
+<p>     <strong>asm</strong> <strong>volatile</strong><br />
+     (<br />
+"mov %0, %1;"<br />
+          : "=r"(to) //to는 출력변수. 0번 레지스터<br />
+          : "r"(from) //from은 입력변수. 1번<br />
+     );</p>
+<p>printf("음 %d", to);<br />
+}<br />
+ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ</p>
+<p>출력문부터 보자.<br />
+: "=r"(to)<br />
+출력변수로는 to를 지정했고, 문자열 표현식에는 "=r"라고 쓰여있다. =은 쓰기작업을 할 수 있다는 뜻이고, r은 일반 레지스터에 할당한다는 뜻이다.<br />
+이 둘 말고도 표현이 되게 많은데, 맨 아래 참조 링크를 찾아보길 바란다.</p>
+<p>여튼 이렇게 할당한 변수는 어셈 구문에서 선언한 순서대로 %0, %1, ...로 가져다 쓸 수 있다. 여분 레지스터에 알아서 잘 깔아주는것같다.<br />
+여기선 to가 %0에 할당된다.</p>
+<p>: "r"(from)<br />
+입력문도 비슷하다. r은 일반 레지스터에 두란 뜻이고, 아무것도 없으면 읽기전용이란거다.<br />
+여기서 from은 %1에 할당된다.</p>
+<p>여기선 특수 레지스터들을 쓰지 않아서 맨 아래에 있어야할 레지스터 명시 부분이 없다.</p>
+<p>그다음에 어셈 명령문을 봐보자<br />
+"mov %0, %1;"<br />
+이건 뭐 별거없다.<br />
+아까 넣어뒀던 %1(from)값을 %0(to)에 집어넣으란 뜻이다.</p>
+<p>설명은 다 됐으니 이제 한번 돌려보자.<br />
+실행환경은 리눅스에, 아마 32비트일거다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+그럼 이렇게 잘 나올것이다.<br />
+아 그리고 나는 <strong>asm</strong> 옆에다 <strong>volatile</strong> 키워드를 붙였는데, 이건 저 어셈구문을 제멋대로 최적화하지 말고 그대로 붙이라는 뜻이다.<br />
+컴파일러가 막 고치게 냅두다보면 버그도 날수있고 목적한 것과 다른 코드가 나올 수도 있다고 한다.</p>
+<p>응용하면 함수도 막 갖다쓸수있다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<br>
+<br>
+<p>참고<br />
+<a rel="external" href="https://www.joinc.co.kr/w/Site/Embedded/Documents/LinuxKernelStudyForSystemenginer/app3.basic.html">https://www.joinc.co.kr/w/Site/Embedded/Documents/LinuxKernelStudyForSystemenginer/app3.basic.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221573316157/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Kotlin] 타입의 확인과 변환<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221572524435/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 타입을 println!에 들어가게 만들어보기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

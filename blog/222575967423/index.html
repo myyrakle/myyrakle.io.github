@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] RDS: 복제본 만들기 (Aurora) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222575967423/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] RDS: 복제본 만들기 (Aurora)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222575967423/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-11-23T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222575967423/">[AWS] RDS: 복제본 만들기 (Aurora)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-11-23T00:00:00+00:00"><time datetime="2021-11-23T00:00:00+00:00">2021.11.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="225 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222575967423" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>본 포스트에서는 AWS RDS Aurora에서 복제본을 만들고 사용하는 법을 간단히 다뤄본다.</p>
+<p>개발과 시스템의 운영을 동시에 하다보면, 개발환경과 서비스환경의 분리가 중요해진다.</p>
+<p>개발환경에서는 당연히 이런저런 시도나 변경사항들이 빈번하게 일어나는 법인데, 이런 일들은 당연히 서비스의 입장에서는 위험천만한 일들이기 때문이다.</p>
+<p>다행스럽게도 RDS Aurora는 이런 상황을 위해서 이런저런 편리한 기능들을 잘 갖춰놓은 편이다.<br />
+다만 Aurora가 아닌 일반 RDS는 이런 기능이 따로 없어서 좀 번잡한 절차를 걸쳐야 한다. S3에 스냅샷을 뽑고, 그 스냅샷으로 다시 RDS를 만들어주고...<br />
+그래서 가급적이면 오로라를 쓰는 것을 권장한다.</p>
+<p>테스트 환경은 Aurora MySQL이나, PostgreSQL도 사용법은 별 차이가 없다.</p>
+<p><img src="/images/img_66f348b5bf80b645.png" alt="" />
+일단 메인 DB를 하나 만들어주겠다.</p>
+<p>내 돈은 소중하기 때문에 가장 낮은 t2.small로 인스턴스를 생성했다.</p>
+<p><img src="/images/img_0568ee80e5583c7c.png" alt="" /></p>
+<p>그리고 아래와 같이 간단한 테이블 하나와 데이터를 좀 넣어줬다.</p>
+<p><img src="/images/img_c45497cde5604e9d.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create database test</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>insert into test</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">person</span><span>(name</span><span style="color: #9399B2;">,</span><span> age)</span></span>
+<span class="giallo-l"><span>values </span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;john&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 13</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;홍길동&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 23</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;사문명&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 17</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;차이코프스키&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 25</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;Henry&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 40</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>(</span><span style="color: #A6E3A1;">&#39;소말리아&#39;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 33</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TABLE test</span><span style="color: #94E2D5;">.</span><span style="color: #A6E3A1;">`person`</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  `id`</span><span style="color: #89B4FA;font-style: italic;"> int</span><span>(</span><span style="color: #FAB387;">11</span><span>) NOT NULL AUTO_INCREMENT</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  `name`</span><span style="color: #89B4FA;font-style: italic;"> varchar</span><span>(</span><span style="color: #FAB387;">100</span><span>) DEFAULT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  `age`</span><span style="color: #89B4FA;font-style: italic;"> int</span><span>(</span><span style="color: #FAB387;">11</span><span>) DEFAULT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  PRIMARY</span><span style="color: #89B4FA;font-style: italic;"> KEY</span><span> (</span><span style="color: #A6E3A1;">`id`</span><span>)</span></span>
+<span class="giallo-l"><span>) ENGINE</span><span style="color: #94E2D5;">=</span><span>InnoDB AUTO_INCREMENT</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">7</span><span> DEFAULT CHARSET</span><span style="color: #94E2D5;">=</span><span>utf8</span><span style="color: #9399B2;">;</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="bogjebon-saengseong">복제본 생성</h2>
+<p>그럼 이제 저 DB에 대한 개발&amp;테스트용 복제본을 만들어보자.<br />
+복제할 DB를 선택하고 복제본 생성을 누른다.</p>
+<p><img src="/images/img_cd6d6e68bc31f7cc.png" alt="" /></p>
+<p>그럼 다음과 같이 데이터베이스 생성창이 뜨는데</p>
+<p><img src="/images/img_dcb24c1704bd5f07.png" alt="" />
+그냥 DB를 만들때와 옵션이 거의 동일하다.<br />
+필요한대로 맞춰주고 생성한다.</p>
+<p>그럼 아래와 같이 인스턴스가 새로 만들어질 것이다.</p>
+<p><img src="/images/img_d03efc262a6a5cc8.png" alt="" /></p>
+<p>열어서 안을 들여다보면</p>
+<p><img src="/images/img_24f1bc4cc813a325.png" alt="" />
+원본의 데이터가 그대로 옮겨져있다.</p>
+<p>그리고 이 복제본은 복제를 한 시점에서 원본과 격리되어있기 때문에, 뭘 쓰더라도 그게 원본에 영향을 주지는 않는다.<br />
+복제에 데이터를 넣고</p>
+<p><img src="/images/img_c629e410da8459ef.png" alt="" /></p>
+<p>원본을 보더라도, 그게 동기화되어있지는 않을 것이다.</p>
+<p><img src="/images/img_8209e987c86d5bf4.png" alt="" />
+반대도 마찬가지다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonRDS/latest/AuroraUserGuide/Aurora.Managing.Clone.html">https://docs.aws.amazon.com/ko_kr/AmazonRDS/latest/AuroraUserGuide/Aurora.Managing.Clone.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222581307134/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[GCP] Google Cloud Functions<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222576013561/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] RDS: RDS Proxy<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

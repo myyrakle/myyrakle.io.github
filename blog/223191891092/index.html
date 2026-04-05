@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] atlas search | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223191891092/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] atlas search">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223191891092/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-08-24T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223191891092/">[MongoDB] atlas search</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-24T00:00:00+00:00"><time datetime="2023-08-24T00:00:00+00:00">2023.08.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="389 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223191891092" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>atlas에서는 Elasticsearch와 유사한 구조와 경험을 가지는 search 전용 시스템을 제공한다.</p>
+<p>Elasticsearch처럼 Lucene을 기반으로 형태소 분석을 처리하며, 동의어(synonym), score 기반의 검색 기능 등을 제공한다. 그리고 범용 DB에서 감당하기 힘든 복잡한 필터나 정렬에 대해서도 준수한 성능을 보장한다.</p>
+<p>mongoDB 데이터를 기반으로 바로 생성해서 사용할 수 있다는게 큰 장점이다. 귀찮게 로그스태시 띄워서 동기화 시키고 그러지 않아도 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="gujo">구조</h2>
+<p>Atlas search는 이런 구조를 가진다.</p>
+<p><img src="/images/img_a02ca6e0adf158e7.png" alt="" /></p>
+<p>뒷단에 mongot를 비롯한 백그라운드 시스템을 추가하고, 이를 통해 데이터가 변경될때마다 search 인덱스에 동기화를 시켜준다.<br />
+그리고 유저는 search 인덱스를 통해 값을 검색해서 사용한다.</p>
+<p>딱히 특이할건 없는 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="search-index-saengseong">search index 생성</h2>
+<p>먼저 인덱스를 만들어야 한다.</p>
+<p><img src="/images/img_6656fcb2cd01822a.png" alt="" />
+클러스터 메인페이지에 뜨는 저걸 누르거나</p>
+<br>
+<p><img src="/images/img_ae935f6d149c7510.png" alt="" />
+클러스터 search 탭의 저 버튼을 누른다.</p>
+<br>
+<p><img src="/images/img_719d38c12204786c.png" alt="" />
+비주얼 에디터</p>
+<br>
+<p><img src="/images/img_9bba44604f2dc11c.png" alt="" />
+여기서 인덱싱할 테이블을 선택한다.</p>
+<br>
+<p><img src="/images/img_8c9a3ed7c51cc189.png" alt="" />
+그러면 이런 형태로 구성이 뜨는데</p>
+<br>
+<p><img src="/images/img_5f59ce7e05426cc0.png" alt="" />
+refine...을 누르면 커스텀을 해줄 수 있다. 일단 기본설정으로 가보겠다.</p>
+<br>
+<p><img src="/images/img_39b6a801f5bc1507.png" alt="" />
+생성하면 이렇게 인덱스가 추가될 것이고</p>
+<br>
+<p><img src="/images/img_2a5b6f264f3b1867.png" alt="" />
+좀 기다리면 활성화가 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="geomsaeghaebogi">검색해보기</h2>
+<p>기존에 text 인덱스만을 쓸때는 직접 인덱스를 만들고, $text 등의 필터 절을 통해 필터링을 수행했다.</p>
+<p><img src="/images/img_da256ac6436b78a3.png" alt="" />
+<a rel="external" href="https://blog.naver.com/sssang97/222987710006">https://blog.naver.com/sssang97/222987710006</a><br />
+하지만 atlas search에서는 $search라는 전용 필드를 통해 필터링을 수행한다.</p>
+<p>만들어진 search index 탭에서 바로 쿼리를 날려볼 수 있는데</p>
+<p><img src="/images/img_1479ca6b31c7ad90.png" alt="" />
+저 쿼리는 name 필드가 "불닭볶음면"인 필드만 검색해서 반환하는 간단한 쿼리다.</p>
+<p>그리고 기존 mongoDB api를 통해서도 사용할 수가 있다. aggregate 함수에 대해서 적용할 수가 있는데</p>
+<p><img src="/images/img_75403df8e0e4f576.png" alt="" />
+이렇게 $search라고 atlas search만을 위해 예약된 필드가 있다.<br />
+아마 altas 밖에서는 유효하지 않을 것이다.</p>
+<p>검색에 대한 더 상세한 내용은 별도 포스트로 정리해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="indegseu-maeping">인덱스 매핑</h2>
+<p>별다른 설정을 주지 않고 인덱스를 만들면 이런식으로 구성이 될 것이다.</p>
+<p><img src="/images/img_8e17e8c3216076e4.png" alt="" />
+이러면 알아서 모든 필드에 대해서 인덱싱을 해주는데, 성능적으로는 비효율적인 부분이 크다.<br />
+디스크도 훨씬 많이 먹고, 인덱싱 성능도 떨어진다고 한다.</p>
+<p>그래서 안정적으로 쓰려면 이렇게, dynamic 매핑을 끄고 정적으로 매핑해야 한다.</p>
+<p><img src="/images/img_5100ad6e9e42d8df.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.mongodb.com/docs/atlas/atlas-search/">https://www.mongodb.com/docs/atlas/atlas-search/</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/atlas/atlas-search/atlas-search-overview/">https://www.mongodb.com/docs/atlas/atlas-search/atlas-search-overview/</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/reference/operator/aggregation/search/">https://www.mongodb.com/docs/manual/reference/operator/aggregation/search/</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/atlas/atlas-search/define-field-mappings/">https://www.mongodb.com/docs/atlas/atlas-search/define-field-mappings/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223192848891/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] time-series 컬렉션<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223190868228/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[MongoDB] Atlas로 시작하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

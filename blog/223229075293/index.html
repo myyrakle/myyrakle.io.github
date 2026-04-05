@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] VPC PrivateEndpoint: Atlas &lt;-&gt; AWS | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223229075293/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] VPC PrivateEndpoint: Atlas <-> AWS">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223229075293/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-10-05T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223229075293/">[MongoDB] VPC PrivateEndpoint: Atlas &lt;-&gt; AWS</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-05T00:00:00+00:00"><time datetime="2023-10-05T00:00:00+00:00">2023.10.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="354 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223229075293" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223095893226">https://blog.naver.com/sssang97/223095893226</a></p>
+<p>Atlas에서 별도 AWS 계정과 피어링+Private Endpoint를 통해 직접 VPC 내 통신을 할 수 있게 설정하는 방법을 정리한다.</p>
+<p>Private Endpoint를 사용하려면 먼저 피어링이 필요하다.<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/223291033247">https://m.blog.naver.com/sssang97/223291033247</a></p>
+<p>Atlas에서 AWS로 클러스터를 띄울때만 적용 가능하다. cross-cloud는 불가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="private-endpoint-mandeulgi">Private Endpoint 만들기</h2>
+<p>우선 네트워크 액세스 탭으로 이동한다.</p>
+<p><img src="/images/img_2603339f1489c8b4.png" alt="" /></p>
+<p>여기로 이동해서</p>
+<p><img src="/images/img_f32749c26f63f8ed.png" alt="" /></p>
+<p>추가창 모달 띄우고</p>
+<p><img src="/images/img_1ebb686b1e594974.png" alt="" />
+리전 선택하고</p>
+<br>
+<p><img src="/images/img_dac47d16d03f1840.png" alt="" />
+엔드포인트를 생성할 vpc와 서브넷을 선택한다.</p>
+<p>그리고 저 자동 생성 cli 코드를 내 aws 계정에서 실행해서 엔드포인트를 생성한다.<br />
+cloudshell로 들어가서 날리면 편하다.</p>
+<p><img src="/images/img_8f3ce78fbe46825a.png" alt="" /></p>
+<p>그럼 이런식으로 엔드포인트 신청이 날라올 것이다.</p>
+<p><img src="/images/img_931e68a25e1dd659.png" alt="" /></p>
+<p><img src="/images/img_252aeb62364770ba.png" alt="" />
+이건 양방향에서 수락을 해줘야 연결되는 거라서, 수락 대기중으로만 뜬다.<br />
+수락을 하면 그때부터 활성화가 될 것이다.</p>
+<p>다시 atlas로 돌아와서 vpc 엔드포인트 id를 넣어준다.</p>
+<p><img src="/images/img_fd0d7773fed73a1d.png" alt="" /></p>
+<br>
+<p><img src="/images/img_ae5f6bbfd113f6c6.png" alt="" />
+그래서 이렇게 잘 되면</p>
+<p><img src="/images/img_2719d06addd159c7.png" alt="" />
+altas에서도 이렇게 노출될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="pieoring-mandeulgi">피어링 만들기</h2>
+<p>피어링 탭으로 이동해서 Add 버튼 클릭</p>
+<p><img src="/images/img_5f584c4a42178ce0.png" alt="" /></p>
+<p>aws 선택</p>
+<p><img src="/images/img_d7e5ca76da581fb4.png" alt="" /></p>
+<p>연결할 계정 번호, vpc ID, vpc cidr를 입력한다.</p>
+<p><img src="/images/img_fe58d29c00b443fc.png" alt="" /></p>
+<p>그럼 이렇게 데이터가 추가되고</p>
+<p><img src="/images/img_bd0e9b2620bae422.png" alt="" /></p>
+<p>대기상태가 될 것이다.</p>
+<p><img src="/images/img_91100525f8f7dd31.png" alt="" />
+aws에 들어가면 피어링 신청이 뜰 것이고</p>
+<p><img src="/images/img_2c59c4b37bebe683.png" alt="" /></p>
+<p>수락 후, DNS 확인 옵션 저거를 활성화해주면</p>
+<p><img src="/images/img_e7ef56976655fd74.png" alt="" /></p>
+<p>다 된 것이다.</p>
+<p><img src="/images/img_92359cb35844a61b.png" alt="" />
+이렇게 뜨면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="privatelinkreul-tonghan-mongodb-jeobsog">PrivateLink를 통한 MongoDB 접속</h2>
+<p>이제 privatelink를 달아놓은 서브넷에 한해서는, peering을 통해서 통신을 할 수 있다.</p>
+<p>유의할 점은, privatelink를 달아놓은 서브넷에서 mongoDB에 접속하려 하면 무조건 privatelink를 통해 접근이 되고, 달아놓지 않은 서브넷에서 접속하려 하면 privatelink를 타지 않고 public으로 접근이 된다는 것이다.</p>
+<p>그래서 달아놓지 않은 서브넷에서는 평소처럼 기본 url로 접속을 하면 되는데, 달아놓은 서브넷에서는 무조건 privatelink로 접속을 해야 한다.</p>
+<p>privatelink용 엔드포인트는 클러스터에서 connect를 눌러서</p>
+<p><img src="/images/img_d13db35365cd9b13.png" alt="" />
+여기서 Private endpoint를 눌러서 진입하면</p>
+<br>
+<p><img src="/images/img_2908d01f49360675.png" alt="" />
+이렇게 알려준다.<br />
+보통 기존 호스트에 pl-0가 뒤에 붙은 형태로 준다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.mongodb.com/docs/atlas/security-vpc-peering/#in-configure-your-network-peering-connection">https://www.mongodb.com/docs/atlas/security-vpc-peering/#in-configure-your-network-peering-connection</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/atlas/security-private-endpoint/">https://www.mongodb.com/docs/atlas/security-private-endpoint/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223228452260/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[MongoDB] Change Stream: Watch<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223227438583/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>gova v0.2.0<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Go] 끔찍한 Receiver Name Rule | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223170253876/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Go] 끔찍한 Receiver Name Rule">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223170253876/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-07-30T00:00:00+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223170253876/">[Go] 끔찍한 Receiver Name Rule</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-07-30T00:00:00+00:00"><time datetime="2023-07-30T00:00:00+00:00">2023.07.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="280 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223170253876" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>그냥 내 불평불만을 써놓은 글이다.</p>
+<p>일단 고퍼들은 이상할 정도로 대충 지은 이름에 관대하다.</p>
+<p>언어를 초월해서 변수명은 축약 없이 명확하게 짓자는게 합의가 된 상황에도 불구하고, 대충 축약한 변수명을 남발하는 문화가 만연하다. context를 ctx로 줄이는건 예사고, SomethingFunctionFactory 같은 긴 타입의 변수도 그냥 sff 같은 식으로 대충 치고 지나가는 경우가 매우 많다.</p>
+<p>그건 그렇다고 치자. 근데 리시버 네임 룰에 대해서도 이상한 자기들만의 규칙을 갖고 있다.<br />
+Go에서는 아래와 같은 형태로 메서드를 정의하는데</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">func</span><span> (st SomeType)</span><span style="color: #89B4FA;font-style: italic;"> DoSomething</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // ...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>사실 저 (st SomeType)는 다른 언어에서의 this 바인딩과 크게 다를 것이 없다.<br />
+파이썬의 self, 러스트의 self와도 사실상 동등한 기능이다.</p>
+<p>그럼에도 불구하고 Go 표준 컨벤션 가이드에서는 그냥 변수처럼 정의하라고만 강요한다. 린터에서도 팬다.<br />
+<a rel="external" href="https://github.com/golang/go/wiki/CodeReviewComments#receiver-names">https://github.com/golang/go/wiki/CodeReviewComments#receiver-names</a><br />
+이에 대해서 별다른 실용적인 근거는 없다. 그럴듯하게 써놨지만 실속은 없다.<br />
+그냥 하지 말라는 것이다.</p>
+<p>온갖 축약으로 가득한 식별자 지옥으로 가득찬 이 코드가 괜찮아 보이나?</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">func</span><span> (sir ShopImageResource)</span><span style="color: #89B4FA;font-style: italic;"> ProcessImage</span><span>(mr MachineRange) float64</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	switch</span><span> sir</span><span style="color: #94E2D5;">.</span><span>Vls</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>Some:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>To:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">2</span><span>)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">3</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>Tree:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">3</span><span>)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>Apple:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">5</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>FooBar:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(self</span><span style="color: #94E2D5;">.</span><span>Width)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(self</span><span style="color: #94E2D5;">.</span><span>Height)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	default</span><span>:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>아니면 그냥 self나 this로 컨텍스트를 정의한 것이 나아보이나?</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">func</span><span> (self ShopImageRatioOption)</span><span style="color: #89B4FA;font-style: italic;"> ProcessImage</span><span>(mr MachineRange) float64</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	switch</span><span> sir</span><span style="color: #94E2D5;">.</span><span>Vls</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>Some:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>To:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">2</span><span>)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">3</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>Tree:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">3</span><span>)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>Apple:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">4</span><span>)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(</span><span style="color: #FAB387;">5</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	case</span><span> mr</span><span style="color: #94E2D5;">.</span><span>FooBar:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(self</span><span style="color: #94E2D5;">.</span><span>Width)</span><span style="color: #94E2D5;"> /</span><span style="color: #89B4FA;font-style: italic;"> float64</span><span>(self</span><span style="color: #94E2D5;">.</span><span>Height)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	default</span><span>:</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		return</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>리시버는 사실상 해당 함수 영역에서는 고유한 기능을 하기 때문에, 온갖 변수를 뒤섞기보단 고유한 식별자를 하나 정해서 사용하는 것이 보기 좋다.</p>
+<p>그래서 나는 this나 self 같은 고유한 키워드로 정의를 하는 편이 더 직관적이고 생산성과 가독성이 뛰어나다고 주장하겠다.<br />
+대관절 저따위로 코드를 짤 이유가 어디에 있단 말인가?</p>
+<p>Go 커뮤니티는 항상 자기들이 실용적이라고 주장하지만, 사실은 자기들만의 아집에 갇혀있는 부분이 상당히 많다고 느낀다.</p>
+<p>스택오버플로에 들어가면 이에 대한 논쟁이 좀 있다.<br />
+<a rel="external" href="https://stackoverflow.com/questions/23482068/in-go-is-naming-the-receiver-variable-self-misleading-or-good-practice">https://stackoverflow.com/questions/23482068/in-go-is-naming-the-receiver-variable-self-misleading-or-good-practice</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/23482068/in-go-is-naming-the-receiver-variable-self-misleading-or-good-practice">https://stackoverflow.com/questions/23482068/in-go-is-naming-the-receiver-variable-self-misleading-or-good-practice</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223169716410/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Amazon MQ: RabbitMQ<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223168104952/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Github] Copilot Chat (Beta)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

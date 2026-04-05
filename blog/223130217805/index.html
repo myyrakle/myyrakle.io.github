@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Unit of Work 패턴 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223130217805/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Unit of Work 패턴">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223130217805/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-06-16T00:00:00+00:00">
+    <meta property="article:tag" content="패턴">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223130217805/">Unit of Work 패턴</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-06-16T00:00:00+00:00"><time datetime="2023-06-16T00:00:00+00:00">2023.06.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="265 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/paeteon/">패턴</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223130217805" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Unit of Work(이하 UoW)는 서비스 레이어와 레포지터리 레이어 사이에 들어가는 또다른 레이어 패턴이다.</p>
+<p>웹서버에서 다음과 같은 레이어 구조에 대해 이해하고 있다고 가정한다.</p>
+<p><img src="/images/img_c1120a5ed452f5ee.jpg" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="weonjaseong-atomic">원자성 (Atomic)</h2>
+<p>UoW의 주요 목적과 용도는 I/O 작업에 대한 원자성에 있다.</p>
+<p>쉽게 말하면, RDB에서 단일 트랜잭션 단위에 여러가지 연산을 묶어서 사용할 때가 많을 것이다.<br />
+특히 일부만 실패하더라도 그 수정사항 전체를 rollback해야 할 경우 말이다.</p>
+<p>UoW는 그런 트랜잭션 단위의 commit과 rollback을 처리하는 껍데기 객체를 만들어서 쓰는 것이다.</p>
+<p>그림으로 표현하면 이렇다.</p>
+<p><img src="/images/img_dc237e01b651f524.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="sayongrye-node-js-sequelize">사용례 (Node.js + Sequelize)</h2>
+<p>Nest.js + Sequelize에서 UoW 패턴을 구현해서 적용하는 예시를 보여보겠다.<br />
+UoW를 사용하지 않는다면 다음과 같이 레이어를 구성할 수 있을 것이다.</p>
+<p>레포지토리가 있고, 서비스가 바로 레포지토리를 갖다쓴다.</p>
+<p><img src="/images/img_d856e407bd491a01.png" alt="" />
+하지만 이 코드에는 원자성에 대한 반영이 되어있지 않다.<br />
+저 서비스에서 하나라도 삐끗한다면 어쩌겠는가?</p>
+<p>저기서 그냥 트랜잭션을 추가한다면, 이런식으로 해볼 수 있을 것이다.<br />
+레포지토리 메서드에서는 명시적으로 트랜잭션을 전달받고,</p>
+<p><img src="/images/img_ee777f48d9da34b6.png" alt="" /></p>
+<p>서비스에서는 명시적으로 트랜잭션을 생성해서 주입한다.</p>
+<p><img src="/images/img_936ab750252153e3.png" alt="" />
+이 방법은 그럭저럭 쓸만하지만, 그리 세련된 모양새는 아니다.<br />
+트랜잭션 자체는 사실 데이터와 I/O에 직접적으로 연관된 기능인데, 그걸 서비스에서 하고 있으니 말이다.</p>
+<p>보다 바람직한 형태는 UoW 레이어를 추가해서 트랜잭션에 대한 처리를 추상화하고 분리하는 것이다.<br />
+이런 식으로 만들 수 있다.</p>
+<p><img src="/images/img_3852df3884ff82df.png" alt="" />
+커밋과 롤백에 대한 처리를 수행하고, 레포지토리를 트랜잭션 기반으로 생성해주는 유틸성 객체가 됐다.</p>
+<p>그래서 레포지토리는 트랜잭션 객체를 전달받아야 하고</p>
+<p><img src="/images/img_45afa0aad17b58e8.png" alt="" /></p>
+<p>서비스는 이제 UoW를 통해 레포지토리에 액세스하게 된다.</p>
+<p><img src="/images/img_239f860762766735.png" alt="" />
+조금 더 간결해질뿐만 아니라, 단위테스트를 구성할 때에도 UnitOfWork의 Fake Object 버전을 구현해서 교체하면 된다는 장점이 있다.</p>
+<p>아래는 UoW에 대한 부분코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">export interface</span><span style="color: #F9E2AF;font-style: italic;"> IUnitOfWork</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  start</span><span style="color: #9399B2;">()</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;"> void</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  complete</span><span style="color: #9399B2;">(</span><span style="color: #89B4FA;font-style: italic;">work</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> ()</span><span style="color: #CBA6F7;"> =&gt; void</span><span style="color: #9399B2;">)</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> Promise</span><span style="color: #89DCEB;">&lt;</span><span style="color: #CBA6F7;">void</span><span style="color: #89DCEB;">&gt;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  getRepository</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">T</span><span style="color: #89DCEB;">&gt;</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">R</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;"> new</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">transactionManager</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;"> any</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #F9E2AF;font-style: italic;"> T</span><span style="color: #9399B2;">)</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> T</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #FAB387;">@</span><span style="color: #89B4FA;font-style: italic;">Injectable</span><span style="color: #FAB387;">()</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">export class</span><span style="color: #F9E2AF;font-style: italic;"> UnitOfWork</span><span style="color: #CBA6F7;"> implements</span><span style="color: #F9E2AF;font-style: italic;"> IUnitOfWork</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  constructor</span><span style="color: #9399B2;">(</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">    @</span><span style="color: #89B4FA;font-style: italic;">Inject</span><span style="color: #FAB387;">(</span><span style="color: #A6E3A1;">&#39;SEQUELIZE&#39;</span><span style="color: #FAB387;">)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    private</span><span style="color: #EBA0AC;font-style: italic;"> sequelize</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> Sequelize</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  ) {}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  private</span><span> transaction</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> Transaction</span><span style="color: #94E2D5;"> |</span><span style="color: #F9E2AF;font-style: italic;"> undefined</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  async</span><span style="color: #89B4FA;font-style: italic;"> setTransactionManager</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #F38BA8;">    this</span><span style="color: #94E2D5;">.</span><span>transaction</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span style="color: #F38BA8;"> this</span><span style="color: #94E2D5;">.</span><span>sequelize</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">transaction</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  async</span><span style="color: #89B4FA;font-style: italic;"> start</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    await</span><span style="color: #F38BA8;"> this</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">setTransactionManager</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">  getRepository</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">T</span><span style="color: #89DCEB;">&gt;</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">R</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;"> new</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">transaction</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> Transaction</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #F9E2AF;font-style: italic;"> T</span><span style="color: #9399B2;">)</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> T</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> (</span><span style="color: #94E2D5;">!</span><span style="color: #F38BA8;">this</span><span style="color: #94E2D5;">.</span><span>transaction)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      throw</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Error</span><span>(</span><span style="color: #A6E3A1;">&#39;Unit of work is not started. Call the start() method&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> R</span><span>(</span><span style="color: #F38BA8;">this</span><span style="color: #94E2D5;">.</span><span>transaction)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  async</span><span style="color: #89B4FA;font-style: italic;"> complete</span><span style="color: #9399B2;">(</span><span style="color: #89B4FA;font-style: italic;">work</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> ()</span><span style="color: #CBA6F7;"> =&gt; void</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      await</span><span style="color: #89B4FA;font-style: italic;"> work</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      await</span><span style="color: #F38BA8;"> this</span><span style="color: #94E2D5;">.</span><span>transaction</span><span style="color: #94E2D5;">?.</span><span style="color: #89B4FA;font-style: italic;">commit</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> catch</span><span> (error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      await</span><span style="color: #F38BA8;"> this</span><span style="color: #94E2D5;">.</span><span>transaction</span><span style="color: #94E2D5;">?.</span><span style="color: #89B4FA;font-style: italic;">rollback</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">      throw</span><span> error</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">...</span></span></code></pre><br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://jideowosakin.com/unit-of-work-pattern-in-typescript/">https://jideowosakin.com/unit-of-work-pattern-in-typescript/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223130210585/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>의존성 주입 (Dependency Injection) 패턴<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223130760892/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Concurrency] 기본개념<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

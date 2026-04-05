@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] 컨테이너 디버깅 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223455571940/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] 컨테이너 디버깅">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223455571940/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-05-23T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223455571940/">[k8s] 컨테이너 디버깅</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-05-23T00:00:00+00:00"><time datetime="2024-05-23T00:00:00+00:00">2024.05.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="365 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223455571940" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>k8s 환경에서 뭘 굴리다보면 실제 파드, 컨테이너 환경에 대해서 실시간으로 뭔가를 확인해야 할 필요가 종종 있다.</p>
+<p><img src="/images/img_3f52e2d3078ce2d2.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="keonteineo-jeobsog">컨테이너 접속</h2>
+<p>컨테이너에 직접 접속해서 액션을 하려면, 다음과 같이 kubectl exec 명령을 사용하면 된다.<br />
+docker cli와 인터페이스가 거의 같다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl exec</span><span style="color: #94E2D5;"> -</span><span>it server</span><span style="color: #94E2D5;">-</span><span>name</span><span style="color: #94E2D5;"> /</span><span>bin</span><span style="color: #94E2D5;">/</span><span>sh</span></span></code></pre>
+<p><img src="/images/img_73c72d9e022dc867.png" alt="" />
+그러면 쉘로 진입해서 이런저런 작업들을 해볼 수 있게 된다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="keonteineo-naebueseo-myeongryeong-silhaeng">컨테이너 내부에서 명령 실행</h2>
+<p>꼭 들어가서 보는게 아니라도 ping이나 curl 같은 단발성 명령을 날리고 싶을 수도 있을 것이다.<br />
+그러면 이것도 exec 명령을 통해 처리할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl exec</span><span style="color: #94E2D5;"> -</span><span>it server</span><span style="color: #94E2D5;">-</span><span>name</span><span style="color: #94E2D5;"> --</span><span> 명령어</span><span style="color: #94E2D5;">...</span></span></code></pre>
+<p><img src="/images/img_de37b3bbbb32b650.png" alt="" />
+다만 유의할 점은, exec 명령은 컨테이너 내부에서 동작하는 것이기 때문에 호스트에 도구가 있더라도 컨테이너 내부에 없으면 사용할 수 없다는 것이다.<br />
+그래서 ping 같은게 이미지 내에 없으면 그냥 못쓴다.</p>
+<p><img src="/images/img_69dcda516d82b1b2.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="keonteineoe-pail-olmgigi">컨테이너에 파일 옮기기</h2>
+<p>컨테이너에 직접 실행파일이나 기타 테스트를 위한 파일을 옮겨서 확인을 해보는 방법도 있다.</p>
+<p>kubectl cp 명령을 사용하면 호스트 시스템의 파일을 컨테이너 내로 바로 복사할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl cp</span><span style="color: #94E2D5;"> /</span><span>usr</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>ping 파드명</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">/</span><span>usr</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span><span>ping</span></span></code></pre>
+<p><img src="/images/img_53ef9588209cacd6.png" alt="" />
+단, 실행파일의 경우에는 그냥 옮긴다고 해서 실행이 보장되지는 않는다는 점을 유의한다. 실행파일의 필요조건에는 .so 같은 별도의 악세서리들이 존재하기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="dibeoging-keonteineo-sayong">디버깅 컨테이너 사용</h2>
+<p>kubectl debug 기능을 사용하면 디버깅용 컨테이너를 띄워서 현황 조사에 응용할 수 있다.<br />
+Pod에는 여러개의 컨테이너를 띄울 수 있고, 각각의 컨테이너가 리소스를 공유한다는 점을 응용한 방법이다.</p>
+<p>그래서 top 같은 도구를 이용한 시스템 리소스 확인 같은 문제에는 사용할만하다.</p>
+<p>다음과 같이 사용하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl debug</span><span style="color: #94E2D5;"> -</span><span>it</span><span style="color: #94E2D5;"> --</span><span>container</span><span style="color: #94E2D5;">=</span><span>debug</span><span style="color: #94E2D5;">-</span><span>container</span><span style="color: #94E2D5;"> --</span><span>image</span><span style="color: #94E2D5;">=</span><span>alpine</span><span style="color: #94E2D5;"> --</span><span>target</span><span style="color: #94E2D5;">=</span><span>파드명 파드명</span></span></code></pre>
+<p><img src="/images/img_86f99fba1dec67af.png" alt="" />
+그럼 컨테이너가 바로 실행되고</p>
+<br>
+<p><img src="/images/img_1817b3fb56d1ec95.png" alt="" />
+기존 파드를 보면 컨테이너만 하나 추가로 붙어있는 것을 볼 수 있다.</p>
+<p>그럼 기본 alpine 환경으로 컨테이너가 떴으니까, 필요한거 설치하고 하면서 이래저래 둘러보면 된다.</p>
+<p><img src="/images/img_c893657d63b0f340.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="rogeu-hwaginhagi">로그 확인하기</h2>
+<p>파드, 컨테이너의 로그를 확인하려면 logs 명령을 사용한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl logs 파드명</span></span></code></pre>
+<p><img src="/images/img_fb1023fae347eb94.png" alt="" />
+근데 이렇게 하면 딱 그 시점에 나온 최근 로그만 잘라서 본다.</p>
+<p>실시간으로 로그를 계속 확인하고 싶다면 -f 플래그를 주면 된다.</p>
+<p><img src="/images/img_70247a0f28d68b6d.png" alt="" />
+로그를 다루는 방법에 대해서는 따로 상세하게 다뤄보겠다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_debug/">https://kubernetes.io/docs/reference/kubectl/generated/kubectl_debug/</a><br />
+<a rel="external" href="https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/">https://kubernetes.io/docs/tasks/debug/debug-application/debug-running-pod/</a><br />
+<a rel="external" href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_debug/">https://kubernetes.io/docs/reference/kubectl/generated/kubectl_debug/</a><br />
+<a rel="external" href="https://medium.com/datamindedbe/debugging-running-pods-on-kubernetes-2ba160c47ef5">https://medium.com/datamindedbe/debugging-running-pods-on-kubernetes-2ba160c47ef5</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223455424691/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] crictl<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223456054522/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] iterator 성능 벤치<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

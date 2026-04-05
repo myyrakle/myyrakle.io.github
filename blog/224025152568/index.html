@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Netbird, HAProxy로 패스스루 프록시 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224025152568/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Netbird, HAProxy로 패스스루 프록시 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224025152568/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-09-29T00:00:00+00:00">
+    <meta property="article:tag" content="Proxy">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224025152568/">Netbird, HAProxy로 패스스루 프록시 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-09-29T00:00:00+00:00"><time datetime="2025-09-29T00:00:00+00:00">2025.09.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="177 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/proxy/">Proxy</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224025152568" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_9c4e4aec00593d96.png" alt="" />
+프록시/로드밸런서가 필요하더라도, 일반적인 인프라에서는 사실 그냥 이런 단순한 구조로 충분하다.</p>
+<p>하지만 보안 구조나, 네트워크 구조의 한계로 저런 직통 통신이 불가능한 경우가 있을 수 있다.<br />
+그럴 때는 가운데 VPN 같은 네트워크 프록시를 써야하는 경우가 생긴다.</p>
+<p><img src="/images/img_da27804267640529.png" alt="" />
+이러면 저 내부 Server에 대해서는 외부망 inbound를 막은 채로 VPN을 통해서 자유롭게 통신할 수 있기 때문이다. 게다가 Server의 IP가 바뀌든 어떻든 유연하게 대처할 수 있게 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="netbird-seting-linux">Netbird 세팅 (Linux)</h2>
+<p>netbird를 세팅하는 법은 간단하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>fsSL https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//pkgs.netbird.io/install.sh | sh</span></span></code></pre>
+<p><img src="/images/img_ac03925bc37c8ddc.png" alt="" />
+일단 깔고</p>
+<p>up를 입력하면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>netbird up</span></span></code></pre>
+<p><img src="/images/img_fbd6c3a8538f3750.png" alt="" />
+임시 로그인 링크가 뜬다.<br />
+저거 브라우저로 들어가서 로그인을 하면 된다.</p>
+<br>
+<p><img src="/images/img_d690c09135d6bb36.png" alt="" /></p>
+<p><img src="/images/img_c4b75192bd805d2d.png" alt="" />
+그러면 각 머신, Peer마다 고유한 netbird 전용 IP가 할당되고, Peer끼리는 그 IP로 통신을 할 수 있게 된다.</p>
+<p>근데 그 통신이 자동으로 열리는건 아니고, netbird 콘솔에서 네트워크 통신을 허가해줘야 한다.</p>
+<p>세팅이 잘 되었다면 status 명령에서 이런 식으로 Connected가 뜨고</p>
+<p><img src="/images/img_a7e11f049c70ef4b.png" alt="" /></p>
+<p>VPN에서 발급해준 Peer IP로 통신도 자유롭게 할 수 있게 될 것이다.</p>
+<p><img src="/images/img_dfb6af05fc2b51d5.png" alt="" /></p>
+<p>그러면 그냥 HAproxy 설정에서도, VPN IP로 프록싱을 하도록 구성해주면 그만이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vim</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>haproxy</span><span style="color: #94E2D5;">/</span><span>haproxy</span><span style="color: #94E2D5;">.</span><span>cfg</span></span>
+<span class="giallo-l"><span>sudo systemctl reload haproxy</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>listen test_proxy</span></span>
+<span class="giallo-l"><span>    bind</span><span style="color: #94E2D5;"> *</span><span>:</span><span style="color: #FAB387;">18007</span></span>
+<span class="giallo-l"><span>    mode tcp</span></span>
+<span class="giallo-l"><span>    balance leastconn</span></span>
+<span class="giallo-l"><span>    server onprem1</span><span style="color: #94E2D5;"> ?.?</span><span style="color: #FAB387;">.63</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">71</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;">18007</span><span> check</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223949573794">https://blog.naver.com/sssang97/223949573794</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224026498626/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] Internal: WAL의 구조<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224024746437/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgeSQL] 파라미터 튜닝 계산기.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ECS로 서버 올려보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222453811379/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ECS로 서버 올려보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222453811379/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2021-08-02T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222453811379/">[AWS] ECS로 서버 올려보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-08-02T00:00:00+00:00"><time datetime="2021-08-02T00:00:00+00:00">2021.08.02</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="691 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222453811379" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_be94e311f077a1c8.png" alt="" />
+ECS는 Elastic Container Service의 약자로, 말 그대로 컨테이너를 여러개 올려 쓸수 있게 해주는 서비스다.<br />
+도커 이미지를 올려서 컨테이너로 만들어 쓰는 것이기 때문에, 도커에 대한 선행 지식이 필요하다.</p>
+<p>그리고 본 포스터에서는 다른 잡다한거 다 배제하고 서버 하나 올려보는 것에만 초점을 맞춰 진행한다.<br />
+로드밸런서니 도메인이니 그런건 생각하지 않는다.</p>
+<p>테스트에 사용한 서버 소스는 이거고<br />
+<a rel="external" href="https://github.com/rusty-wiki/rustywiki-server">https://github.com/rusty-wiki/rustywiki-server</a><br />
+이미지는 도커허브에 있는 데비안 이미지인 'rust'를 기반으로 간단하게 빌드해서 사용했다.</p>
+<br>
+<br>
+<br>
+<h2 id="ecr-repojitori-saengseong">ECR 레포지토리 생성</h2>
+<p>ECR은 Elastic Container Registry의 약자로, 그냥 도커 이미지 저장소다.<br />
+도커 허브의 아마존 버전이라고 보면 된다.</p>
+<p>도커허브처럼 프라이빗과 퍼블릭 버전이 존재하는데</p>
+<p><img src="/images/img_92bae77a28791e08.png" alt="" />
+저장된 이미지의 스토리지 사용량과, 데이터 송신으로 비용을 부과한다.<br />
+스토리지는 1기가당 0.1 달러가 부과된다.</p>
+<p>그리고 데이터 송신은 비용이 조금 나오긴 하는데, 프라이빗과 퍼블릭이 산정이 다르다.</p>
+<p><img src="/images/img_b38add349abb43c1.png" alt="" />
+근데 그렇게 많이 쓰는거 아니면 많이 나올 일은 없을 것 같다.</p>
+<p>레포지토리는 프라이빗/퍼블릭 고르고, 이름만 잘 지어주면 된다.</p>
+<p><img src="/images/img_cfe3f39a24d65cb5.png" alt="" /></p>
+<p>그리고 업로드할 이미지를 잘 준비해준다.</p>
+<p><img src="/images/img_eaa3d9fd7421b80f.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="dokeo-ecr-rogeuin-peuraibisman">도커 - ECR 로그인 (프라이빗만)</h2>
+<p>프라이빗 레포지토리인 경우에는 업로드를 위해 인증을 거쳐야 한다.</p>
+<p>먼저 계정에 대한 액세스 키가 있어야 한다.<br />
+없으면 보안 자격 증명에 들어가서 만들자.</p>
+<p><img src="/images/img_1331de31a605e5ac.png" alt="" /></p>
+<p>그리고 aws cli의 configure 명령으로 로그인을 한다.</p>
+<p><img src="/images/img_49330f99ff4db172.png" alt="" /></p>
+<p>그다음에는 다음 명령으로 도커에 로그인을 해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>aws ecr get</span><span style="color: #94E2D5;">-</span><span>login</span><span style="color: #94E2D5;">-</span><span>password</span><span style="color: #94E2D5;"> --</span><span>region 리전</span><span style="color: #94E2D5;"> |</span><span> sudo docker login</span><span style="color: #94E2D5;"> --</span><span>username AWS</span><span style="color: #94E2D5;"> --</span><span>password</span><span style="color: #94E2D5;">-</span><span>stdin 내계정ID</span><span style="color: #94E2D5;">.</span><span>dkr</span><span style="color: #94E2D5;">.</span><span>ecr</span><span style="color: #94E2D5;">.</span><span>리전</span><span style="color: #94E2D5;">.</span><span>amazonaws</span><span style="color: #94E2D5;">.</span><span>com</span></span></code></pre>
+<p>리전은 서울이라면 ap-northeast-2를 넣어주면 되고,<br />
+계정 ID는 오른쪽 위에서 볼 수 있는 숫자열이다.</p>
+<p><img src="/images/img_f542d1a9addb8942.png" alt="" />
+저거.</p>
+<p>그래서 이렇게 뜨면 성공이다.</p>
+<p><img src="/images/img_cfe1621d99bf3a5f.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="ecre-imiji-eobrodeu">ECR에 이미지 업로드</h2>
+<p>그럼 이제 이미지를 올려보자.<br />
+먼저 ECR을 가리킬 수 있도록 다음과 같이 태그를 걸어줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo docker tag 56dd6a4793f7 계정ID</span><span style="color: #94E2D5;">.</span><span>dkr</span><span style="color: #94E2D5;">.</span><span>ecr</span><span style="color: #94E2D5;">.</span><span>ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span>2</span><span style="color: #94E2D5;">.</span><span>amazonaws</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>레포지토리명</span></span></code></pre>
+<p>56dd6a4793f7는 기존 이미지의 ID다.</p>
+<p>그럼 이렇게 추가될 것이고</p>
+<p><img src="/images/img_fd6230cd012d3576.png" alt="" /></p>
+<p>저걸 푸시하면 올라가게 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span> sudo docker push 계정ID</span><span style="color: #94E2D5;">.</span><span>dkr</span><span style="color: #94E2D5;">.</span><span>ecr</span><span style="color: #94E2D5;">.</span><span>ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span>2</span><span style="color: #94E2D5;">.</span><span>amazonaws</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>레포지토리명</span></span></code></pre>
+<p>그래서</p>
+<p><img src="/images/img_1c584e0d694fb5e5.png" alt="" /></p>
+<p><img src="/images/img_3ddbab654a48852f.png" alt="" />
+이렇게 뜨면 잘 올라간 것이다.</p>
+<p>그럼 이제 레포지토리 콘솔에서도 확인할 수 있을 것이다.</p>
+<p><img src="/images/img_ed23b3d6c646c8c8.png" alt="" />
+이제 이걸로 ECS 설정을 시작해보자.</p>
+<br>
+<br>
+<br>
+<h2 id="ecs-jageob-jeongyi">ECS: 작업 정의</h2>
+<p>이제 작업을 정의해주자. 이건 이미지를 기반으로 해서 컨테이너를 어떻게 실행시킬지를 정하는 요소다.</p>
+<p><img src="/images/img_7f3ef4be7eee8f9e.png" alt="" />
+새 작업 정의 생성에 들어가</p>
+<br>
+<p><img src="/images/img_0af7838675bd16b7.png" alt="" />
+호환성은 Fargate를 선택한다.<br />
+EC2같은걸로 돌려도 되긴되는데, 저게 더 효율적이고 편리한 편이다.</p>
+<br>
+<p><img src="/images/img_fbdabd5c29c746f0.png" alt="" />
+이름 잘 적어주고</p>
+<br>
+<p><img src="/images/img_f1983428cc1b3d98.png" alt="" />
+메모리와 CPU를 신중하게 고른다.</p>
+<br>
+<p><img src="/images/img_e788d33372923dcc.png" alt="" />
+그리고 컨테이너 를 추가해, 이름과 레포지토리, 열어줄 포트 등을 지정해준다.</p>
+<br>
+<p><img src="/images/img_413e4dafc80dce74.png" alt="" />
+그리고 환경변수도 필요한 만큼 넣어주자</p>
+<br>
+<p><img src="/images/img_3c02d9d6bd29d00b.png" alt="" />
+그래서 이렇게 생성되면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="ecs-keulreoseuteo-saengseong">ECS: 클러스터 생성</h2>
+<p>이제 컨테이너가 돌아갈 클러스터를 만들어주자.<br />
+클러스터는 여러개의 서비스를 모아놓는 관리 단위다.</p>
+<br>
+<p><img src="/images/img_af8c730b97153618.png" alt="" />
+생성 누르고</p>
+<br>
+<p><img src="/images/img_daf85bb0e7e01b6d.png" alt="" />
+타입은 네트워킹 전용으로 해주면 된다.<br />
+우리는 Fargate를 쓸거라서 저게 딱 맞다.</p>
+<br>
+<p><img src="/images/img_a3a47f7bcfb13fc6.png" alt="" />
+이름 짓고, 서브넷 달아주고, 다른건 대충 예스맨으로 지나가주자.</p>
+<br>
+<p><img src="/images/img_78be3c9653df3ecf.png" alt="" />
+이렇게 뜨면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="ecs-seobiseu-saengseong">ECS: 서비스 생성</h2>
+<p>자... 이제 뭔가 결과물을 만들어낼 수 있는 단계까지 왔다.<br />
+서비스는 컨테이너들을 관리하는 하나의 관리 단위다.<br />
+서비스 하나에는 여러개의 작업 컨테이너가 들어갈 수 있고, 그 작업의 동작은 등록한 작업 정의를 따른다.</p>
+<br>
+<p><img src="/images/img_4d738990e6ee346b.png" alt="" />
+생성을 눌러준다.</p>
+<br>
+<p><img src="/images/img_e304b4efae453a1e.png" alt="" />
+이름 잘 짓고, 작업정의 선택하고, 작업개수 잘 정해준다.</p>
+<br>
+<p><img src="/images/img_b0f9b491cd021f54.png" alt="" />
+지금은 서브넷만 달아줘도 된다.</p>
+<br>
+<p><img src="/images/img_ba0efb6aedffddb3.png" alt="" />
+오토스케일링 좋긴 한데.. 일단 넘어간다.</p>
+<br>
+<p><img src="/images/img_5d2a16d084218836.png" alt="" />
+이렇게 해서 만들면</p>
+<p>이제 서비스와 함께 실제로 실행되는 작업단위를 볼 수 있을 것이다.</p>
+<p><img src="/images/img_2fc416151807ee84.png" alt="" /></p>
+<p>작업에 들어가면 이런식으로 정보들을 확인할 수 있고</p>
+<p><img src="/images/img_6d4a054d5e6f288e.png" alt="" /></p>
+<p>열려있는 퍼블릭 IP로 접근도 가능하다.</p>
+<p><img src="/images/img_f49074087318cf5a.png" alt="" /></p>
+<p>로그탭을 열면 로그도 볼 수 있다.</p>
+<p><img src="/images/img_cd59696a8be997ef.png" alt="" />
+잘 실행되고 있음을 알 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="jageob-gaesu-jojeong-jaebaepo">작업 개수 조정, 재배포</h2>
+<p>ECS에서는 설정을 수정해서 재배포를 하거나, 작업의 개수를 조절하는 것이 자유롭다.</p>
+<p>작업의 개수를 늘리거나 줄이고 싶다면 서비스 업데이트에 들어가 작업 개수를 늘리기만 하면 된다.</p>
+<p><img src="/images/img_755ff062d667a055.png" alt="" /></p>
+<p>그럼 이런식으로 잘 늘어날 것이다.</p>
+<p><img src="/images/img_99c98ccf7c95916c.png" alt="" /></p>
+<p><img src="/images/img_f861627eac5f5e5d.png" alt="" />
+약간 자동으로 무중단 처리를 해줘서, 바로바로 죽이고 새 인스턴스를 띄우는게 아니라 교체되는데 좀 텀이 있다.</p>
+<p>그럼 이렇게 각각 다 잘 실행될 것이다.</p>
+<p><img src="/images/img_cfba704d5a2aa9dd.png" alt="" />
+아이피는 다 작업별로 따로 할당받기 떄문에, 로드밸런서를 붙이거나 해서 연결을 해줘야한다.</p>
+<p>그리고 설정 수정 없이 그냥 재배포만 하고 싶다면 "새 배포 적용"만 체크하고 업데이트하면 된다.</p>
+<p>그렇다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonECR/latest/userguide/docker-push-ecr-image.html">https://docs.aws.amazon.com/ko_kr/AmazonECR/latest/userguide/docker-push-ecr-image.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonECR/latest/userguide/registry_auth.html">https://docs.aws.amazon.com/ko_kr/AmazonECR/latest/userguide/registry_auth.html</a><br />
+<a rel="external" href="https://neo-blog.tistory.com/42">https://neo-blog.tistory.com/42</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222454990018/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] 로드밸런서<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222452854656/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Docker] Amazon Linux에 설치<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

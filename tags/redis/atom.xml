@@ -1,0 +1,896 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - Redis</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/redis/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2025-04-01T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/redis/atom.xml</id>
+    <entry xml:lang="en">
+        <title>[Redis] 메모리 사용량 프로파일링</title>
+        <published>2025-04-01T00:00:00+00:00</published>
+        <updated>2025-04-01T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223817851123/"/>
+        <id>https://myyrakle.github.io/blog/223817851123/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223817851123/">&lt;p&gt;Redis에는 일반적인 데이터베이스들처럼 객관화된 사용 지표 같은건 없다. 그런게 필요하다면 뻘짓을 좀 하고, DB에도 부하가 가해진다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 Redis를 쓴다면, 애초에 사용할때부터 신중하게 만료시간과 데이터 누적 수준을 고려할 필요가 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;전체 메모리 사용량을 조회하려면, INFO MEMORY 명령을 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;redis&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;cli INFO memory&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7901079ae45e7cc2.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 이게 도움이 될 일은 별로 없다. 전체 메모리 정보 본다고 실제 사용 패턴을 파악할 수가 있겠는가?&lt;&#x2F;p&gt;
+&lt;p&gt;메모리 통계도 있긴 한데, 이거도 별 의미는 없다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;MEMORY STATS&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e66fa874e7128c06.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이 기능들의 실사용례는 메모리 꽉찼을때쯤 경보 날려주는 것 정도밖엔 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;큰 키값들을 약간 분석하게 해주는 명령이 하나 있긴 하다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;redis6&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;cli&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;h&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; ... -&lt;&#x2F;span&gt;&lt;span&gt;p&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 6379&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;bigkeys&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9090a7b1c9ad96f2.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 이것도 좀 애매한건 마찬가지다.&lt;br &#x2F;&gt;
+이건 단일 키의 값이 큰것만 가져오는 거라서, 임의의 키값 그룹이 차지하는 용량 같은건 알 수가 없다.&lt;br &#x2F;&gt;
+애초에 테이블 같은 정규화된 최소 단위조차 없어서 생기는 문제고, 어떻게 할 방법도 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 사실 제대로 사용량을 조회하려면 모든 키를 풀스캔하는 수밖에 없다.&lt;br &#x2F;&gt;
+운영중이라면 좀 날리기에 부담이 될 수도 있긴 한데...&lt;&#x2F;p&gt;
+&lt;p&gt;어쨌든 다음은 적당히 뽑아서 csv로 만들어주는 파이썬 코드다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;import&lt;&#x2F;span&gt;&lt;span&gt; redis&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;import csv&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;from&lt;&#x2F;span&gt;&lt;span&gt; typing import Dict&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;REDIS_HOST = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;localhost&amp;#39;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;def get_redis_memory_usage() -&amp;gt; Dict[str&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; int]:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;&amp;quot;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    Connect to Redis and get memory usage for all keys&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    Returns a dictionary mapping key names to their memory usage in bytes&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;&amp;quot;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    # Initialize Redis connection&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    # Note: Update these parameters based on your Redis configuration&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    r = redis.Redis(&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        host=REDIS_HOST&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        port=6379&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        decode_responses=True&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    )&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    # Get all keys&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    keys = r.keys(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;*&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    print(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;key count&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; len(keys))&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    # Get memory usage for each key&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    memory_usage = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    i = 0&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    for key in keys:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        i += 1&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        print(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;In Progress&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; i&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;&#x2F;&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; len(keys))&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        try:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            # MEMORY USAGE command returns the number of bytes used to store the key&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            mem = r.memory_usage(key)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            if mem is not None:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;                memory_usage[key] = mem&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        except redis.exceptions.ResponseError as e:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            print(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;Error getting memory usage for key {key}: {e}&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    return memory_usage&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;def save_to_csv(memory_usage: Dict[str&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; int]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; output_file: str = &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;redis_memory_usage.csv&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;):&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;&amp;quot;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    Save the memory usage data to a CSV file&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    Args:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        memory_usage: Dictionary mapping keys to their memory usage&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        output_file: Path to the output CSV file&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    &amp;quot;&amp;quot;&amp;quot;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;    with open(output_file, &amp;#39;w&amp;#39;, newline=&amp;#39;&amp;#39;) as f:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        writer = csv.writer(f)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        # Write header&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        writer.writerow([&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;#39;Key&amp;#39;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt; &amp;#39;Memory Usage (bytes)&amp;#39;&lt;&#x2F;span&gt;&lt;span&gt;])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        # Write data&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        for key&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; usage in memory_usage.items():&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            writer.writerow([key&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; usage])&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;def main():&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    try:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        # Get memory usage for all keys&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        memory_usage = get_redis_memory_usage()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        # Save results to CSV&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        save_to_csv(memory_usage)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        print(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;Successfully saved memory usage data for {len(memory_usage)} keys&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    except Exception&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span&gt; e:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        print(f&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;Error: {e}&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;if __name__ == &lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;__main__&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    main()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;깔고 돌리면&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;vi main&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;py&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;pip install redis &lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;python main&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;py&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e6d326a12056e5be.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_032973129e1deb19.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 뽑아준다.&lt;&#x2F;p&gt;
+&lt;p&gt;적당히 어디 DB에 넣고 통계 돌려보면서 파악해보면 된다.&lt;br &#x2F;&gt;
+Redis에서는 이게 최선이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;snmaynard&#x2F;redis-audit&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;snmaynard&#x2F;redis-audit&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] TTL 시스템 구조</title>
+        <published>2024-11-11T00:00:00+00:00</published>
+        <updated>2024-11-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223655132149/"/>
+        <id>https://myyrakle.github.io/blog/223655132149/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223655132149/">&lt;p&gt;Redis는 낮은 레이턴시의 고속 접근을 위해 사용되는 캐싱용 인메모리 데이터베이스다.&lt;br &#x2F;&gt;
+Redis는 캐시의 특성상, 캐시의 만료로 인한 삭제를 지원하기 위해 TTL을 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;사실 TTL은 그냥 저장공간을 아끼기 위해 약간 GC 개념으로 넣은 부가적인 기능일 뿐인데, 만료 동작 구현하기 편하다고 아무데나 박는 남용 사례가 자주 보이긴 한다. 이걸 보는 사람들은 그러지 않길 바란다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 TTL은 어떤 방식으로 구현될까?&lt;br &#x2F;&gt;
+사실 Redis의 TTL은 시간이 되자마자 실제로 딱 지우는건 아니다. 그런건 현실적으로 불가능하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jeyag&quot;&gt;제약&lt;&#x2F;h2&gt;
+&lt;p&gt;TTL 시스템은 실질적인 제약이 조금 존재한다. 그래서 로직을 TTL에 의존하는 것은 권장하지 않는다.&lt;br &#x2F;&gt;
+TTL의 동작 방식은 v2.4, v2.6 2가지를 기점으로 조금 달라졌다.&lt;&#x2F;p&gt;
+&lt;p&gt;2.4 버전대에서는 문제가 많았다. 일단 만료 자체에 오차가 꽤 컸고, 최대 1초까지 지연될 수 있었다.&lt;br &#x2F;&gt;
+애초에 이 때는 TTL 시간 값을 유닉스 타임스탬프-초 단위로 관리했기 때문에 그랬다.&lt;&#x2F;p&gt;
+&lt;p&gt;2.6 버전대부터는 TTL에 사용하는 타임스탬프 단위를 밀리초로 내렸기 때문에 만료 시간의 오차가 최대 1밀리초까지 내려갔다.&lt;br &#x2F;&gt;
+하지만 분명하게 오차가 존재하긴 하는 것이고, 마이크로세컨드 수준의 오차도 엄밀하게 발생해서는 안되는 상황이라면 이걸 기반으로 로직을 작성해서는 안된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;ttlyi-dongjag-bangsig&quot;&gt;TTL의 동작 방식&lt;&#x2F;h2&gt;
+&lt;p&gt;Redis는 수동적인 방법(passive way)과 능동적인 방법(active way)을 통해 TTL 데이터를 제거한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;passive-way&quot;&gt;passive way&lt;&#x2F;h4&gt;
+&lt;p&gt;Redis는 기본적으로, TTL 시간이 지났다고 해서 데이터를 즉시 지우지는 않는다. 계속해서 모니터링하는건 너무 비효율적이기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 기본적으로는 그냥 뒀다가&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ba7e2a2d21ee4c67.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4ddee2ffd3462c0a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+TTL이 지난 데이터에 대해 접근을 시도하면&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c9394c441ad49352.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그때 삭제하는 방식을 취한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;active-way&quot;&gt;active way&lt;&#x2F;h4&gt;
+&lt;p&gt;근데 접근된 것만 지워서는 문제가 많을 것이다.&lt;br &#x2F;&gt;
+쓰레기들이 쌓였는데, 영영 접근하지 않는다면 어떻게 되겠는가? TTL이 지난 데이터들이 우주쓰레기처럼 메모리를 점유하고 있을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 Redis에는 접근을 하지 않더라도 주기적으로 돌면서 TTL 체크를 하는 프로세스가 존재한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_81db9708261a6071.png&quot; alt=&quot;&quot; &#x2F;&gt;
+근데 이게 뭐 풀스캔을 하면서 모든 TTL 만료를 찾는건 아니고, 랜덤으로 일부만 본다.&lt;br &#x2F;&gt;
+그리고 이것도 버전마다 동작이 다르다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;before Redis 6.0&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+예전에는 확률적 방법에 의존해서 TTL 만료를 제거했다. 이런 식이다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;TTL 데이터 20개를 무작위 확인&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;만료된걸 전부 삭제&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;만료 비율이 25% 이상이었다면 한번 더 반복&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;이건 확률적으로 대충 25% 정도는 쓰레기 메모리가 잔존할 수도 있다는 것을 의미하기도 한다.&lt;br &#x2F;&gt;
+그래서 트위터는 이거 때문에 성능 문제가 되었던 적도 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;since Redis 6.0 (2020)&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+6.0 버전부터는 조금 더 정교한 방법을 통해 만료된 키를 찾아서 정리한다.&lt;br &#x2F;&gt;
+사실 대단한 기술을 적용한 것은 아니다. 값을 TTL 기준으로 정렬해서 TTL 지난걸 빠르게 찾고 제거하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;애초에 이렇게 했어야 했던게 아닌가 싶다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;commands&#x2F;expire&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;commands&#x2F;expire&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.pankajtanwar.in&#x2F;blog&#x2F;how-redis-expires-keys-a-deep-dive-into-how-ttl-works-internally-in-redis&quot;&gt;https:&#x2F;&#x2F;www.pankajtanwar.in&#x2F;blog&#x2F;how-redis-expires-keys-a-deep-dive-into-how-ttl-works-internally-in-redis&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.x.com&#x2F;engineering&#x2F;en_us&#x2F;topics&#x2F;infrastructure&#x2F;2019&#x2F;improving-key-expiration-in-redis&quot;&gt;https:&#x2F;&#x2F;blog.x.com&#x2F;engineering&#x2F;en_us&#x2F;topics&#x2F;infrastructure&#x2F;2019&#x2F;improving-key-expiration-in-redis&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.digitalocean.com&#x2F;community&#x2F;cheatsheets&#x2F;how-to-expire-keys-in-redis&quot;&gt;https:&#x2F;&#x2F;www.digitalocean.com&#x2F;community&#x2F;cheatsheets&#x2F;how-to-expire-keys-in-redis&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;blog&#x2F;diving-into-redis-6&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;blog&#x2F;diving-into-redis-6&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] 시스템구조</title>
+        <published>2024-06-21T00:00:00+00:00</published>
+        <updated>2024-06-21T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223487017370/"/>
+        <id>https://myyrakle.github.io/blog/223487017370/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223487017370/">&lt;p&gt;사람들이 Redis에 대해서 설명할때 자주 말하는 특징 중 하나는, 싱글 스레드 시스템이라는 것이다.&lt;br &#x2F;&gt;
+그 전반적인 구조에 대해서 한번 정리를 해보겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;in-memori-siseutem&quot;&gt;인 메모리 시스템&lt;&#x2F;h2&gt;
+&lt;p&gt;이게 뭐냐면, 메모리, 그러니까 RAM에 데이터를 저장하는 DB라는 것이다.&lt;br &#x2F;&gt;
+그래서 디스크에 데이터를 저장하는 고전적인 의미에서의 DB라고는 부를 수 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;일반적인 RDB들이 디스크에 데이터를 저장하고, 메모리를 최적화의 수단으로 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_12eb69c15f68e69f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+큰 데이터를 저장하기 유리하고, 장애시의 대응도 안정적이지만, 성능, 특히 레이턴시를 극단적으로 최적화하는데는 한계가 있다. 기본적으로 캐시를 타지 못하면 디스크를 거치기 때문에다.&lt;br &#x2F;&gt;
+보통은 밀리세컨드 수준이라고 봐도 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 레디스는 바로 데이터를 메모리에 저장하고, 디스크를 선택적인 백업 수단으로 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a8e7fa542365c801.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 레디스는 기본 성능이 일단 빠르다.&lt;&#x2F;p&gt;
+&lt;p&gt;공간도 작고 서버 재부팅시 데이터가 날라간다는 점이 있지만,&lt;br &#x2F;&gt;
+단순한 메모리 전달자 수준이라서 레이턴시를 마이크로세컨드 수준으로 보장할 수 있다는게 가장 큰 장점이다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 그정도로 민감한 레이턴시 보장이 필요한게 아니라면 굳이 레디스를 쓸 이유는 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;singgeul-seuredeu-siseutem&quot;&gt;싱글 스레드 시스템&lt;&#x2F;h2&gt;
+&lt;p&gt;Redis는 일단 싱글 스레드 시스템은 맞다.&lt;br &#x2F;&gt;
+DB 엔진 수준에서 동시에 한번의 연산만이 가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 Redis는 멀티코어에 올려도 이점이 별로 없다.&lt;br &#x2F;&gt;
+성능 확장을 위해서는 단일코어 머신을 여러개 띄워서 스케일아웃하는 형태로 확장을 해야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;레디스가 싱글 스레드 구조를 채택한 이유는 구조를 단순하게 유지하기 위한 점이 크다.&lt;br &#x2F;&gt;
+멀티스레드 동기화나 복잡한 성능 저하 요인이 별로 없기 때문에 오히려 성능이 괜찮은 부분도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 단일 스레드로 동작하기 때문에 원자성을 강력하게 보장할 수 있다는 장점도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;Redis 7에서는 스레드를 도입하겠다는 말이 있긴 한데, 정해진건 아니다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;i-o-meoltipeulregsing&quot;&gt;I&#x2F;O 멀티플렉싱&lt;&#x2F;h2&gt;
+&lt;p&gt;근데 단일 스레드를 쓴다고 해서 동시성을 활용하지 못한다는 것은 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;Redis의 코어 엔진 자체는 싱글 스레드지만, Request를 받아서 사용자 요청을 핸들링하는 부분은 멀티스레드를 통해 다중화한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9e3b9095ccaf1507.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그래서 사실 실제 read&#x2F;write 수준에서 발생하는 병목은 해결하진 못하지만, 탄력적으로 네트워크 요청&#x2F;응답을 다중화해서 사용자 수준에서 느끼는 처리량은 크게 나쁘지 않다.&lt;br &#x2F;&gt;
+요청 태스크들이 단일 이벤트루프에 요청을 쏘면, 코어 엔진은 이벤트루프를 기반으로 결과를 핸들링한다.&lt;&#x2F;p&gt;
+&lt;p&gt;네트워크 핸들링에는 epoll&#x2F;kqueue을 활용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;Redis 6에서 Thread가 추가되었다고 말하는 것도 이 네트워크 I&#x2F;O 핸들링을 위해서 멀티스레드를 활용했다는 말이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;hwagjang&quot;&gt;확장&lt;&#x2F;h2&gt;
+&lt;p&gt;레디스는 자체적인 한계 탓에 스케일업은 좀 효율성이 떨어지고, 서버를 여러개 띄워서 사용량을 확장하는 멀티노드 구성을 많이 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;Redis에서 멀티노드를 구성하는 방법은 별도 포스트를 참조한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223485062023&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223485062023&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;velog.io&#x2F;@hope1213&#x2F;Redis-%EC%A0%95%EB%A7%90-%EC%8B%B1%EA%B8%80%EC%8A%A4%EB%A0%88%EB%93%9C%EC%9D%BC%EA%B9%8C&quot;&gt;https:&#x2F;&#x2F;velog.io&#x2F;@hope1213&#x2F;Redis-%EC%A0%95%EB%A7%90-%EC%8B%B1%EA%B8%80%EC%8A%A4%EB%A0%88%EB%93%9C%EC%9D%BC%EA%B9%8C&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;48035646&#x2F;if-redis-is-single-threaded-how-can-it-be-so-fast&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;48035646&#x2F;if-redis-is-single-threaded-how-can-it-be-so-fast&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.linkedin.com&#x2F;pulse&#x2F;why-heck-single-threaded-redis-lightning-fast-beyond-in-memory-kapur&quot;&gt;https:&#x2F;&#x2F;www.linkedin.com&#x2F;pulse&#x2F;why-heck-single-threaded-redis-lightning-fast-beyond-in-memory-kapur&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;blog&#x2F;multiplexing-explained&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;blog&#x2F;multiplexing-explained&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] multi node를 구성하는 방법</title>
+        <published>2024-06-20T00:00:00+00:00</published>
+        <updated>2024-06-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223485062023/"/>
+        <id>https://myyrakle.github.io/blog/223485062023/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223485062023/">&lt;p&gt;Redis가 멀티 노드 구축을 통해 사용량이나 가용성을 확장하는 방법을 다룬다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gibon-weonri&quot;&gt;기본 원리&lt;&#x2F;h2&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;1-replication&quot;&gt;1. Replication&lt;&#x2F;h4&gt;
+&lt;p&gt;Redis도 여타 고전적인 DB들처럼 master-slave 방식의 replication을 지원한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3d3f2f4b3eede6d6.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;ankitsahay.medium.com&#x2F;redis-multi-node-deployment-replication-vs-cluster-vs-sentinels-8099d15dcc09&quot;&gt;https:&#x2F;&#x2F;ankitsahay.medium.com&#x2F;redis-multi-node-deployment-replication-vs-cluster-vs-sentinels-8099d15dcc09&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+마스터 노드에다가 값을 쓰거나 수정하면, slave 노드들에 값을 복제시키면서 쓰는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 쓰기 작업은 master에만 행할 수 있고, slave 노드를 참조할 경우에는 복제 딜레이로 인한 오차가 발생할 수 있다는 단점이 있다.&lt;br &#x2F;&gt;
+이 구조의 주 목적은 read 부하를 분산하는 용도로 쓰는 것이다.&lt;br &#x2F;&gt;
+write 부하를 확장할 수는 없다. master가 더 많은 일을 하기 때문에 오히려 줄어들 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;master 노드가 다운되더라도 slave를 master로 승격하거나 하진 않는다. 고가용성을 보장하진 못한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;2-clustering&quot;&gt;2. Clustering&lt;&#x2F;h2&gt;
+&lt;p&gt;규모가 계속 확장되고 단일 마스터로 부하를 감당하기 힘들거나 메모리 용량이 부족한 지경에 이른다면, multi master로 클러스터를 구성하는 단계에 이르게 된다.&lt;br &#x2F;&gt;
+물론 Redis를 어지간히 짬통처럼 쓰는게 아니라면 그 정도 부하에 도달하는게 흔한 일은 아닐 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cd930fd7bc1e28c4.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;ankitsahay.medium.com&#x2F;redis-multi-node-deployment-replication-vs-cluster-vs-sentinels-8099d15dcc09&quot;&gt;https:&#x2F;&#x2F;ankitsahay.medium.com&#x2F;redis-multi-node-deployment-replication-vs-cluster-vs-sentinels-8099d15dcc09&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+클러스터 환경에서 보통 마스터는 N개로 구성되며, 각각의 읽기 전용 Slave 세트를 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 경우 master끼리는 동일한 데이터를 복제하는게 아니라, 1&#x2F;N로 데이터를 분할해서 저장한다.&lt;br &#x2F;&gt;
+그리고 각 Slave들은 본인들의 Master에 대한 읽기 전용 복제본만을 가진다.&lt;&#x2F;p&gt;
+&lt;p&gt;만약 Master가 죽을 경우 Slave가 Master로 승격되어 그룹 내에서의 쓰기와 복제를 처리할 수 있다. 고가용성을 어느 정도 보장할 수 있는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;3-redis-sentinels&quot;&gt;3. Redis Sentinels&lt;&#x2F;h2&gt;
+&lt;p&gt;Redis Sentinels은 고가용성이 필요하지만 multi master까지는 필요하지 않은 중간 지점의 사용자를 위한 방법론이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4a2b008b765e88d3.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+일반적인 Master Slave 구조 시스템에서 Master가 죽어도 Slave를 승격시키지 못하는 이유는, 애초에 Master가 모든 책임을 지고 복제나 관리를 총괄하는 것을 전제로 시스템이 짜여있어서 그런 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;기본 설계 수준부터 분산 DB로 만들어진 근래의 시스템들은 서로서로 체크해주면서 과반수 투표 하고 그렇게 살려주는 구조가 있긴 한데, Redis는 그런거까진 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 master의 생존을 확인해주는 Sentinel이라는 서브프로세스를 따로 구성하고, 그걸 통해 master가 뻗으면 새 master를 선정하는 일련의 작업을 수행한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c7bddc94dfbc7b84.png&quot; alt=&quot;&quot; &#x2F;&gt;
+따로 별도의 머신이 필요한건 아니고, 각 레디스 노드와 함께 포장해서 띄우면 된다.&lt;br &#x2F;&gt;
+별도 인스턴스에 띄워도 되긴 하는데, 리소스 낭비도 낭비고 네트워크 레이턴시도 늘어날 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;사실 Redis 내부에서 자체적으로 구현할 수도 있을텐데 귀찮아서 따로 빼서 제공하는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;아무튼 이 sentinel들은 각각의 Redis 프로세스들이 살아있는지도 검사하고, master가 살아있는지도 모니터링한다. 과반수 합의로 master가 실패했다는게 확실하면 master 교체를 수행한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;operate&#x2F;oss_and_stack&#x2F;management&#x2F;replication&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;operate&#x2F;oss_and_stack&#x2F;management&#x2F;replication&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;operate&#x2F;oss_and_stack&#x2F;management&#x2F;sentinel&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;operate&#x2F;oss_and_stack&#x2F;management&#x2F;sentinel&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] Replication</title>
+        <published>2024-06-20T00:00:00+00:00</published>
+        <updated>2024-06-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223485093718/"/>
+        <id>https://myyrakle.github.io/blog/223485093718/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223485093718/">&lt;p&gt;single master - multi slave 구조로 복제를 구성하는 방법을 간단히 다룬다.&lt;&#x2F;p&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223485062023&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223485062023&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;redis-seobeo-guseong-docket&quot;&gt;Redis 서버 구성 (Docket)&lt;&#x2F;h2&gt;
+&lt;p&gt;먼저 docker를 통해서 레디스 서버를 N개 띄워보자.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo docker network create redis&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;network&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo docker run&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;name master&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;d&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;network redis&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;network&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;p&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 44444&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;6379&lt;&#x2F;span&gt;&lt;span&gt; redis&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo docker run&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;name slave&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;1&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;d&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;network redis&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;network&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;p&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 44443&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;6379&lt;&#x2F;span&gt;&lt;span&gt; redis&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;sudo docker run&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;name slave&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;2&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;d&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; --&lt;&#x2F;span&gt;&lt;span&gt;network redis&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;-&lt;&#x2F;span&gt;&lt;span&gt;network&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;p&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 44442&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;6379&lt;&#x2F;span&gt;&lt;span&gt; redis&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_fe3c7dc2323177ca.png&quot; alt=&quot;&quot; &#x2F;&gt;
+하나는 마스터고 나머지가 slave 노드다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c9ac97127d6a7ddd.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이렇게 뜨면 잘 뜬 것이고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_14a100ae02b54342.png&quot; alt=&quot;&quot; &#x2F;&gt;
+꽂아서 접속했을때 잘 되면 된 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b8032072001f7fc9.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그리고, slave들에서 master 접속이 되는지도 확인해본다.&lt;br &#x2F;&gt;
+같은 docker network로 묶었기 때문에 &quot;master&quot; 호스트로 접속이 가능하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;replication-jeongbo-johoe&quot;&gt;Replication 정보 조회&lt;&#x2F;h2&gt;
+&lt;p&gt;info replication을 사용하면 replication 관련된 상태 정보를 확인할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ebc95b148e74b9eb.png&quot; alt=&quot;&quot; &#x2F;&gt;
+master&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6304e55714ca0019.png&quot; alt=&quot;&quot; &#x2F;&gt;
+slave1&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5c5de6ec30e7dc56.png&quot; alt=&quot;&quot; &#x2F;&gt;
+slave2&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;replication-guseong&quot;&gt;Replication 구성&lt;&#x2F;h2&gt;
+&lt;p&gt;replication 구성은 의외로 간단하다.&lt;br &#x2F;&gt;
+slave 노드들에 들어가서, replicaof 명령을 치면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;replicaof master&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 6379&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그럼 저 노예들이 master 서버를 가리키게 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4d485a6f4389e4bc.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_01e14aacbe9806c9.png&quot; alt=&quot;&quot; &#x2F;&gt;
+하나씩 등록하고 좀 기다리면&lt;&#x2F;p&gt;
+&lt;p&gt;정보가 바뀔 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7dc9c8cd13090169.png&quot; alt=&quot;&quot; &#x2F;&gt;
+master는 connected_slave가 2개가 뜨고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8bd56820d5b85516.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_48880a92b7a11a73.png&quot; alt=&quot;&quot; &#x2F;&gt;
+slave들은 master가 연결되어있음을 보여준다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 이제&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2b3523677cb53063.png&quot; alt=&quot;&quot; &#x2F;&gt;
+master에 데이터를 찍으면&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_851bb93249b8429d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2f64f047390d50ac.png&quot; alt=&quot;&quot; &#x2F;&gt;
+바로바로 slave에 복제될 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d98774255459a6ba.png&quot; alt=&quot;&quot; &#x2F;&gt;
+단, slave 노드들에서는 쓰기 작업이 불가능하다. 일관성을 위해서 읽기 전용으로만 동작한다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 정도가 기본으로 제공하는 Replication 구성이다.&lt;&#x2F;p&gt;
+&lt;p&gt;자동 장애 복구나 규모 확장성을 늘려야 한다면 Sentinel이나 Clustering을 직접 구성해야 하고, 신경써야할게 곱절로 많아진다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;operate&#x2F;oss_and_stack&#x2F;management&#x2F;replication&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;latest&#x2F;operate&#x2F;oss_and_stack&#x2F;management&#x2F;replication&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] 분산 락 (Distributed Lock)</title>
+        <published>2023-05-17T00:00:00+00:00</published>
+        <updated>2023-05-17T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223104149637/"/>
+        <id>https://myyrakle.github.io/blog/223104149637/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223104149637/">&lt;p&gt;락은 동시성 구조를 가진 시스템에서 가장 중요한 것 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;보통은 관계형데이터베이스의 락 기능을 활용해서 락 처리를 하곤 하는데, 그것만으로는 확장성이나 성능 면에서 부족할 때가 있다.&lt;br &#x2F;&gt;
+애플리케이션 코드를 이용한 Lock 처리도 싱글 앱에서나 가능하지, 스케일아웃된 분산 환경에서는 유효하지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럴때는 Lock을 직접 구현해서 사용하곤 하는데, 보통 Redis를 중앙 메모리로 두고 Lock 기능을 직접 구현해서 사용하는 경우가 많다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;teseuteu-hwangyeong-guseong&quot;&gt;테스트 환경 구성&lt;&#x2F;h2&gt;
+&lt;p&gt;우선 redis를 docker로 간단하게 띄웠다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;docker run&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&lt;&#x2F;span&gt;&lt;span&gt;p&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 12345&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;6379&lt;&#x2F;span&gt;&lt;span&gt; redis&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;그리고 아래는 Rust로 작성한 예제코드다.&lt;br &#x2F;&gt;
+개념 설명을 위한 것이기 때문에 꼭 코드 전체를 다 이해할 필요는 없다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;use futures&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:future&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:join_all&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;use redis&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:Commands&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;#[tokio::main]&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;async fn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; main&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; Result&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; Box&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;dyn std&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:error&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:Error&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; +&lt;&#x2F;span&gt;&lt;span&gt; Send&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let redis_client&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis::Client::&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;open&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;redis:&#x2F;&#x2F;127.0.0.1:12345&#x2F;&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let mut redis_connection&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis_client&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;get_connection&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let _&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; ()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis_connection&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;set&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;counter&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F; 10000번 반복합니다.&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let _&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; join_all&lt;&#x2F;span&gt;&lt;span&gt;((&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0..10000&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;into_iter&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;map&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;|&lt;&#x2F;span&gt;&lt;span&gt;_&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;|&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        let redis_client&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis_client&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;clone&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        return tokio&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;spawn&lt;&#x2F;span&gt;&lt;span&gt;(async move&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            let mut redis_connection&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis_client&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;get_connection&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            let old&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; i32&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis_connection&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;get&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;counter&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            let&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;font-weight: bold;&quot;&gt; new&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; old&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; +&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1&lt;&#x2F;span&gt;&lt;span&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;            println&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;new: {}&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;font-weight: bold;&quot;&gt; new&lt;&#x2F;span&gt;&lt;span&gt;);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            let _: ()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis_connection&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;set&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;counter&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;font-weight: bold;&quot;&gt; new&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        }&lt;&#x2F;span&gt;&lt;span&gt;);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;    }&lt;&#x2F;span&gt;&lt;span&gt;))&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;    .&lt;&#x2F;span&gt;&lt;span&gt;await;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let counter: i32&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; redis_connection&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;get&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;counter&amp;quot;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;unwrap&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;    println&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;counter: {}&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; counter);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;    Ok&lt;&#x2F;span&gt;&lt;span&gt;(())&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;코드의 로직 자체는 매우 단순하다.&lt;br &#x2F;&gt;
+redis에서 &quot;counter&quot;라는 키에 멀티스레드로 10000번 동시에 반복하면서 증가를 시키고 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bd7da059ddc56af1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+원래 기대한대로라면 10000번 반복했으니 10000이 되어야 하지만,&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f3245a10715e9323.png&quot; alt=&quot;&quot; &#x2F;&gt;
+결과는 그렇지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;get으로 값을 가져오고, set으로 다시 설정하는 미묘한 간극에서 동시성 충돌이 발생했기 때문이다.&lt;br &#x2F;&gt;
+이를테면 counter가 2인 상태에서 동시에 2개의 스레드가 &quot;2&quot; 값을 받아오면, 2-&amp;gt;3, 3-&amp;gt;4로 값이 늘어나는 것이 아니라 2-&amp;gt;3, 2-&amp;gt;3 와 같이 중복할당을 해버리기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이러한 상황을 막기 위해 사용하는 것이 Lock이다.&lt;br &#x2F;&gt;
+사실 그냥 동시에 접근이 불가능하도록 막아버리는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;setnx-gibanyi-spin-lock&quot;&gt;setnx 기반의 Spin Lock&lt;&#x2F;h2&gt;
+&lt;p&gt;Spin Lock은 Lock이 대기중일때 뺑글뺑글 돈다고 해서 부르는 명칭인데, 구현은 어렵지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;매 프로세스마다 redis의 setnx 명령으로 lock 값을 저장하고, 이미 lock이 있다면 대기하고, 프로세스가 끝나면 lock 값을 제거하게 하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;setnx는 기존에 값이 존재하면 0을 리턴하는 atomic한 명령이라, 1을 반환할때까지 무한루프를 돌려서 대기를 타게 하면 된다. 이렇게 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5bafc8fe8e386547.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 나갈때는 del로 제거해주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bbd74a4f30c0e6d5.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이러면 아주 간단한 Spin Lock의 완성이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d2c77989252a9772.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;자. 이제 기대한대로 동작할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c13c301537a667f2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;잘 동작하는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 여기에는 단점이 좀 있는데...&lt;br &#x2F;&gt;
+애플리케이션단에서 무한루프 돌며 기다리는건 그렇다 치고, setnx를 와장창 날려대기 때문에 Redis에 가해지는 부담이 엄청나다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이걸 해결하려면 애플리케이션 단에서 무한루프를 sleep도 걸어가면서 천천히 하는 방법이 있긴 한데, best practice라고 말하기는 어렵다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;redis-pub-sub-gibanyi-lock-guhyeon&quot;&gt;Redis pub&#x2F;sub 기반의 Lock 구현&lt;&#x2F;h2&gt;
+&lt;p&gt;Redis는 다행스럽게도 pub&#x2F;sub이라는 이벤트 기반의 시스템을 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러니까, 이걸로 lock을 풀때마다 알림을 보내서, 그때 다시 setnx를 시도하도록 하면, 무작정 쏟아지는 setnx의 횟수를 줄여서 Redis의 부담을 줄이는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;Lock 해제를 할때 Lock이 풀렸다고 알려주고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ce5adfa0b2ab5747.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;Lock 진입을 할때는 루프를 돌려고 할때마다 저 pub&#x2F;sub을 기반으로 블럭을 걸어주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cb59fca612bae840.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이러면 lock이 해제될때만 setnx로 lock 진입을 시도할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;동작은 이전과 거의 동일하고,&lt;&#x2F;p&gt;
+&lt;p&gt;일반 SpinLock은 Redis CPU가 이정도로 먹던게&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5f67f44c4a4f614c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;거의 절반 정도로 줄어들었다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ca7bf5d1416b175f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이 로직은 꼭 다 직접 구현할 필요는 없고, 괜찮은 Redis 클라이언트 구현체가 있다면 그걸 쓰면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그런데 여기에도 문제가 있긴 있으니.. Redis마저 분산화된 멀티노드 Redis 클러스터에서는 기대한대로 동작하지 않을 수 있다는 것이다. 노드끼리 값이 다를 수 있으니까!&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;redlock&quot;&gt;Redlock&lt;&#x2F;h2&gt;
+&lt;p&gt;Redlock은 가장 권장되는 형태의 Lock 알고리즘이다.&lt;br &#x2F;&gt;
+pub&#x2F;sub 기반의 Lock에 멀티노드 Redis 환경까지 고려한 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;자세한 것은 공식문서를 참조하면 좋다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;manual&#x2F;patterns&#x2F;distributed-locks&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;manual&#x2F;patterns&#x2F;distributed-locks&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;멀티노드에서의 충돌을 피하기 위해 이러한 로직을 따른다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;현재 시간을 밀리초 단위로 가져온다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;N개의 노드에서 모두 동일한 키 이름과 무작위 값으로 순차적으로 Lock을 획득하려고 시도한다.&lt;br &#x2F;&gt;
+여기서 각 노드에 잠금을 설정할 때 클라이언트는 총 Lock 자동 해제 시간과 비교하여 작은 타임아웃을 사용하여 Lock을 획득한다.&lt;br &#x2F;&gt;
+예를 들어, 자동 해제 시간이 10초인 경우 타임아웃은 대략 5-50 밀리초 범위일 수 있다. 이렇게 함으로써 클라이언트는 다운된 Redis 노드와 통신을 시도하는 동안 오랜 시간 동안 블록되는 것을 방지한다.&lt;br &#x2F;&gt;
+노드가 사용 불가능한 경우 가능한 빨리 다음 노드와 통신을 시도해야 한다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;클라이언트는 Lock을 획득하기 위해 단계 1에서 얻은 타임스탬프를 현재 시간에서 빼어 경과된 시간을 계산한다.&lt;br &#x2F;&gt;
+클라이언트가 대다수의 노드(적어도 3개)에서 Lock을 획득하고, Lock을 획득하는 데 걸린 총 시간이 Lock의 validity time보다 작은 경우에만 Lock이 획득된 것으로 간주된다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;Lock이 획득된 경우, validity time은 단계 3에서 계산된 경과 시간을 초기 validity time에서 뺀 값으로 간주된다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;만약 클라이언트가 어떤 이유로 인해 Lock을 얻지 못했다면 (N&#x2F;2+1 개의 인스턴스를 잠글 수 없었거나 유효 시간이 음수인 경우), 클라이언트는 Lock을 얻지 못한 것으로 여겼던 모든 노드를 unlock한다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;그리고 여기에는 몇가지 구현체들이 존재한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c04f363b2210397b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+보면 좀 이상한것도 많다. 스타 개수 보고 괜찮으면 골라쓰자..&lt;br &#x2F;&gt;
+당장 내가 써본 Rust 구현체도 제대로 된 물건이 아니었고, Go도 그랬다.&lt;br &#x2F;&gt;
+Node.js 구현체는 왜 없지...?&lt;&#x2F;p&gt;
+&lt;p&gt;아무튼 저기서 Redisson이 이 방면에서 좀 잘 쓰이는 것 같았다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;manual&#x2F;patterns&#x2F;distributed-locks&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;manual&#x2F;patterns&#x2F;distributed-locks&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;hyperconnect.github.io&#x2F;2019&#x2F;11&#x2F;15&#x2F;redis-distributed-lock-1.html&quot;&gt;https:&#x2F;&#x2F;hyperconnect.github.io&#x2F;2019&#x2F;11&#x2F;15&#x2F;redis-distributed-lock-1.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;hudi.blog&#x2F;distributed-lock-with-redis&#x2F;&quot;&gt;https:&#x2F;&#x2F;hudi.blog&#x2F;distributed-lock-with-redis&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;http:&#x2F;&#x2F;redisgate.kr&#x2F;redis&#x2F;command&#x2F;setnx.php&quot;&gt;http:&#x2F;&#x2F;redisgate.kr&#x2F;redis&#x2F;command&#x2F;setnx.php&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] 설치 in Mac</title>
+        <published>2023-02-13T00:00:00+00:00</published>
+        <updated>2023-02-13T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223014091774/"/>
+        <id>https://myyrakle.github.io/blog/223014091774/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223014091774/">&lt;p&gt;mac에서는 다른 도구들이 대개 그렇듯, brew를 쓰는 편이 편리하다.&lt;br &#x2F;&gt;
+다음과 같이 설치하고&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;brew install redis&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4319cb4842911915.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;시작시키면 된다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;brew services restart redis&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5139dcba32a236d2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 cli로 접속이 될 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4773180a15a6e943.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;getting-started&#x2F;installation&#x2F;install-redis-on-mac-os&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;getting-started&#x2F;installation&#x2F;install-redis-on-mac-os&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] Pub&#x2F;Sub</title>
+        <published>2023-02-13T00:00:00+00:00</published>
+        <updated>2023-02-13T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223014572088/"/>
+        <id>https://myyrakle.github.io/blog/223014572088/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223014572088/">&lt;p&gt;redis는 pub&#x2F;sub 기능을 지원한다.&lt;br &#x2F;&gt;
+특정 주제를 subscribe하고 있으면, 동일한 주제로 publish된 메세지를 받을 수 있는 구조다.&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 asdf라는 주제를 구독하고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a29d22247ba60524.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;다른데서 asdf라는 주제에 메세지를 보내면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9ba3443a94c43fd4.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이렇게 받아진다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_54624eba72129c2d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;단점은, subscriber가 하나도 없는 상태에서 publish를 하면 그 메세지는 증발한다는 것이다. 그래서 진짜 큐처럼 쓰기는 어렵다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 기능의 주요 사용처는 웹소켓이라고 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;웹소켓은 기본적으로 인메모리에 커넥션 정보를 쌓아놔야 양방향 통신을 할 수가 있는데, 서버를 스케일아웃하면 인스턴스마다 그 메모리 데이터가 파편화되고 엉망진창이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 메모리를 중앙화해서 관리하는 용도로 많이 쓴다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;manual&#x2F;pubsub&#x2F;&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;docs&#x2F;manual&#x2F;pubsub&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] 개괄</title>
+        <published>2020-05-29T00:00:00+00:00</published>
+        <updated>2020-05-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221982914794/"/>
+        <id>https://myyrakle.github.io/blog/221982914794/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221982914794/">&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f54df19c17f9701e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+레디스는 대표적인 NoSQL 데이터베이스 중 하나다.&lt;br &#x2F;&gt;
+2009년에 나왔다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 NoSQL도 사실 종류가 많은데, 이건 Key-Value형 DB에 속한다.&lt;br &#x2F;&gt;
+말 그대로 키와 값의 쌍을 저장하는 것에 특수화되어있다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;타입도 필수적인 몇가지만을 제공한다. String, List, Set, SortedSet, Hash이다.&lt;br &#x2F;&gt;
+기본타입은 문자열밖에 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;간단한만큼 성능이 매우 빠르다는 것이 강점이다.&lt;br &#x2F;&gt;
+기존의 DB들이 전부 무조건 디스크에 저장하고, 필요할 때만 메모리에 캐싱해서 쓰는 것과 다르게, 이건 무조건 메모리에 올리고 디스크에도 백업을 해둔다.&lt;&#x2F;p&gt;
+&lt;p&gt;물론 관계형 DB에서 주로 사용하는 복잡한 데이터 구조는 사용이 힘들고, 좀 특수한 경우에서만 별도로 사용하는 편이다. 특히 메세지 큐나, 영속성을 가지는 딕셔너리가 필요할 때 사용하기 좋다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;medium.com&#x2F;@jyejye9201&#x2F;%EB%A0%88%EB%94%94%EC%8A%A4-redis-%EB%9E%80-%EB%AC%B4%EC%97%87%EC%9D%B8%EA%B0%80-2b7af75fa818&quot;&gt;https:&#x2F;&#x2F;medium.com&#x2F;@jyejye9201&#x2F;%EB%A0%88%EB%94%94%EC%8A%A4-redis-%EB%9E%80-%EB%AC%B4%EC%97%87%EC%9D%B8%EA%B0%80-2b7af75fa818&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;engkimbs.tistory.com&#x2F;869&quot;&gt;https:&#x2F;&#x2F;engkimbs.tistory.com&#x2F;869&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;ko.wikipedia.org&#x2F;wiki&#x2F;%EB%A0%88%EB%94%94%EC%8A%A4&quot;&gt;https:&#x2F;&#x2F;ko.wikipedia.org&#x2F;wiki&#x2F;%EB%A0%88%EB%94%94%EC%8A%A4&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] 설치 및 시작</title>
+        <published>2020-05-29T00:00:00+00:00</published>
+        <updated>2020-05-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221983010011/"/>
+        <id>https://myyrakle.github.io/blog/221983010011/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221983010011/">&lt;h2 id=&quot;windou&quot;&gt;윈도우&lt;&#x2F;h2&gt;
+&lt;p&gt;윈도우라면, 아래 링크에 들어가서 받아야 한다. redis는 Windows를 정식으로 지원하지 않기 때문에... MS가 따로 관리해주는 것이 있다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;github.com&#x2F;dmajkic&#x2F;redis&#x2F;downloads&quot;&gt;https:&#x2F;&#x2F;github.com&#x2F;dmajkic&#x2F;redis&#x2F;downloads&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+원하는 버전을 받고, 압축을 풀고, 위치를 잘 지정해놓고, 환경변수를 지정하면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9b8ec4945da953a9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f216574a2bf8f1ed.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 서버를 켜자.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ccc391b90e1ebb40.png&quot; alt=&quot;&quot; &#x2F;&gt;
+대충 이렇게 뜨면 잘 동작한 것인데..&lt;&#x2F;p&gt;
+&lt;p&gt;터미널을 하나 더 켜고 redis-cli로 핑을 날려본다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bf1e23bccc0612b0.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이러면 잘 된 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 redis-cli만 실행하면 바로 접속이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5baa5aca6eef2afd.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이 상태에서 이런저런 명령어를 사용해서 데이터를 등록하거나 검색할 수 있는데...&lt;br &#x2F;&gt;
+그건 이후 포스트에서 다루겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;rinugseu&quot;&gt;리눅스&lt;&#x2F;h2&gt;
+&lt;p&gt;리눅스는 당연히 더 쉽고 편하게 설치가 가능하다.&lt;br &#x2F;&gt;
+센토스의 경우엔 패키지 매니저로 바로 설치가 가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_422293415564d6a0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;서버를 백그라운드에서 실행시키려면 daemonize 플래그값을 yes로 주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3c55f3f1c58b8dd1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이게 이상하게 윈도 버전에서는 제대로 동작하지 않더라&lt;&#x2F;p&gt;
+&lt;p&gt;마찬가지로 핑도 잘 받는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_02dd4e4b484b6480.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;서버를 죽이려면 killall을 쓰면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b700c0fa4b251e6c.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;hyunalee.tistory.com&#x2F;17&quot;&gt;https:&#x2F;&#x2F;hyunalee.tistory.com&#x2F;17&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] 값의 저장과 획득 (문자열&amp;리스트)</title>
+        <published>2020-05-29T00:00:00+00:00</published>
+        <updated>2020-05-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221983126621/"/>
+        <id>https://myyrakle.github.io/blog/221983126621/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221983126621/">&lt;p&gt;이번에는 간단한 값들을 저장하고, 다시 읽어들이는 법을 다뤄보겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;munjayeol&quot;&gt;문자열&lt;&#x2F;h2&gt;
+&lt;h2 id=&quot;gandanhan-munjayeolgabsyi-jeojangeun-set-myeongryeongeul-tonghae-suhaenghal-su-issda&quot;&gt;간단한 문자열값의 저장은 set 명령을 통해 수행할 수 있다.&lt;&#x2F;h2&gt;
+&lt;p&gt;키와 값을 순서대로 쳐주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a1be99af3f7c5b37.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 읽어오는건 get으로 수행할 수 있다. 키값만 주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_35f929c9019d7aae.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;레디스의 문자열은 최대 512메가바이트의 크기를 가질 수 있고, 바이너리 값도 다룰 수가 있다..&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;riseuteu&quot;&gt;리스트&lt;&#x2F;h2&gt;
+&lt;p&gt;리스트는 lpush나 rpush 등으로 삽입을 시도하는 순간에 생성된다.&lt;br &#x2F;&gt;
+lpush는 왼쪽에, rpush는 오른쪽에 삽입한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3a6bb881da45e11f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;한번에 여러개를 넣을 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_15f96fb1a239ac7d.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 리스트를 조회하려면 lrange에 시작-끝 인덱스값을 주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_3f7afee2ec06a601.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 다 보고 싶으면 종료값을 -1로 주면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_52e9a41b0c28bbb7.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;삭제를 하고 싶다면 lpop&amp;amp;rpop을 사용하면 된다. 요소를 하나 삭제 후, 값을 반환해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_9cd30ca278ad2d92.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;llen은 리스트의 길이를 계산해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_459375cb063bae27.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;lindex는 인덱스값을 받아 인덱싱을 해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_627e787bc18bbdcf.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이외에도 몇가지 함수가 더 있는데, 그건 문서를 참조하길 바란다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;blpop&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;blpop&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;riptutorial.com&#x2F;ko&#x2F;redis&#x2F;example&#x2F;28288&#x2F;%EB%AA%A9%EB%A1%9D%EC%97%90-%ED%95%AD%EB%AA%A9-%EC%B6%94%EA%B0%80%ED%95%98%EA%B8%B0&quot;&gt;https:&#x2F;&#x2F;riptutorial.com&#x2F;ko&#x2F;redis&#x2F;example&#x2F;28288&#x2F;%EB%AA%A9%EB%A1%9D%EC%97%90-%ED%95%AD%EB%AA%A9-%EC%B6%94%EA%B0%80%ED%95%98%EA%B8%B0&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.seotory.com&#x2F;post&#x2F;2016&#x2F;11&#x2F;introduction-to-redis&quot;&gt;https:&#x2F;&#x2F;blog.seotory.com&#x2F;post&#x2F;2016&#x2F;11&#x2F;introduction-to-redis&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;blpop&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;blpop&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] Set 타입</title>
+        <published>2020-05-29T00:00:00+00:00</published>
+        <updated>2020-05-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221983147936/"/>
+        <id>https://myyrakle.github.io/blog/221983147936/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221983147936/">&lt;p&gt;Set은 레디스의 기본타입 중 하나로, 실제로는 해시 집합이다.&lt;br &#x2F;&gt;
+때문에 삽입과, 요소의 존재여부 확인이 전부 O(1)에 수행된다.&lt;br &#x2F;&gt;
+근데 사실 쓸 일이 그리 잦지는 않을 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;set은 sadd 명령을 통해 삽입을 수행할 수 없다.&lt;br &#x2F;&gt;
+삽입을 수행하는 것으로 객체가 생성된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_956dd6f8073b2bd9.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;smembers를 사용하면 모든 값을 조회할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_50d92c9823139755.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;scard는 저장된 값의 개수를 읽어오고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_2ed11bbf29d39394.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;sismember는 일치하는 값의 개수를 가져온다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b9c811631ba77e65.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;srem은 해당 값을 집합에서 삭제한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e518314715164dbb.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이외에도 합집합, 차집합 등의 집합연산도 있긴 한데, 문서를 참조하길 바란다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;sunion&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;sunion&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.seotory.com&#x2F;post&#x2F;2016&#x2F;11&#x2F;introduction-to-redis&quot;&gt;https:&#x2F;&#x2F;blog.seotory.com&#x2F;post&#x2F;2016&#x2F;11&#x2F;introduction-to-redis&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;sadd&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;sadd&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Redis] Hash 타입</title>
+        <published>2020-05-29T00:00:00+00:00</published>
+        <updated>2020-05-29T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/221983220471/"/>
+        <id>https://myyrakle.github.io/blog/221983220471/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/221983220471/">&lt;p&gt;레디스의 Hash는 해시맵, 딕셔너리다. 우리가 알던 그것이 맞다.&lt;br &#x2F;&gt;
+일반적으로 자주 쓰이는 컬렉션 타입이다.&lt;&#x2F;p&gt;
+&lt;p&gt;단일요소의 삽입은 hset로 수행할 수 있다. 키와 값 쌍을 받는다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_45ce91fe77906b99.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;hlen은 해시의 길이를 가져오고&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e950f6e68b9bc1a1.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;hkeys와 kvals는 각각 키 목록과 값 목록을 뿌려준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6483ebb716981bef.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;hgetall은 키와 값을 가리지 않고 무식하게 뿌려준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ef75c88acea198a0.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;hdel은 키값을 받아서 해당 요소를 삭제한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cca1da14b01c64f2.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그렇다.&lt;br &#x2F;&gt;
+이외의 명령들은 공식 문서를 참조하길 바란다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;commands#hash&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;commands#hash&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.seotory.com&#x2F;post&#x2F;2016&#x2F;11&#x2F;introduction-to-redis&quot;&gt;https:&#x2F;&#x2F;blog.seotory.com&#x2F;post&#x2F;2016&#x2F;11&#x2F;introduction-to-redis&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;hset&quot;&gt;https:&#x2F;&#x2F;redis.io&#x2F;commands&#x2F;hset&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

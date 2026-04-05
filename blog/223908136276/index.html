@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Pytorch] TorchScript | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223908136276/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Pytorch] TorchScript">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223908136276/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-06-23T00:00:00+00:00">
+    <meta property="article:tag" content="Pytorch">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223908136276/">[Pytorch] TorchScript</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-06-23T00:00:00+00:00"><time datetime="2025-06-23T00:00:00+00:00">2025.06.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="572 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/pytorch/">Pytorch</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223908136276" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Pytorch 기본 모델 형식은 태생적인 단점을 많이 가지고 있는 편이다.<br />
+파이썬 코드로 실행되고, 사용법이 간단하고, 학습이나 배포도 간단한 것이 장점이나. 최적의 성능을 내지 못한다는게 고질적인 단점이 있었다.</p>
+<p>그래서 나온 것이 Torchscript라는 모델 파일 형식이다.</p>
+<p><img src="/images/img_0c13418302a30e83.png" alt="" />
+torch에서 제공하는 torchscript 기능 지원을 활용하면, 컴파일 과정을 거쳐서 python&amp;pytorch 종속성을 제거하고, 최소한의 의미만을 담는 script를 만들 수 있다.<br />
+다만, 이 자체로는 완성된 바이너리가 아님에 유의한다. 바이트코드처럼 중간 표현 언어로 변환하는 것이다.</p>
+<p>실제로 torchscript를 돌리려면 이걸 다시 torch로 로드해서 실행하거나, TensorRT 같은 진짜 native 바이너리 형태로 컴파일해서 실행해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeje-saempeul">예제 샘플</h2>
+<p>먼저 예제 모델을 하나 준비해보겠다.<br />
+그냥 길이 2짜리 입력을 받아서 길이 3짜리를 반환하는 간단한 모델이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> torch</span></span>
+<span class="giallo-l"><span>import torch.nn as nn</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>class SimpleModel(nn.Module):</span></span>
+<span class="giallo-l"><span>    def __init__(self):</span></span>
+<span class="giallo-l"><span>        super().__init__()</span></span>
+<span class="giallo-l"><span>        self.linear = nn.Linear(2</span><span style="color: #9399B2;">,</span><span> 3)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    def forward(self</span><span style="color: #9399B2;">,</span><span> x):</span></span>
+<span class="giallo-l"><span>        return self.linear(x)</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>from model</span><span style="color: #CBA6F7;"> import</span><span> SimpleModel</span></span>
+<span class="giallo-l"><span>import torch</span></span>
+<span class="giallo-l"><span>import torch.nn as nn</span></span>
+<span class="giallo-l"><span>import torch.optim as optim</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>model = SimpleModel()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(model)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>x = torch.tensor([[1.0</span><span style="color: #9399B2;">,</span><span> 1.0]</span><span style="color: #9399B2;">,</span><span> [2.0</span><span style="color: #9399B2;">,</span><span> 2.0]</span><span style="color: #9399B2;">,</span><span> [3.0</span><span style="color: #9399B2;">,</span><span> 3.0]</span><span style="color: #9399B2;">,</span><span> [4.0</span><span style="color: #9399B2;">,</span><span> 4.0]])</span></span>
+<span class="giallo-l"><span>y = torch.tensor([[3.0</span><span style="color: #9399B2;">,</span><span> 5.0</span><span style="color: #9399B2;">,</span><span> 7.0]</span><span style="color: #9399B2;">,</span><span> [5.0</span><span style="color: #9399B2;">,</span><span> 7.0</span><span style="color: #9399B2;">,</span><span> 9.0]</span><span style="color: #9399B2;">,</span><span> [7.0</span><span style="color: #9399B2;">,</span><span> 9.0</span><span style="color: #9399B2;">,</span><span> 11.0]</span><span style="color: #9399B2;">,</span><span> [9.0</span><span style="color: #9399B2;">,</span><span> 11.0</span><span style="color: #9399B2;">,</span><span> 13.0]])</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>criterion = nn.MSELoss()  # 평균제곱오차</span></span>
+<span class="giallo-l"><span>optimizer = optim.SGD(model.parameters()</span><span style="color: #9399B2;">,</span><span> lr=0.01)  # 확률적 경사하강법</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 10번 반복해서 학습 (epoch)</span></span>
+<span class="giallo-l"><span>for epoch in range(1000):</span></span>
+<span class="giallo-l"><span>    optimizer.zero_grad()         # 기울기 초기화</span></span>
+<span class="giallo-l"><span>    outputs = model(x)            # 모델에 입력값 전달</span></span>
+<span class="giallo-l"><span>    loss = criterion(outputs</span><span style="color: #9399B2;">,</span><span> y)  # 손실 계산</span></span>
+<span class="giallo-l"><span>    loss.backward()               # 역전파</span></span>
+<span class="giallo-l"><span>    optimizer.step()              # 파라미터 업데이트</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    if (epoch+1) % 100 == 0:</span></span>
+<span class="giallo-l"><span>        print(f</span><span style="color: #A6E3A1;">&#39;Epoch [{epoch+1}/1000], Loss: {loss.item():.4f}&#39;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 결과 확인</span></span>
+<span class="giallo-l"><span>print(</span><span style="color: #A6E3A1;">&quot;학습된 가중치:&quot;</span><span style="color: #9399B2;">,</span><span> model.linear.weight.tolist())</span></span>
+<span class="giallo-l"><span>print(</span><span style="color: #A6E3A1;">&quot;학습된 편향:&quot;</span><span style="color: #9399B2;">,</span><span> model.linear.bias.tolist())</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 테스트 </span></span>
+<span class="giallo-l"><span>print(</span><span style="color: #A6E3A1;">&quot;기대한 출력&quot;</span><span style="color: #9399B2;">,</span><span> y.tolist())</span></span>
+<span class="giallo-l"><span>print(</span><span style="color: #A6E3A1;">&quot;실제의 출력&quot;</span><span style="color: #9399B2;">,</span><span>  model(torch.tensor([[1.0</span><span style="color: #9399B2;">,</span><span> 1.0]])).tolist())</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 3가지 방식으로 모델 저장</span></span>
+<span class="giallo-l"><span>torch.save(model.state_dict()</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;state_dict.pth&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>torch.save(model</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;model_full.pth&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>checkpoint = </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &#39;epoch&#39;</span><span>: epoch</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &#39;model_state_dict&#39;</span><span>: model.state_dict()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &#39;optimizer_state_dict&#39;</span><span>: optimizer.state_dict()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &#39;loss&#39;</span><span>: loss</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    # ... 기타 필요한 정보</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"><span>torch.save(checkpoint</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;checkpoint.pth&quot;</span><span>)</span></span></code></pre>
+<p><img src="/images/img_a7178460e8acf64a.png" alt="" />
+그래서 1.0, 1.0을 넣으면 3,5,7에 근사하는 값이 나오도록 세팅해뒀다.</p>
+<p>이걸 torchscript로 컴파일해보자.</p>
+<br>
+<br>
+<br>
+<h2 id="2gaji-keompail-bangbeob-trace-vs-script">2가지 컴파일 방법: trace vs script</h2>
+<p>torchscript에는 2가지 컴파일 방법이 있다.<br />
+근데 이게 방법만 다른게 아니라 실제 결과물의 수준도 다를 수 있기 때문에 그 장단점과 특징을 잘 알고 선택해야 한다. 딱 뭐를 써야한다는 일반적인 지침은 존재하지 않는 것 같다.</p>
+<p>일단 script는 가장 정직하고 일반적인 형태의 컴파일 방법이다. 그냥 python 코드를 읽어서, 정적으로 컴파일하는 전형적인 방법론을 취한다.</p>
+<p>반면에 trace는 모델을 실제로 실행하면서 그 실행 흐름에 맞게 최적화된 코드를 만들어내는 방식을 취한다. 진짜 JIT 컴파일에 가까운 방법이라고 할 수 있겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="trace-keompail">trace 컴파일</h2>
+<p>trace 컴파일은 그렇게 어렵진 않다.<br />
+실제 모델 실행에 필요한 입력값을 대충 하나 만들고, 밀어넣어서 trace 컴파일을 돌리면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> trace</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">from</span><span> model import SimpleModel</span></span>
+<span class="giallo-l"><span>import torch</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>model = SimpleModel()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>model.load_state_dict(torch.load(</span><span style="color: #A6E3A1;">&quot;state_dict.pth&quot;</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(model)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># 추론 모드 전환</span></span>
+<span class="giallo-l"><span>model.eval()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># Tracing 방식 - 예제 입력으로 모델 실행 경로 추적</span></span>
+<span class="giallo-l"><span>example_input = torch.tensor([[1.0</span><span style="color: #9399B2;">,</span><span> 2.0]])</span></span>
+<span class="giallo-l"><span>traced_model = torch.jit.trace(model</span><span style="color: #9399B2;">,</span><span> example_input)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>traced_model.save(</span><span style="color: #A6E3A1;">&quot;traced_model.pt&quot;</span><span>)</span></span></code></pre>
+<p>그러고 만들어지는 반환값 traced_model이 trace 모드로 컴파일된 모델 데이터다.<br />
+저걸 저장해서 사용하면 된다.</p>
+<p>실행할 때는 jit.load를 통해서 로드해서 사용할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>from model</span><span style="color: #CBA6F7;"> import</span><span> SimpleModel</span></span>
+<span class="giallo-l"><span>import torch</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>loaded_model = torch.jit.load(</span><span style="color: #A6E3A1;">&quot;traced_model.pt&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(loaded_model)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(loaded_model(torch.tensor([[1.0</span><span style="color: #9399B2;">,</span><span> 1.0]])).tolist())</span></span></code></pre>
+<p><img src="/images/img_927f8be6d036069e.png" alt="" />
+경우에 따라 값이 약간 왜곡될 수도 있긴 한데, 이 경우에는 동일한 값이 나왔다.</p>
+<br>
+<br>
+<br>
+<h2 id="script-keompail">script 컴파일</h2>
+<p>script 컴파일의 경우에는 비교적 더 간단하다.<br />
+실제로 모델을 돌릴 필요도 없기 때문이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>from model</span><span style="color: #CBA6F7;"> import</span><span> SimpleModel</span></span>
+<span class="giallo-l"><span>import torch</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>loaded_model = torch.jit.load(</span><span style="color: #A6E3A1;">&quot;scripted_model.pt&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(loaded_model)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>print(loaded_model(torch.tensor([[1.0</span><span style="color: #9399B2;">,</span><span> 1.0]])).tolist())</span></span></code></pre>
+<p><img src="/images/img_7bc4c95dd203bedb.png" alt="" />
+이 경우에도 일단은 동등한 결과가 나왔다.</p>
+<br>
+<br>
+<br>
+<h2 id="trace-vs-script">trace vs script</h2>
+<p>그래서, 2가지 방법 중 무엇을 선택해야할까?<br />
+사실 이것도 경우에 따라 다르다는 말을 할 수밖에 없을 것 같다.</p>
+<p>trace는 해당 계산 흐름에 맞춰서 최적화된 형태로 정적 빌드를 수행한다. 해당 예제 실행에 사용되지 않은 불필요한 그래프를 전부 제거한다.<br />
+그래서 실행 흐름이 한가지라면 무엇보다 빠르고 뛰어난 결과를 도출할 수 있다.<br />
+하지만 다양한 형태의 실행 흐름을 제공하게끔 만들기 어렵고, 입력 크기 또한 한가지로 제한된다는 단점이 있다.</p>
+<p>script는 코드를 정적으로 분석해서 최적화된 형태로 컴파일을 시도한다. 이건 특히, 모델 코드에 복잡한 조건문이나 반복문 같은 것이 있는 패턴에 대해서는 더욱 유효하게 동작한다.<br />
+예를 들면, 이런 식의 변칙적인 코드 말이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> torch</span></span>
+<span class="giallo-l"><span>import torch.nn as nn</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>class SampleModel(nn.Module):</span></span>
+<span class="giallo-l"><span>    def __init__(self):</span></span>
+<span class="giallo-l"><span>        super().__init__()</span></span>
+<span class="giallo-l"><span>        self.linear = nn.Linear(2</span><span style="color: #9399B2;">,</span><span> 3)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    def forward(self</span><span style="color: #9399B2;">,</span><span> x):</span></span>
+<span class="giallo-l"><span>        # 동적 제어 흐름 예시</span></span>
+<span class="giallo-l"><span>        if x.sum() &gt; 0:</span></span>
+<span class="giallo-l"><span>            return self.linear(x)</span></span>
+<span class="giallo-l"><span>        else:</span></span>
+<span class="giallo-l"><span>            return torch.zeros_like(x)</span></span></code></pre>
+<p>하지만 script 코드의 정적 분석 수준은 낮다. 모든 python 신택스나 코드 패턴에 유효하게 동작하는 것이 아니기 때문이다. 최적화가 되는 한도 내에서 강박적으로 코드를 작성해야 한다는게 좀 치명적인 부분이다.<br />
+상속을 써도 안되고, lamdba를 써도 안되고, union도 안되고, 동적 타입도 안되고, 사실 뭐 되는게 없다.<br />
+코드 퀄리티와 script 컴파일 가능성을 동시에 가져가는게 거의 불가능하다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="trace-with-script">trace with script</h2>
+<p>양쪽 모두의 장점을 가져가고 싶다면, trace와 script를 동시에 섞어서 사용하는 것도 가능하다.<br />
+예를 들면, 이런 식이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">class</span><span style="color: #F9E2AF;font-style: italic;"> MyRNNLoop</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">torch</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">nn</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">Module</span><span>):</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">    def __init__</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">self</span><span>):</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">        super</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">MyRNNLoop</span><span>, </span><span style="color: #F9E2AF;font-style: italic;">self</span><span>).</span><span style="color: #F9E2AF;font-style: italic;">__init__</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">        self</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">cell</span><span> = </span><span style="color: #F9E2AF;font-style: italic;">torch</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">jit</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">trace</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">MyCell</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">scripted_gate</span><span>), (</span><span style="color: #F9E2AF;font-style: italic;">x</span><span>, </span><span style="color: #F9E2AF;font-style: italic;">h</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">    def forward</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">self</span><span>, </span><span style="color: #F9E2AF;font-style: italic;">xs</span><span>):</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">        h</span><span>, </span><span style="color: #F9E2AF;font-style: italic;">y</span><span> = </span><span style="color: #F9E2AF;font-style: italic;">torch</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">zeros</span><span>(3, 4), </span><span style="color: #F9E2AF;font-style: italic;">torch</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">zeros</span><span>(3, 4)</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">        for i in range</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">xs</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">size</span><span>(0)):</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">            y</span><span>, </span><span style="color: #F9E2AF;font-style: italic;">h</span><span> = </span><span style="color: #F9E2AF;font-style: italic;">self</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">cell</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">xs</span><span>[</span><span style="color: #F9E2AF;font-style: italic;">i</span><span>], </span><span style="color: #F9E2AF;font-style: italic;">h</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">        return y</span><span>, </span><span style="color: #F9E2AF;font-style: italic;">h</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">rnn_loop</span><span> = </span><span style="color: #F9E2AF;font-style: italic;">torch</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">jit</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">script</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">MyRNNLoop</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">print</span><span>(</span><span style="color: #F9E2AF;font-style: italic;">rnn_loop</span><span>.</span><span style="color: #F9E2AF;font-style: italic;">code</span><span>)</span></span></code></pre>
+<p>세부 모델 동작들에 대해서는 trace로 컴파일을 하고, 분기 제어에 대해서는 script 컴파일을 하도록 하는 것이다.<br />
+이러면 컴파일을 할때 script가 trace된 스크립트를 인라인해서 적절히 처리한다.</p>
+<br>
+<p>예제에 사용한 전체 코드베이스는 다음 링크에서 확인할 수 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/ml_examples/tree/master/pytorch/torchscript-basic">https://github.com/myyrakle/ml_examples/tree/master/pytorch/torchscript-basic</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://tutorials.pytorch.kr/recipes/torchscript_inference.html">https://tutorials.pytorch.kr/recipes/torchscript_inference.html</a><br />
+<a rel="external" href="https://happy-jihye.github.io/dl/torch-2/">https://happy-jihye.github.io/dl/torch-2/</a><br />
+<a rel="external" href="https://ppwwyyxx.com/blog/2022/TorchScript-Tracing-vs-Scripting/">https://ppwwyyxx.com/blog/2022/TorchScript-Tracing-vs-Scripting/</a><br />
+<a rel="external" href="https://docs.pytorch.org/docs/stable/jit.html">https://docs.pytorch.org/docs/stable/jit.html</a><br />
+<a rel="external" href="https://docs.pytorch.org/docs/stable/jit_language_reference_v2.html">https://docs.pytorch.org/docs/stable/jit_language_reference_v2.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223910102830/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Docker] docker nvidia: gpu 메모리 접근 오류? &quot;misaligned address&quot;<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223908184749/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] DI: wire<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

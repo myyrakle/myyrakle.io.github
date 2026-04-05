@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana] Loki (with k8s) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223518846852/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana] Loki (with k8s)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223518846852/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-07-19T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223518846852/">[Grafana] Loki (with k8s)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-07-19T00:00:00+00:00"><time datetime="2024-07-19T00:00:00+00:00">2024.07.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="644 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223518846852" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_69434f688e686b43.jpg" alt="" /></p>
+<p>Loki는 Grafana에서 만들고 관리하는 로그 수집 도구다.<br />
+로그를 쌓고, 검색하는 기능을 제공한다. 로그 저장용 오픈소스로는 단연 최고 중 하나다.</p>
+<p>스토리지 옵션은 다양하다. 싱글 노드에 그냥 저장하는 방법도 있고, minio도 있고, s3 같은 클라우드 공급 스토리지를 사용해서 관리할 수도 있다.</p>
+<p>여기서는 단일노드에 NFS를 통해서 구성해보고, 그라파나 대시보드까지 연결해보는 것까지를 해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="akitegcyeo">아키텍쳐</h2>
+<p>Loki는 수평 확장을 지원하는 로그 저장소다.</p>
+<p><img src="/images/img_c4f6b5ec8050cafe.png" alt="" />
+<a rel="external" href="https://grafana.com/docs/loki/latest/get-started/architecture/">https://grafana.com/docs/loki/latest/get-started/architecture/</a><br />
+Loki에서 가장 중요한 개념은 인덱스와 청크다. 저 2가지의 형태로 로그 데이터를 저장하게 된다.</p>
+<p>청크는 말 그대로 로그를 압축해서 저장하는 형태를 말하고, 인덱스는 로그를 검색하기 위한 용도의 데이터셋을 말한다.</p>
+<p>인덱스는 예전에는 BoltDB라는걸 썼는데, 그건 단종했고 TSDB라는 Prometheus 원산의 포맷을 쓴다.</p>
+<p>자세한 내용은 다음 문서를 참조하면 좋다.<br />
+<a rel="external" href="https://grafana.com/docs/loki/latest/get-started/architecture/">https://grafana.com/docs/loki/latest/get-started/architecture/</a></p>
+<br>
+<br>
+<br>
+<h2 id="helmeuro-seolcihagi">helm으로 설치하기</h2>
+<p>우선 helm으로 레포지토리를 가져온다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>helm repo add grafana https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//grafana.github.io/helm-charts</span></span>
+<span class="giallo-l"><span>helm repo update</span></span></code></pre>
+<p><img src="/images/img_fcebb4dcb604181a.png" alt="" /></p>
+<p>그리고 구성 파일을 작성한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>vi loki</span><span style="color: #94E2D5;">-</span><span>single</span><span style="color: #94E2D5;">.</span><span>yaml</span></span></code></pre>
+<p><img src="/images/img_6c1b1a6b0fb31ee7.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>deploymentMode</span><span style="color: #9399B2;">:</span><span> SingleBinary</span></span>
+<span class="giallo-l"><span>loki</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  auth_enabled</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>  ingester</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    wal</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>      flush_on_shutdown</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>  commonConfig</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    replication_factor</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>  storage</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    type</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &#39;filesystem&#39;</span></span>
+<span class="giallo-l"><span>  schemaConfig</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    configs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> from</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;2024-01-01&quot;</span></span>
+<span class="giallo-l"><span>      store</span><span style="color: #9399B2;">:</span><span> tsdb</span></span>
+<span class="giallo-l"><span>      index</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>        prefix</span><span style="color: #9399B2;">:</span><span> loki_index_</span></span>
+<span class="giallo-l"><span>        period</span><span style="color: #9399B2;">:</span><span> 24h</span></span>
+<span class="giallo-l"><span>      object_store</span><span style="color: #9399B2;">:</span><span> filesystem # we</span><span style="color: #A6E3A1;">&#39;re storing on filesystem so there&#39;</span><span>s no real persistence here</span><span style="color: #94E2D5;">.</span></span>
+<span class="giallo-l"><span>      schema</span><span style="color: #9399B2;">:</span><span> v13</span></span>
+<span class="giallo-l"><span>memberlist</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  service</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    publishNotReadyAddresses</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>singleBinary</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>read</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>backend</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>write</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  replicas</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 0</span></span></code></pre><br>
+<p>그리고 바로 생성을 때려준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl create</span><span style="color: #CBA6F7;"> namespace</span><span style="color: #F9E2AF;font-style: italic;"> loki</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">helm install</span><span> --</span><span style="color: #F9E2AF;font-style: italic;">values loki</span><span>-</span><span style="color: #F9E2AF;font-style: italic;">single</span><span style="color: #94E2D5;">.</span><span style="color: #F9E2AF;font-style: italic;">yaml loki grafana</span><span>/</span><span style="color: #F9E2AF;font-style: italic;">loki</span><span> -</span><span style="color: #F9E2AF;font-style: italic;">n loki</span></span></code></pre>
+<p><img src="/images/img_be71c97c3b356f7e.png" alt="" /></p>
+<p><img src="/images/img_39eb30a8f8dda9ce.png" alt="" /></p>
+<p>그리고 좀 기다리다가</p>
+<p><img src="/images/img_af5a7b7ac2b08d0a.png" alt="" /></p>
+<p><img src="/images/img_e81189c3a72538a4.png" alt="" />
+다 이렇게 Running이 되면 잘 뜬 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="pvc-munje-haegyeol-onpeuremiseuyi-gyeongu">PVC 문제 해결 (온프레미스의 경우)</h2>
+<p>클라우드 클러스터에서 쓰면 문제가 없을 수도 있는데, 온프레미스 클러스터에서 공식문서만 따라치다가는 대가리가 깨진다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #FAB387;">0</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">1</span><span> nodes are available</span><span style="color: #9399B2;">:</span><span> pod has unbound immediate PersistentVolumeClaims</span><span style="color: #94E2D5;">.</span><span> preemption: </span><span style="color: #FAB387;">0</span><span style="color: #94E2D5;">/</span><span style="color: #FAB387;">1</span><span> nodes are available</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 1</span><span> Preemption is not helpful for scheduling</span><span style="color: #94E2D5;">.</span></span></code></pre>
+<p><img src="/images/img_70af54aed8f739b9.png" alt="" />
+다음과 같은 오류가 흔하게 발생할 수 있는데</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223495801532">https://blog.naver.com/sssang97/223495801532</a><br />
+붙일 볼륨 없다고 찡찡거리는 것이다.</p>
+<p>내 경우에는 NFS를 쓰고 있어서 그냥 그거로 붙였다.</p>
+<p><img src="/images/img_ec16ca34e12fe0a3.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1 </span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> PersistentVolume</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  labels</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>component</span><span style="color: #9399B2;">:</span><span> single</span><span style="color: #94E2D5;">-</span><span>binary</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>instance</span><span style="color: #9399B2;">:</span><span> loki</span></span>
+<span class="giallo-l"><span>    app</span><span style="color: #94E2D5;">.</span><span>kubernetes</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>name</span><span style="color: #9399B2;">:</span><span> loki</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> nfs</span><span style="color: #94E2D5;">-</span><span>pv</span><span style="color: #94E2D5;">-</span><span>loki</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span> loki</span></span>
+<span class="giallo-l"><span>spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  storageClassName</span><span style="color: #9399B2;">:</span><span> nfs</span></span>
+<span class="giallo-l"><span>  capacity</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    storage</span><span style="color: #9399B2;">:</span><span> 15Gi </span></span>
+<span class="giallo-l"><span>  volumeMode</span><span style="color: #9399B2;">:</span><span> Filesystem</span></span>
+<span class="giallo-l"><span>  accessModes</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> ReadWriteOnce</span></span>
+<span class="giallo-l"><span>  persistentVolumeReclaimPolicy</span><span style="color: #9399B2;">:</span><span> Retain</span></span>
+<span class="giallo-l"><span>  nfs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    server</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 192.168</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">1.2</span><span> </span></span>
+<span class="giallo-l"><span>    path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>home</span><span style="color: #94E2D5;">/</span><span>nfs</span><span style="color: #94E2D5;">/</span><span>loki</span></span></code></pre>
+<p><img src="/images/img_7db643892a440d31.png" alt="" />
+볼륨 만들고 레이블도 좀 달아주면 된다.<br />
+기본 설정으로는 최소 10G짜리 볼륨이 필요하다.</p>
+<br>
+<p><img src="/images/img_ae5d2fb2f7313bc8.png" alt="" /></p>
+<p><img src="/images/img_e8746a6354593ba2.png" alt="" />
+기본 구성에서 헬름 스택은 storage-loki라는 pvc를 만드는데, 그게 바인딩되면 잘 될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jigjeob-api-jjilreoseo-sayonghaebogi">직접 API 찔러서 사용해보기</h2>
+<p>한번 직접 찔러서 Loki가 잘 구성되어있는지를 검증해보자.</p>
+<p><img src="/images/img_4528b933c993125b.png" alt="" />
+loki 스택은 기본적으로 ClusterIP를 통한 내부접근만을 권장하기에, 내부에서 k8s dns로 찔러서 사용하는 경우가 많다. 저대로면 pod 하나 띄우고 들어가서 써야하는데, 그러기엔 영 귀찮다.</p>
+<p>호스트에서 쓸 수 있도록 포트포워드좀 열고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl port</span><span style="color: #94E2D5;">-</span><span>forward</span><span style="color: #94E2D5;"> --</span><span style="color: #CBA6F7;">namespace</span><span style="color: #F9E2AF;font-style: italic;"> loki svc</span><span>/</span><span style="color: #F9E2AF;font-style: italic;">loki</span><span>-</span><span style="color: #F9E2AF;font-style: italic;">gateway</span><span> 3100:80</span></span></code></pre>
+<p><img src="/images/img_54b09cdb7ac4e6b3.png" alt="" /></p>
+<p>API로 바로 찔러보면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #A6E3A1;"> &quot;http://127.0.0.1:3100/loki/api/v1/query_range&quot;</span><span style="color: #94E2D5;"> --</span><span>data</span><span style="color: #94E2D5;">-</span><span>urlencode</span><span style="color: #A6E3A1;"> &#39;query={job=&quot;test&quot;}&#39;</span><span style="color: #94E2D5;"> -</span><span>H X</span><span style="color: #94E2D5;">-</span><span>Scope</span><span style="color: #94E2D5;">-</span><span>OrgId</span><span style="color: #9399B2;">:</span><span>foo</span><span style="color: #94E2D5;"> |</span><span> jq</span><span style="color: #94E2D5;"> .</span><span>data</span><span style="color: #94E2D5;">.</span><span>result</span></span></code></pre>
+<p><img src="/images/img_150fd006a928721d.png" alt="" />
+이건 쿼리를 검색하는 API다. 아직 아무것도 안했으니 아무것도 없다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>curl</span><span style="color: #94E2D5;"> -</span><span>H</span><span style="color: #A6E3A1;"> &quot;Content-Type: application/json&quot;</span><span style="color: #94E2D5;"> -</span><span>XPOST</span><span style="color: #94E2D5;"> -</span><span>s</span><span style="color: #A6E3A1;"> &quot;http://127.0.0.1:3100/loki/api/v1/push&quot;</span><span>  \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">--</span><span>data</span><span style="color: #94E2D5;">-</span><span>raw</span><span style="color: #A6E3A1;"> &quot;{</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">streams</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">: [{</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">stream</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">: {</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">job</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">: </span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">test</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">}, </span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">values</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">: [[</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">$(date +%s)000000000</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">, </span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">fizzbuzz</span><span style="color: #F5C2E7;">\&quot;</span><span style="color: #A6E3A1;">]]}]}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">-</span><span>H X</span><span style="color: #94E2D5;">-</span><span>Scope</span><span style="color: #94E2D5;">-</span><span>OrgId</span><span style="color: #9399B2;">:</span><span>foo</span></span></code></pre>
+<p><img src="/images/img_b2f689de75e35b21.png" alt="" />
+이렇게 json 형태로 말아서 로그를 쌓을 수 있다.</p>
+<p>job은 loki에서 로그를 묶는 단위다. 보통 하나의 시스템 단위를 하나의 job으로 잡고 로그를 쓸 것이다.</p>
+<p><img src="/images/img_a3f76ee72d30e8bc.png" alt="" />
+그리고 다시 조회하면 밀어넣은 데이터를 쿼리해볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="grafanae-yeondonghaebogi">Grafana에 연동해보기</h2>
+<p>그라파나에 대해서는 약간 알고, 이미 구성해놨다고 전제한다.</p>
+<p>그라파나 대시보드로 이동해서 connection을 먼저 등록해준다.</p>
+<p><img src="/images/img_229e5b059f9f468d.png" alt="" /></p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//loki-gateway.loki.svc.cluster.local</span></span></code></pre>
+<p>그리고 대충 이런식의 k8s dns를 잘 추출한다.<br />
+helm으로 띄울 때도 알려주고, 내가 위에 적어놓은대로 했으면 이렇게 나올 것이다.</p>
+<br>
+<p><img src="/images/img_a13079ba3fdbfbd4.png" alt="" />
+URL에 엔드포인트를 적고</p>
+<br>
+<p><img src="/images/img_48f61836a258def1.png" alt="" />
+Save &amp; Test를 누른다.<br />
+이렇게 뜨면 잘 뜬 것이다.</p>
+<p>근데 몇가지 이유로 연결이 되지 않을 수도 있다.</p>
+<p><img src="/images/img_28fb4b874a0e4c10.png" alt="" /></p>
+<p><img src="/images/img_ea264fbf342aba8b.png" alt="" />
+loki에 인증이 켜져있다거나, networkpolicy가 걸려있다거나, 그냥 엔드포인트가 잘못되었거나. 원인은 여러가지가 있을 수 있다. 정확한 원인은 그라파나 서버 로그를 보는게 정확하다.</p>
+<p>아무튼 이렇게 추가가 되면 된 것이다.</p>
+<p><img src="/images/img_babef7f4df9548b0.png" alt="" /></p>
+<p>그걸 대시보드에 추가해주면 되는데</p>
+<p><img src="/images/img_33280b0fc145e7a0.png" alt="" /></p>
+<p><img src="/images/img_f5226f83bc7685ba.png" alt="" />
+Add visualization을 누르ㅗ</p>
+<br>
+<p><img src="/images/img_9cfe26d4d6a3346f.png" alt="" />
+로키 선택</p>
+<br>
+<p><img src="/images/img_d58b17dae4982774.png" alt="" />
+그럼 편집창이 뜬다.</p>
+<br>
+<p><img src="/images/img_b997747710ccefb6.png" alt="" />
+조회할 로그 필터를 적절히 걸고</p>
+<br>
+<p><img src="/images/img_650c48e0911607c8.png" alt="" />
+어떻게 볼지를 정한다.</p>
+<br>
+<p><img src="/images/img_3d62eb3788225b91.png" alt="" />
+테이블은 뭐 이렇게 뜨고</p>
+<br>
+<p><img src="/images/img_2a621c468683690a.png" alt="" />
+Logs는 이렇게 뜬다.</p>
+<p>Logs가 대체로 더 나은거같다.</p>
+<br>
+<p><img src="/images/img_3af8ba663588fb9e.png" alt="" />
+아무튼 뭐로든 저장하면</p>
+<br>
+<p><img src="/images/img_274270338f9dacfd.png" alt="" />
+대시보드에서 이제 볼 수 있게 된다.</p>
+<br>
+<p><img src="/images/img_01a67effe2986d96.png" alt="" />
+Logs의 경우에는 옵션도 좀 있다.</p>
+<p>이러면 앞단은 대충 된 것이다.</p>
+<p>다음 포스트에서는 Promtail을 통해 로그를 수집해서 Loki로 쏘는걸 해보겠다.</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223518925037">https://blog.naver.com/sssang97/223518925037</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://grafana.com/docs/loki/latest/setup/install/helm/">https://grafana.com/docs/loki/latest/setup/install/helm/</a><br />
+<a rel="external" href="https://whchoi98.gitbook.io/k8s/observability/loki">https://whchoi98.gitbook.io/k8s/observability/loki</a><br />
+<a rel="external" href="https://github.com/grafana/loki/issues/7907">https://github.com/grafana/loki/issues/7907</a><br />
+<a rel="external" href="https://github.com/grafana/loki/issues/10529">https://github.com/grafana/loki/issues/10529</a><br />
+<a rel="external" href="https://github.com/grafana/loki/issues/9756">https://github.com/grafana/loki/issues/9756</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223518925037/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Grafana] Loki: Promtail 에이전트 구성 (k8s)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223516497933/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] Failed to inspect image &quot;...&quot; did not resolve to an alias and no unqualified-search...<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

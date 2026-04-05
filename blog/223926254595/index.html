@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] Engine: ReplacingMergeTree | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223926254595/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] Engine: ReplacingMergeTree">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223926254595/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-07-08T00:00:00+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223926254595/">[Clickhouse] Engine: ReplacingMergeTree</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-07-08T00:00:00+00:00"><time datetime="2025-07-08T00:00:00+00:00">2025.07.08</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="273 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223926254595" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>MergeTree 엔진의 주요 변종 엔진 중 하나다.<br />
+만약 정렬키를 기준으로 고유성을 보장하고 싶다면 이 엔진을 선택하면 된다.</p>
+<p>일반적인 공통사항은 MergeTree에 대한 글을 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223926218194">https://blog.naver.com/sssang97/223926218194</a></p>
+<p>테이블 정의나 일반적인 사용법에 있어서는 MergeTree와 크게 다르지 않다.</p>
+<p><img src="/images/img_3990756dc341d6c1.png" alt="" />
+ORDER BY를 기준으로 중복을 제거한다는 것을 알기만 하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="jungbog-jegeo">중복 제거</h2>
+<p>ORDER BY 키를 기준으로 중복 데이터를 제거한다.</p>
+<p><img src="/images/img_5bedc68fcc137d0b.png" alt="" /></p>
+<p><img src="/images/img_93b8268299936703.png" alt="" />
+문제는, 중복 제거가 실시간으로 처리되는건 아니라는 것이다.<br />
+백그라운드 Merge가 진행될 때 모아서 중복을 제거하는데, 이게 그렇게 자주 실행되지는 않는다.</p>
+<p>Merge를 트리거해서 강제로 중복을 제거하려면, OPTIMIZE를 사용하면 된다.</p>
+<p><img src="/images/img_462cf469191ff73c.png" alt="" /></p>
+<p><img src="/images/img_93751ad691a61bf9.png" alt="" />
+다만, 권장되지는 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="jungbog-jegeowa-deiteo-beojeoning">중복 제거와 데이터 버저닝</h2>
+<p>RDB의 Unique 조건의 경우에는 강력하게 Lock을 걸고 유일성을 처리해서 나중에 들어온 값이 튕기지만, 이건 실시간이 아니라서 그렇게는 못한다.<br />
+그러면 무엇을 기준으로 남겨둘 항목을 선택할까?</p>
+<p>따로 버전을 지정하지 않는다면 가장 마지막에 insert된 것만을 남기고 전부 지운다.</p>
+<p>만약 확실하게 나중에 저장된 데이터만 남기고 싶다면, 버전 필드를 추가하고 버저닝 대상으로 지정해서 중복 제거 조건을 명확하게 만들 수 있다.</p>
+<p><img src="/images/img_459e1558e14458fb.png" alt="" />
+이렇게 걸어둔다면</p>
+<br>
+<p><img src="/images/img_e339d667e58dae28.png" alt="" /></p>
+<p><img src="/images/img_884166a4354dbabb.png" alt="" />
+버전 값이 가장 큰 것만 남기고 지운다.</p>
+<p>여기서는 정수로 했지만 시간 값을 넣어도 된다.</p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="min-age-to-force-merge-seconds-seting">min_age_to_force_merge_seconds 세팅</h2>
+<p>ReplacingMergeTree는 MergeTree의 기본 병합 정책을 따라서 중복 키를 제거한다.<br />
+근데 이건 생각보다 느긋하게 처리하는거라서 원하는 수준의 유일성을 보장하기 어려울 수 있다.</p>
+<p>이때 적용하기 좋은 설정이 min_age_to_force_merge_seconds다</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER TABLE 테이블명 </span></span>
+<span class="giallo-l"><span>MODIFY SETTING min_age_to_force_merge_seconds</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 10</span></span></code></pre>
+<p><img src="/images/img_306f2949774b7cfb.png" alt="" />
+이러면 해당 초 이상이 지난 데이터에 대해서 강제로 병합-중복제거를 하도록 지정할 수 있다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree">https://clickhouse.com/docs/engines/table-engines/mergetree-family/replacingmergetree</a><br />
+<a rel="external" href="https://clickhouse.com/docs/guides/replacing-merge-tree">https://clickhouse.com/docs/guides/replacing-merge-tree</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223926218194/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Clickhouse] Engine: MergeTree<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223926531588/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] Publication: WAL 기반 복제&#x2F;CDC<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Cloud Spanner와 분산 합의, 시간 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223187729894/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Cloud Spanner와 분산 합의, 시간">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223187729894/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-08-19T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223187729894/">Cloud Spanner와 분산 합의, 시간</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-08-19T00:00:00+00:00"><time datetime="2023-08-19T00:00:00+00:00">2023.08.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="398 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223187729894" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Cloud Spanner는 분산형 DB 시스템들 중에서도 꽤나 독보적인 포지션을 점유하고 있다.<br />
+왜일까?</p>
+<p>분산 DB들이 일반적으로 가지고 있는 문제인 일관성에 대해 살짝 다루고, Cloud Spanner가 이를 어떻게 해결하고 있는지 소개해보겠다.</p>
+<br>
+<br>
+<h2 id="bunsan-db">분산 DB?</h2>
+<p>분산DB는 글로벌 서비스의 요구사항에 따라 등장하고 성장하게 된 시스템이다.</p>
+<p>만약 서비스가 유럽, 아시아, 미국에 전부 다 있다면, 각자 서버를 지리적으로 유럽, 아시아, 미국에 두는게 보통이다. 대륙을 건너게 되면 필연적으로 물리적인 속도 지연이 발생하기 때문이다.</p>
+<p>그럼 DB는 어떨까? 서버만 분산해두고 DB를 중앙화하면 DB 왔다갔다하는데도 꽤나 오랜 시간이 걸릴 것은 자명하다.<br />
+DB를 완전히 격리해서 각자 세팅할 수도 있겠지만, 그렇지 못할 경우도 많다.<br />
+이럴 때 분산 DB를 사용해서 전세계의 리전에 DB 노드들을 깔아두고, 서로 동기화되게 하는 것이다.</p>
+<p>대표적인 분산 DB로는 GCP의 close 시스템인 Cloud Spanner, 오픈소스인 CockroachDB, YDB 등이 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="bunsan-teuraenjaegsyeongwa-ilgwanseong-consistency">분산 트랜잭션과 일관성(consistency)</h2>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223115732041">https://blog.naver.com/sssang97/223115732041</a></p>
+<p>분산시스템들에서 항상 머리를 아프게 만드는 것이 일관성 보장이다.<br />
+만약 유럽 노드와 아시아 노드에서, 동시에 같은 계좌 데이터에 쓰기를 수행한다면 어떻게 할까?<br />
+일단은 각 노드에 쓰기를 할 것이다. 유럽 노드에서는 500원을 인출하고, 아시아 노드에서는 2000원을 인출한다.</p>
+<p>그 다음에는 각 노드의 변경사항을 전세계에 동기화해야한다. 그러면 500원 인출이 먼저 진행되어야할지, 2000원 인출이 진행되어야할지 선택해야 한다.<br />
+여기가 쟁점이다.</p>
+<p>대부분의 오픈소스 시스템은 Raft 기반의 알고리즘을 사용해서 멀티리전을 동기화한다.<br />
+그리고 트랜잭션들을 순서대로 직렬화해서 처리를 해줘야 하는데, 여기서 또 걸리는 것이 "시간"이다.</p>
+<p>일반적으로 컴퓨터에서 제공되는 시계는 그리 정확하지 않다는게 문제다. cockroach는 시간을 기준으로 직렬화를 하긴 하는데, 각 노드의 시간을 다 믿을 수는 없기 때문에 꽤나 복잡한 방법으로 오차를 줄인다.</p>
+<p>이건 시간 정확도의 문제는 어떤 시계를 써도 마찬가지다. 단 한가지를 빼면...</p>
+<br>
+<br>
+<br>
+<h2 id="cloud-spanneryi-bigyeol">Cloud Spanner의 비결</h2>
+<p>Cloud Spanner는 놀랍게도 원자시계를 사용한다.</p>
+<p><img src="/images/img_8a06cd9e96b2b60d.jpg" alt="" />
+원자시계를 장치에 달고 절대적인 시간을 가져와서 트랜잭션을 직렬화하는데, Cloud Spanner에서는 이를 True Time이라 부른다.</p>
+<p><img src="/images/img_1afed2a81bfe3358.png" alt="" /></p>
+<p>오픈소스 시스템들에서는 사용할 수 없는 방법이다. 구글이라 할수있는거지.</p>
+<p>CloudSpanner는 이를 통해 강력한 일관성과 높은 성능을 보장할 수 있다. 대부분의 합의는 1밀리초 정도에 완료된다.<br />
+그냥 원자시계의 시간을 신뢰하고 귀찮은 처리들을 다 생략하기 때문이다.</p>
+<p>이렇듯 소프트웨어보다는 하드웨어로 해결하는게 방법일 때도 있는 법이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://cloud.google.com/blog/ko/products/databases/get-started-with-spanner">https://cloud.google.com/blog/ko/products/databases/get-started-with-spanner</a><br />
+<a rel="external" href="https://www.cockroachlabs.com/blog/spanner-vs-cockroachdb/">https://www.cockroachlabs.com/blog/spanner-vs-cockroachdb/</a><br />
+<a rel="external" href="https://cloud.google.com/spanner/docs/true-time-external-consistency?hl=ko">https://cloud.google.com/spanner/docs/true-time-external-consistency?hl=ko</a><br />
+<a rel="external" href="https://www.cockroachlabs.com/blog/consistency-model/">https://www.cockroachlabs.com/blog/consistency-model/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/64451468/cockroachdb-read-transactions">https://stackoverflow.com/questions/64451468/cockroachdb-read-transactions</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223187549486/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] 타입캐스팅<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223184617858/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] data race와 mutex, atomic<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

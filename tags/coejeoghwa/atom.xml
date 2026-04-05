@@ -1,0 +1,1584 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>myyrakle&#x27;s note - 최적화</title>
+    <subtitle>dev blog</subtitle>
+    <link rel="self" type="application/atom+xml" href="https://myyrakle.github.io/tags/coejeoghwa/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://myyrakle.github.io"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-01-11T00:00:00+00:00</updated>
+    <id>https://myyrakle.github.io/tags/coejeoghwa/atom.xml</id>
+    <entry xml:lang="en">
+        <title>벡터 검색과 SIMD</title>
+        <published>2026-01-11T00:00:00+00:00</published>
+        <updated>2026-01-11T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224142181346/"/>
+        <id>https://myyrakle.github.io/blog/224142181346/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224142181346/">&lt;p&gt;그냥 간단한 성능 실험 기록이다.&lt;&#x2F;p&gt;
+&lt;p&gt;벡터 검색에서 수행하는 주된 연산인 벡터 유사도 계산은 생각보다 무거운 연산이다. 벡터의 모든 요소를 순회하면서 돌기 때문에, 벡터의 차원(길이)가 커지면 커질수록 정비례해서 부하가 커지고 느려진다.&lt;&#x2F;p&gt;
+&lt;p&gt;심지어 대형 모델을 쓰는 고품질 벡터 연산의 경우에는 1500, 3000 등이 넘는 차원을 다루는 일도 비일비재하다. 벡터 DB가 근사치 검색을 수행하면서 많은 리소스를 요구하는 것도 본질적으로는 이런 이유 때문이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;simd&quot;&gt;SIMD&lt;&#x2F;h2&gt;
+&lt;p&gt;그리고 이런 최적화 주제에 단골처럼 나오는 것이 연산 단위의 병렬화-SIMD다.&lt;br &#x2F;&gt;
+SIMD는 이런 사례에 잘 들어맞는 최적화 기법이다. ML에서 사용하는 병렬 연산이 GPU의 무식한 코어 개수로 밀어붙이는 병렬 연산이라면, SIMD는 CPU 수준에서 적당히 말아서 제공하는 가벼운 병렬 연산이다.&lt;&#x2F;p&gt;
+&lt;p&gt;SIMD는 GPU 만큼의 압도적인 화력은 없지만, 오히려 이런 적당한 사용사례에서는 GPU보다는 CPU 내의 병렬연산을 활용하는 것이 훨씬 빠를 수 있다. GPU 연산은 하나하나가 꽤 큰 오버헤드를 유발하기 때문이다. CPU&amp;lt;&amp;gt;GPU 전송을 포함해서 이런저런 부하 지점들이 존재한다.&lt;br &#x2F;&gt;
+그런 이유들에서 벡터 연산의 단위가 수백만 단위는 되어야 GPU의 병렬 연산 속도가 이런 오버헤드를 압도한다. 딱 그런 지점이 머신러닝 분야인 것이고...&lt;&#x2F;p&gt;
+&lt;p&gt;Rust의 std SIMD 기능을 사용해서 전후 비교를 단순하게 해보겠다.&lt;br &#x2F;&gt;
+테스트에 사용한 벡터는 512차원, 10000개 정도에, dot product 연산을 돌렸다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_092b2c08a5d0b772.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a814c40e91a7f34f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그냥 평범하게 구현했을 때는 하나의 벡터 스코어를 추출하는데 거의 300나노초 가량이 걸렸다.&lt;&#x2F;p&gt;
+&lt;p&gt;그럼 SIMD를 써보면 어떨까?&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_4042eaf9830ec735.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_08cb2f8a6ee52eec.png&quot; alt=&quot;&quot; &#x2F;&gt;
+좀 코드가 번잡해지긴 하지만&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bc70f5187cf5fc15.png&quot; alt=&quot;&quot; &#x2F;&gt;
+막상 돌려보면 확실한 성능 향상이 있다.&lt;br &#x2F;&gt;
+86나노초 정도로 확실하게 빨라졌다. 기존 대비해서 30% 정도로 단축된 셈이다.&lt;&#x2F;p&gt;
+&lt;p&gt;내 경우에는 256bit AVX2를 지원하는 CPU라서 최대 8개의 연산을 병렬로 돌렸는데, 이 최대 성능은 CPU마다 다를 수 있다.&lt;br &#x2F;&gt;
+최근에는 512bit AVX2도 본격적으로 지원하려는 모양새라서, 향후에는 더 극적으로 빨라질 수도 있을듯하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>컴파일러는 인간의 친구.link</title>
+        <published>2026-01-03T00:00:00+00:00</published>
+        <updated>2026-01-03T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224132351325/"/>
+        <id>https://myyrakle.github.io/blog/224132351325/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224132351325/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.daniel-beskin.com&#x2F;2025-12-22-the-compiler-is-your-best-friend-stop-lying-to-it&quot;&gt;https:&#x2F;&#x2F;blog.daniel-beskin.com&#x2F;2025-12-22-the-compiler-is-your-best-friend-stop-lying-to-it&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;컴파일러의 원리와 동작 구조에 대한 썰.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>컴파일러가 당신을 놀라게 할 때.link</title>
+        <published>2025-12-25T00:00:00+00:00</published>
+        <updated>2025-12-25T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224122592777/"/>
+        <id>https://myyrakle.github.io/blog/224122592777/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224122592777/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;xania.org&#x2F;202512&#x2F;24-cunning-clang&quot;&gt;https:&#x2F;&#x2F;xania.org&#x2F;202512&#x2F;24-cunning-clang&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+clang이 최적화를 더 공격적으로 하는 사례에 대한 글. (물론 전체적인 최적화 성능은 아직 gcc에 비해 부족함)&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>프로그램 최적화 가이드</title>
+        <published>2025-12-17T00:00:00+00:00</published>
+        <updated>2025-12-17T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224112437726/"/>
+        <id>https://myyrakle.github.io/blog/224112437726/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224112437726/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_34481d7d431dc80d.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+프로그램의 성능을 최적화하는 것은 고려해야하는 요소나 관점이 매우 다양하고, 변수도 늘 많다.&lt;br &#x2F;&gt;
+그래서 엔지니어의 역량을 판가름하는 주요 지표 중 하나가 되곤 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기에서는 최적화에 대한 주요 관점들, 기반지식들, 접근 방식들을 대략적으로나마 다뤄본다.&lt;&#x2F;p&gt;
+&lt;p&gt;시간복잡도 기반으로 알고리즘 최적화하고 그런건 다루지 않는다. 이건 그냥 문제풀이 사이트 같은 곳에서 훈련하면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;seongneung-jipyowa-tradeoff&quot;&gt;성능 지표와 Tradeoff&lt;&#x2F;h2&gt;
+&lt;p&gt;성능을 최적화하려면, 우선 뭘 최적화하려는 것인지부터 선택해야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;대표적인 지표로는 다음과 같은 것들을 꼽을 수 있을 것이다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;실행속도 (혹은 Latency)&lt;&#x2F;li&gt;
+&lt;li&gt;처리량 (Throughput)&lt;&#x2F;li&gt;
+&lt;li&gt;CPU 사용량&lt;&#x2F;li&gt;
+&lt;li&gt;메모리 사용량&lt;&#x2F;li&gt;
+&lt;li&gt;디스크 사용량&lt;&#x2F;li&gt;
+&lt;li&gt;I&#x2F;O 사용량&lt;&#x2F;li&gt;
+&lt;li&gt;실행파일 크기&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;항상 모든 것을 다 가져갈 수는 없기 때문에, 우리에게 필요한 성능이 무엇인지를 알고, 나머지를 적절히 포기할 줄도 알아야 한다.&lt;br &#x2F;&gt;
+그래서 최적화에서 가장 중요한 것은 적절한 Tradeoff를 잡는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들면, 일반적인 클라이언트 프로그램들의 경우에는 실행속도와 메모리 사용량이 중요하고, 나머지는 상대적으로 중요성이 낮다.&lt;br &#x2F;&gt;
+반면 서버사이드 프로그램의 경우에는 7번을 제외한 거의 모든 것을 다 고려해야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;실행속도나 처리량이 가장 중요한 케이스라면, CPU와 메모리를 영끌해서 다 미리 로드하고, CPU 코어를 최대한으로 조져서 처리하는 것이 가능하다.&lt;br &#x2F;&gt;
+이건 일회성 Batch 프로세스나 데이터 파이프라인처럼 짧은 수명과 낮은 가용성이 허용되는 경우에 유효하다.&lt;&#x2F;p&gt;
+&lt;p&gt;반면 안정성이나 가용성이 중요한 경우라면, 적정선을 잡는 것이 중요하다.&lt;br &#x2F;&gt;
+CPU&#x2F;메모리 사용량을 우선으로 잡고, 실행속도와 처리량은 기본적인 정도만 유지하게 하는 것이 일반적인 관점이 된다. 대부분의 API 서버 시스템이 여기에 해당된다.&lt;&#x2F;p&gt;
+&lt;p&gt;I&#x2F;O 사용량은 보통 우선적으로 고려할 대상은 아니지만, 플랫폼이나 하드웨어 기반에 따라서 큰 성능 제약이 될 수 있는 부분이다.&lt;br &#x2F;&gt;
+AWS 같은 클라우드를 사용할 경우에는 디스크 I&#x2F;O 단위에도 비용을 부과하고 스로틀링을 걸며, 네트워크 데이터 전송량이 커질수록 비용을 더 뜯는다. 비용적인 연관성이 커진다.&lt;br &#x2F;&gt;
+그리고 클라우드가 아니라도, 사용 패턴에 따라서는 Disk I&#x2F;O로 인한 디스크 압박이 문제가 될 수 있다. 디스크 접근은 생각보다 비싸고 느린 자원이다.&lt;&#x2F;p&gt;
+&lt;p&gt;실행 파일의 크기도 은근히 중요한 부분 중 하나다. 임베디드와 웹브라우저-스크립트가 실행파일 크기에 영향을 받는 대표적인 사례다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;임베디드 시스템의 경우에는 심한 하드웨어 제약 때문에 실행파일을 강제로 줄여야 한다.&lt;&#x2F;li&gt;
+&lt;li&gt;WEB-Frontend 시스템의 경우에는 실행파일(Javascript)이 작을수록 빠르게 로드되고, 그에 따른 사용자 체감 성능 차이가 꽤 많이 난다. 그래서 보통은 번들링을 통해서 Javascript 파일을 작게 압축해서 사용하곤 한다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;yeonsanbyeol-eungdabjiyeon-sigan&quot;&gt;연산별 응답지연 시간&lt;&#x2F;h2&gt;
+&lt;p&gt;시스템을 효과적으로 작성하고 최적화하려면, 어떤 연산들이 대강 어느 정도로 걸리는지 알아두긴 해야한다.&lt;br &#x2F;&gt;
+예전에 구글에서 정리한게 있다. 좀 오래된 자료라서 지금 성능과는 괴리가 있을 수도 있는데, 그래도 대략적인 지표로는 참고할만하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_09500cc5fde2f495.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+일단 중요한 것은, 일반적인 CPU 내 작업은 어지간해서 나노초 단위라는 것이다.&lt;br &#x2F;&gt;
+그래서 연산 한두개 빼는건 대부분 큰 의미가 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;보통 문제가 되는건 디스크 I&#x2F;O나 네트워크 I&#x2F;O다. 밀리초 단위가 기본이다.&lt;br &#x2F;&gt;
+이 말인즉슨, 가장 큰 성능 병목이 I&#x2F;O에서 발생하고, 주요 최적화 지점도 I&#x2F;O가 될 확률이 높다는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gwanceug-ganeungseong-observability-gwa-coejeoghwa-jijeom-pandan&quot;&gt;관측 가능성(Observability)과 최적화 지점 판단&lt;&#x2F;h2&gt;
+&lt;p&gt;성능을 최적화려면, 어떤 부분에서 얼마나 걸리고 얼마나 리소스를 점유하는지 측정하는 것이 우선이 되어야한다.&lt;br &#x2F;&gt;
+그냥 느낌적으로 &quot;이게 더 빠를 것 같으니까&quot; 고친다는 것은 유효하지 않을 때가 많다.&lt;&#x2F;p&gt;
+&lt;p&gt;항상 중요한 것은 실제 병목지점을 파악하고 고치는 것이다. 이상한 마이크로 최적화가 아니라.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들어 DB Query 조회에 500ms가 걸리는데, 나노초 단위로 처리되는 후처리 코드를 최적화하는 것은 대부분의 경우 아무런 의미가 없는 짓이다. 영향 범위를 파악하고 진짜 문제를 찾아서 최적화를 해야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그런 맥락에서 서버사이드 애플리케이션의 경우에는 모니터링 스택을 사용해서 운영 상황에서의 관측성을 확보하는 것이 꽤 중요하다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223478540289&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223478540289&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;eoneobyeol-cai&quot;&gt;언어별 차이&lt;&#x2F;h2&gt;
+&lt;p&gt;가끔 보면 언어는 도구에 불과하다고 하면서 언어의 중요성을 평가절하하는 경우가 많은데, 실제로 성능 관점에서는 엄청나게 큰 영향을 준다.&lt;&#x2F;p&gt;
+&lt;p&gt;순수하게 어떤 언어를 선택하는지에 따라서 처리량이나 리소스 사용량이 수십-수백배는 차이가 나는 경우가 드물지 않기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;물론 이건 시스템이 맡은 역할이 어느 정도인지에 따라 달라진다.&lt;br &#x2F;&gt;
+만약 단순한 API 서버를 구현할 뿐이고, 서버에 heavy한 로직이 없으면서 대부분의 핵심 동작이 데이터베이스에 위임되어 있다면. 그건 사실 Python을 쓰든 PHP를 쓰든, Rust를 쓰든 눈에 띄는 큰 차이는 없을 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;언어에 따른 성능 편차가 크게 벌어지는 경우는 무거운 연산이 많이 포함되어있거나, 메모리 압력이 심하거나, 매우 높은 동시 처리 능력이 요구되는 경우 등이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;**a. 컴파일 언어와 인터프리트 언어 **&lt;&#x2F;p&gt;
+&lt;p&gt;언어의 성능-특히 실행속도-을 결정짓는 가장 큰 요소는, 언어의 실행 결과물이 순수한 실행파일로 나오는지, 아니면 해당 언어의 인터프리터(가상머신)에서 실행되는지다.&lt;&#x2F;p&gt;
+&lt;p&gt;대개 가장 빠른 종류는 컴파일 언어이면서도 최적화 수준이 괜찮은 언어다.&lt;br &#x2F;&gt;
+C&#x2F;C++, Rust, Go 등이 여기에 속한다. 다만 컴파일 언어라고 다 빠른건 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 코드가 인터프리터로 실행되면 당연히 직접 CPU 인스트럭션을 때리는 것에 비해서 현저하게 느리다. Ruby, Python, Node.js 같은 언어들이 이런 느림보 분류군에 속한다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기에도 회색지대가 있다. 구현 수준이 높은 인터프리터 언어들은 태생적인 단점을 극복하기 위해 JIT 기반 최적화 시스템을 내장한다. 스크립트의 함수를 실제 바이너리로 컴파일해서 섞어쓰는 것이다.&lt;br &#x2F;&gt;
+해당되는 언어는 Java, C# 정도가 있다. 이외에도 JIT을 구현하는 언어들이 더 있긴 하지만, 컴파일 언어에 비빌 정도로 최적화를 잘 해주는 언어는 이 둘 정도 밖에 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;**b. GC와 non-GC 언어 **&lt;&#x2F;p&gt;
+&lt;p&gt;GC는 약간 복잡한 성능 요인이다. GC가 있다고 해서 성능적으로 항상 나쁜 것은 아니지만, 마냥 긍정적인 영향이 있는 것도 아니다.&lt;br &#x2F;&gt;
+다만 중요한 것은 GC 달렸다는 것 자체로 속도 자체가 무조건 느려지는건 아니라는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;GC가 부착됨으로 인해서 발생할 수 있는 성능 손실은 다음과 같다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;GC Stop으로 인한 일시적인 성능 지연-멈춤 (구현에 따라 길면 초 단위)&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;GC가 더디게 처리됨으로 인해서 메모리 사용량이 실제 사용량보다 튀는 메모리 스파이크&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;GC로 인한 CPU 코어 사용량 증가&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;반면 성능 이점을 가져갈 수 있는 부분도 있다. 대표적인 부분은 메모리 할당에 대한 부하를 줄일 수 있다는 것이다.&lt;br &#x2F;&gt;
+대부분의 GC 언어는 런타임에 자체적인 메모리 풀을 두고서 메모리 재사용을 제법 잘 하기 때문에, 시스템 수준 메모리 할당이 줄어들 수 있다.&lt;br &#x2F;&gt;
+그래서 GC 언어는 메모리 할당 성능에 대한 저점이 비교적 높다. 물론 이것도 메모리 스파이크 위험과 tradeoff가 되는 부분이긴 하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;**c. 그냥 느린 언어 **&lt;&#x2F;p&gt;
+&lt;p&gt;다음 목록은 성능이 중요하다면 1차적으로 배제해야 하는 언어다.&lt;&#x2F;p&gt;
+&lt;ul&gt;
+&lt;li&gt;erlang&#x2F;elixir는 메이저한 언어 중에서도 타의 추종을 불허할 정도로 느린 연산 성능을 자랑한다.&lt;&#x2F;li&gt;
+&lt;li&gt;컴파일 언어인데도 순수하게 최적화 수준이 딸려서 느린 경우도 있다. Haskell이 대표적이다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;ffi-foreign-function-interface&quot;&gt;FFI (Foreign Function Interface)&lt;&#x2F;h2&gt;
+&lt;p&gt;종종 언어의 한계로 인해서 최적화의 벽에 막힐 때가 있다.&lt;br &#x2F;&gt;
+특히 Node.js와 Python 같은 언어들이 더욱 그러한데, 속도가 느린 것이 문제가 될 수도 있고, 메모리를 무식하게 먹는 것이 문제가 될 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런건 언어의 근본적인 한계인지라. 부분적으로라도 해결하려면 결국은 C&#x2F;C++, Rust 같은 언어로 컴파일해서 그 외부 모듈을 Node.js&#x2F;Python 등에서 끌어다가 쓰는 식으로 진행을 하게 된다. 이렇게 언어를 교차해서 사용하는 것을 FFI라고 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;컴파일이나 실행 문제가 복잡해질 수 있지만, MSA랍시고 서버 단위로 분리하고 연동하는 것에 비해서는 더 빠르고, 관리포인트가 적고, 결과적으로 저렴한 방법이다.&lt;&#x2F;p&gt;
+&lt;p&gt;요즘은 Rust에 Node.js&#x2F;Python에 한해, 상호운용성을 위한 에코시스템이 제법 잘 되어있는 편이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223072977222&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223072977222&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223103102724&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223103102724&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;seobeowa-deiteobeiseu&quot;&gt;서버와 데이터베이스&lt;&#x2F;h2&gt;
+&lt;p&gt;대부분의 서버 시스템들은, 그 성능이 데이터베이스 수준에서 상당수 결정된다.&lt;br &#x2F;&gt;
+그래서 데이터베이스를 잘 선택하고, 잘 설계해서 구현하는 것이 매우 중요하다고 할 수 있겠다.&lt;&#x2F;p&gt;
+&lt;p&gt;특히 중요한 것은 인덱스의 동작 방식에 대한 이해, 카디널리티와 데이터 분포, 스캔에 대한 성능 이해다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들어, Row Based Database - OLTP 데이터베이스들의 경우에는 대형 데이터셋에서 매우 적은 일부만 스캔하는 것에 대해서 훌륭한 성능을 보인다.&lt;br &#x2F;&gt;
+하지만 매우 높은 비율을 필터링하거나, 필터링 조건이 복잡한 경우에는 순진하게 동작하지는 않는다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223981993212&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223981993212&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223828946151&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223828946151&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;대척점에 있는 Column base Database들의 경우에는 데이터를 컬럼 단위로 분리해서 저장하고 인덱싱하기 때문에, 카디널리티가 낮거나 복잡한 컬럼 필터링에 대해서 훨씬 나은 성능을 보여준다.&lt;br &#x2F;&gt;
+서비스용 DB로서는 대표적으로 Elasticsearch가 여기에 속한다.&lt;&#x2F;p&gt;
+&lt;p&gt;좀 더 극단으로 가면 Clickhouse 같은 OLAP DB가 있는데, 이건 전체 데이터 통계를 위한 것이라서, 항상 대부분의 데이터 블록을 스캔하는 식으로 접근해버린다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223652951126&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223652951126&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;당연하지만 여기에도 tradeoff는 있다.&lt;br &#x2F;&gt;
+Column base Database들이 필터링 성능이 좋긴 하지만 대체로&lt;br &#x2F;&gt;
+트랜잭션이나 데이터 반영, 유일성 등에 대한 보장 수준이 떨어지는 편이다. 그래서 메인 DB로는 Row Based Database를 우선 선택하는 편이 권장된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;kaesi&quot;&gt;캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;사용량이 늘고 요구사항에 맞춰서 최적화를 하다보면, 결국 어느 지점에서는 캐시 레이어들을 활용해야 하는 순간들이 온다.&lt;br &#x2F;&gt;
+핵심 원리는 &quot;자주 사용되는 데이터&quot;에 대해서 미리 저장해놓고 최소한의 리소스로 제공한다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이를 통해 속도와 처리량 등을 최적화할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;자세한 내용은 별도 포스트를 참조하길 바란다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;224067483517&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;224067483517&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;dongsiseong-coejeoghwa&quot;&gt;동시성 최적화&lt;&#x2F;h2&gt;
+&lt;p&gt;동시성은 성능 최적화에 있어서 가장 중요한 부분 중 하나다.&lt;br &#x2F;&gt;
+단일 머신의 성능에는 한계가 있기 때문에, 종국에는 멀티코어를 활용해서 처리량과 최대성능을 끌어내야 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기에는 2가지 분기점이 있다.&lt;br &#x2F;&gt;
+I&#x2F;O 집약적인 경우라면 실제 코어를 많이 쓰지 않더라도, 시분할 기반의 가짜 스레드로도 괜찮은 처리 성능을 가져갈 수 있다. 이건 대개 처리량에 대한 최적화로 이어진다.&lt;br &#x2F;&gt;
+반면 실제로 CPU 집약적인 부분이 많은 사례라면 진짜 스레드를 활용해야 한다. 이건 실행속도에 대한 최적화로 이어진다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 2가지에 대한 적절한 절충안으로서 존재하는 것이 경량 스레드라는 것이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223918683800&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223918683800&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+자세한 것은 별도 포스트를 참조한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 동시성에 있어 중요한 것 중 하나가 데이터에 대한 동기화다.&lt;br &#x2F;&gt;
+동기화 수단으로 무엇을 쓸 것인지에 따라서 실제 성능 상한이 올라간다.&lt;&#x2F;p&gt;
+&lt;p&gt;일반적인 경우에는 Mutex 같은 futex 구현체를 권할만하다. 성능과 리소스의 균형을 최적으로 잡는다.&lt;br &#x2F;&gt;
+하지만 강력한 Lock이 필요하지 않거나, 코어가 많아서 CPU 좀 갈궈도 된다면 CAS 같은 atomic operation을 기반으로 동기화를 처리하는 것이 훨씬 효율적이거나 성능 상한을 올릴 수 있다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223126307890&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223126307890&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;hadeuweeo-hangyewa-byeongryeolceori&quot;&gt;하드웨어 한계와 병렬처리&lt;&#x2F;h2&gt;
+&lt;p&gt;일반적인 사이즈의 연산을 할 때는 단일 머신에서 멀티코어를 갈구는 것으로도 충분하다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 결국, 단일 장비, 단일 머신에서 발휘할 수 있는 연산력에는 분명한 한계가 존재한다. 어느 시점에서는 단일머신을 넘어선 복잡한 교차 처리가 필요해지는 순간이 온다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들어, 가장 먼저 맞닥뜨릴 수 있는 한계는 디스크 성능의 한계다. 디스크는 생각보다 느리고 처리량도 저조한 부위다. 그래서 디스크 I&#x2F;O가 병목이 된다면 하나의 컴퓨터에 2개 이상의 디스크를 연결해서 사용하는 것도 흔한 사용패턴이 되곤 한다.&lt;br &#x2F;&gt;
+데이터베이스들의 경우에도 멀티 볼륨을 통해 사용량을 최적화하는 것을 공식적인 최적화 방안으로 권장한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 디스크뿐만 아니라 단일머신에서의 전반적인 한계에 부닥치면, 결국은 여러개의 서버를 연결해서 사용하는 방식을 취하게 된다. 이것이 분산시스템이다.&lt;br &#x2F;&gt;
+단일머신에 집적할 수 있는 코어 수에는 한계가 있을뿐더러, 항상 코어의 개수에 비례해서 성능이 향상되는 것도 아니다. 코어가 Memory에 동시에 접근하는 것 자체부터가 성능 병목이 된다. Disk의 접근 성능도 한계가 있고, Disk에 저장할 수 있는 데이터의 크기도 한계가 있다. 멀티 Disk를 구성하더라도 하나의 머신에 디스크를 무한으로 꼽을 수는 없다.&lt;br &#x2F;&gt;
+분산시스템과 분산형 DB들이 사용되는 이유에는 가용성도 있지만, 이런 한계를 벗어나기 위한 것도 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;memori-haldang&quot;&gt;메모리 할당&lt;&#x2F;h2&gt;
+&lt;p&gt;메모리 할당이란 것은 생각보다 굉장히 무거운 작업이다.&lt;br &#x2F;&gt;
+GC 언어를 쓴다면 메모리 풀링과 재사용을 해주니 덜하긴 하지만, 그렇다고 해서 가벼운 작업이 되지는 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 값을 할당할 때는 확실히 필요한 만큼을 미리 할당해서 할당이 빈번하지 않게 만들고, 적당히 재사용할 수 있게 해주는 것이 중요하다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 이야기는 컬렉션 응용 수준에서도 이어진다.&lt;br &#x2F;&gt;
+배열이나 Hashmap 등을 쓸 때 capacity 지정도 없이 빈 객체로 만들고 때려넣는 경우가 많은데, 이런 것도 안티 패턴인 할당 남용이다. 이런 객체의 무분별한 growth 유도는 재할당으로 인한 성능 저하를 일으킨다.&lt;br &#x2F;&gt;
+특히 Hashmap의 경우에는 해싱 동작 때문에 growth가 심해질 경우 CPU 부하도 굉장히 크게 늘어난다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;neteuweokeu-i-o&quot;&gt;네트워크 I&#x2F;O&lt;&#x2F;h2&gt;
+&lt;p&gt;서버 시스템을 운영하게 된다면, 네트워크 전송도 중요한 최적화 포인트 중 하나가 된다.&lt;br &#x2F;&gt;
+2가지 관점에서 최적화를 바라볼 수 있을 것 같다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;레이턴시&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;데이터 전송량&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;네트워크 전송은 소프트웨어 시스템의 계층 중에서 가장 느리고 안정성도 떨어지는 부분이다.&lt;br &#x2F;&gt;
+지역에 따라서는 200-400ms의 지연이 발생하는 것도 흔하기 때문에, 네트워크 I&#x2F;O는 빈도가 적고 짧을수록 좋다.&lt;&#x2F;p&gt;
+&lt;p&gt;1차적으로는 CDN 캐시나 로컬 컴퓨터 캐시를 최대한 활용하고, 여러개의 ping-pong API 처리를 하나의 API로 묶을 수 있다면 그렇게 하는 편이 레이턴시 최적화 측면에서도 좋다.&lt;&#x2F;p&gt;
+&lt;p&gt;데이터 전송은 속도도 속도지만, 보통은 비용적인 부분도 있다. 데이터 전송량에 따라서 실제로 부과되는 비용이 상승하기 때문이다.&lt;br &#x2F;&gt;
+HTTP라면 gzip 같은 압축포맷을 사용해서 데이터 전송을 압축해서 최적화할 수 있고, gRPC를 쓴다면 protobuf를 활용해서 데이터 전송량을 컴팩트하게 줄일 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;diseukeu-i-o&quot;&gt;디스크 I&#x2F;O&lt;&#x2F;h2&gt;
+&lt;p&gt;메모리는 CPU보다 느리지만, 디스크는 그보다 훨씬 압도적으로 느린 자원이다.&lt;br &#x2F;&gt;
+그래서 큰 데이터를 파일 기반으로 핸들링한다면 디스크 액세스를 최소화하는 것이 주요 최적화 관점이 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;a. 압축&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;가장 일반적인 최적화 방법은 압축이다.&lt;br &#x2F;&gt;
+디스크에 읽고 쓸 파일의 크기가 크다면, 압축을 하는 것이 효율적일 경우가 많다.&lt;br &#x2F;&gt;
+압축&#x2F;해제로 인해서 CPU+메모리 사용량이 늘겠지만, 일단 디스크에서 읽고 쓰는 크기가 작아지니 결과적으로 빠르고 저렴해진다.&lt;&#x2F;p&gt;
+&lt;p&gt;대표적인 사용 사례는 parquet로 빅데이터를 압축-분할해서 저장하는 것이다. parquet 자체가 이런 용도의 저장 형식이다.&lt;&#x2F;p&gt;
+&lt;p&gt;대부분의 오픈소스 데이터베이스들도 데이터 세그먼트를 최대한 작게 압축해서 저장하거나, 저장하는 옵션을 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들어, clickhouse의 경우에는 약 1만개의 행을 하나의 블럭(granule) 단위로 압축 저장한다. 이를 통해 디스크 접근 효율을 극대화하는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;b. 중간 메모리 계층 활용하기&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;우리가 사용하는 파일 쓰기&#x2F;읽기 함수들은 사실 디스크에 즉시 접근하는 것은 아니다. OS에서 파일캐시를 두고서 가급적 메모리를 통해서 동작하게 최적하해주기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 그보다도 더 빠른 방법이 있다. memory map과 같은 중간과정 없는 파일 로딩 방법을 사용하는 것이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223479875946&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223479875946&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;zero-copy&quot;&gt;Zero-Copy&lt;&#x2F;h2&gt;
+&lt;p&gt;이건 위에서 사용한 디스크 I&#x2F;O 최적화와도 연관점이 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;최적화를 하는 주요 접근법 중 하나는, 불필요한 복사를 줄이는 것이다.&lt;br &#x2F;&gt;
+가벼운 스칼라 데이터라면 몇번을 복사하든 별 의미가 없지만, 크기가 좀 클 수 있는 문자열 같은 타입들의 경우에는 복사 한번 하고 말고로 적지 않은 컴퓨팅 리소스를 소모할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 가능하다면 복사보다는 move나 forwading의 형태로 값을 전달해서 사용하는 것이 좋다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 이건 커널 레벨 syscall에서도 공통적으로 적용되는 부분이다.&lt;br &#x2F;&gt;
+자세한 내용은 별도 포스트를 참조한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223629674161&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223629674161&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;baeyeolgwa-kaesi-jaryogujo&quot;&gt;배열과 캐시, 자료구조&lt;&#x2F;h2&gt;
+&lt;p&gt;자료구조-알고리즘-을 잘 사용하는 것도 중요하다.&lt;br &#x2F;&gt;
+대형 데이터셋에 대해서 빈번한 고속-부분 접근이 필요하다면 O(log N)의 Tree 구조나 O(1)의 해시테이블 구조를 잘 응용하는 것이 매우 중요해진다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 많은 사람들이 간과하는 것 중 하나가, 배열은 생각보다 엄청나게 빠르다는 것이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223422783855&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223422783855&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+그래서 데이터 세트가 수백이나 수천 미만으로 그렇게 크지 않거나, 크더라도 데이터 전체 접근 처리가 빈번하다면 배열을 쓰는 것이 압도적으로 빠를 수 있다. 이런건 사용 패턴을 잘 보고 판단해야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;byeongryeol-yeonsan-simd&quot;&gt;병렬 연산: SIMD&lt;&#x2F;h2&gt;
+&lt;p&gt;요즘 각광받는 최적화 접근 방식 중 하나가 SIMD를 통해 병렬연산을 하는 것이다.&lt;br &#x2F;&gt;
+이건 CPU 레벨에서, GPU가 해주는 것처럼 여러개의 배열 연산을 단일 인스트럭션으로 처리해준다.&lt;&#x2F;p&gt;
+&lt;p&gt;이를 통해 여러개의 연산이 동시에 일어날 수 있는 상황에서는 최대 수십배의 실행속도 향상을 가져올 수 있다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223322281259&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223322281259&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+단점은 많은 컴파일 언어들에서 안정화되지 않은 기능이라는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;instruction-level&quot;&gt;Instruction Level&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터베이스나 네트워크 수준을 떠나서, 실제 컴파일러와 CPU의 동작 원리를 어느정도 알아야 제대로 최적화가 가능한 부분들도 존재한다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223940931299&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223940931299&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223942222903&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223942222903&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223937776756&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223937776756&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>40억개의 if문.link</title>
+        <published>2025-12-14T00:00:00+00:00</published>
+        <updated>2025-12-14T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224108955120/"/>
+        <id>https://myyrakle.github.io/blog/224108955120/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224108955120/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;andreasjhkarlsson.github.io&#x2F;&#x2F;jekyll&#x2F;update&#x2F;2023&#x2F;12&#x2F;27&#x2F;4-billion-if-statements.html&quot;&gt;https:&#x2F;&#x2F;andreasjhkarlsson.github.io&#x2F;&#x2F;jekyll&#x2F;update&#x2F;2023&#x2F;12&#x2F;27&#x2F;4-billion-if-statements.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+재밌는 썰&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>프로그래밍에서 빠르고 느린 것은 중요하지 않다.link</title>
+        <published>2025-11-19T00:00:00+00:00</published>
+        <updated>2025-11-19T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224080594257/"/>
+        <id>https://myyrakle.github.io/blog/224080594257/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224080594257/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;jerf.org&#x2F;iri&#x2F;post&#x2F;2025&#x2F;the_uselessness_of_fast&#x2F;&quot;&gt;https:&#x2F;&#x2F;jerf.org&#x2F;iri&#x2F;post&#x2F;2025&#x2F;the_uselessness_of_fast&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>끝없는 캐시의 피라미드</title>
+        <published>2025-11-07T00:00:00+00:00</published>
+        <updated>2025-11-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224067483517/"/>
+        <id>https://myyrakle.github.io/blog/224067483517/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224067483517/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_7f8b9793db2d2f50.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+현대 시스템들은 캐시로 만들어져있다고 해도 과언이 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;CPU 같은 하드웨어 레벨부터, 로우레벨 시스템, 네트워크 레이어, 하이레벨 애플리케이션에 이르기까지, 모든 프로그램들은 수많은 캐시 계층 위에서 동작한다.&lt;&#x2F;p&gt;
+&lt;p&gt;캐시가 어떤 식으로 사방에 퍼져있는지 간략하게 정리해보겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pon-noiman-akitegcyeo&quot;&gt;폰 노이만 아키텍쳐&lt;&#x2F;h2&gt;
+&lt;p&gt;우리가 쓰는 디스크-RAM-캐시-CPU의 컴퓨터 아키텍쳐를 폰 노이만 아키텍쳐라고 부른다.&lt;br &#x2F;&gt;
+사실 이러한 구조 자체도 일종의 캐시라고 볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;당연히 가장 사이즈가 크고 저렴한 것이 디스크이니, 디스크에 모든걸 다 저장해놓고 쓰면 편할 것이다.&lt;br &#x2F;&gt;
+하지만 성능과 비용 효율성의 문제로 중간중간 캐시 계층을 겹겹이 쌓은 구조가 되어버렸다.&lt;&#x2F;p&gt;
+&lt;p&gt;어떻게 보면 RAM은 디스크에 대한 캐시이고, CPU 내 Cache 메모리는 RAM에 대한 캐시다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;cpuwa-kaesi&quot;&gt;CPU와 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;현대 CPU의 뛰어난 성능도 사실은 캐시에서 나오는 것이라고 봐도 무방하다.&lt;&#x2F;p&gt;
+&lt;p&gt;메모리는 느리고, 레지스터는 너무 작기 때문에 중간 캐시 계층을 추가해서 적절한 타협접을 잡은 것이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223143443182&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223143443182&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223422783855&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223422783855&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+그래서 프로그램을 최적화하려면 CPU의 캐시 동작 원리를 아는 것이 꽤 중요하다.&lt;br &#x2F;&gt;
+이런건 컴파일러들도 최적화를 못한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pailgwa-kaesi&quot;&gt;파일과 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;우리가 파일을 쓰고 읽는 동작 자체도 사실은 캐시 기반으로 동작한다.&lt;br &#x2F;&gt;
+파일을 쓴다고 해서 진짜 디스크에 바로 쓰는 것도 아니고, 파일을 읽는다고 해서 항상 디스크에서 곧장 읽어오는 것도 아니다.&lt;&#x2F;p&gt;
+&lt;p&gt;OS가 내부적으로 메모리 기반의 캐시 계층을 추가해서, 디스크 접근을 최소화하려는 노력들을 뒤에서 해주기 때문이다. 그래서 일반적인 상황에서의 성능은 좋지만, 장애 내구성이 떨어진다는 tradeoff가 존재한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;deiteobeiseuwa-kaesi&quot;&gt;데이터베이스와 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터베이스도 항상 내부적으로 캐시 매커니즘을 적용한다.&lt;br &#x2F;&gt;
+기본적으로는 디스크 기반으로 데이터 내구성을 보장하나, 디스크를 통해서만 읽기&#x2F;쓰기를 처리하는건 너무 느리기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 RDB, NoSQL을 가리지 않고 모든 데이터베이스들은 중간에 캐싱을 위한 메모리 계층을 둔다. 반복적으로 읽었거나 최근에 생성하거나 읽은 데이터를 메모리에 미리 올려놓고 사용하는 것이다.&lt;br &#x2F;&gt;
+이를 통해서 쓰기&#x2F;읽기에 발생하는 디스크 액세스를 줄이고, 처리량을 극대화한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;elasticsearchwa-kaesi&quot;&gt;Elasticsearch와 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;데이터베이스들 중에서도 캐시를 탄력적으로 가장 잘 활용하는 것은 아마 Elasticsearch일 것이다.&lt;br &#x2F;&gt;
+이건 단순 최근 데이터나 데이터 일부를 캐싱하는 것이 아니라, 필터링 결과에 대한 값을 캐싱한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 필터링 검색이 쌓이고 쌓일수록, 해당 필터 검색에 대한 캐시값이 누적되면서 더욱 안정적인 성능을 낼 수 있는 것이다. Elasticsearch의 놀라운 필터링 성능은 이런 적극적인 캐시 구조에서도 나온다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223664141145&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223664141145&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;seobeowa-inmemori-kaesi&quot;&gt;서버와 인메모리 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;많은 서버 시스템들에서는 Redis로 대표되는 인메모리 캐시 레이어를 많이 사용한다.&lt;br &#x2F;&gt;
+반복적으로 발생하는 읽기 처리에 대한 값을 미리 캐싱해놨다가 꺼내서 레이턴시를 최적화하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;값의 변화에 민감하지 않고, 약간의 딜레이를 둬도 좋다면 이 또한 매우 효과적인 대응책이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 인메모리 특유의 낮은 비용효율성, 낮은 확장성 때문에 무작정 캐시에 우겨넣기보다는 정책을 잘 정하는 것이 중요하다.&lt;&#x2F;p&gt;
+&lt;p&gt;대부분의 대규모 서비스들에서는 캐시 계층을 많이 적용해놔서 쓰다보면 실제로 유저 수준에서도 딜레이가 관측되는 경우가 많다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;domein-kaesi&quot;&gt;도메인 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;도메인 주소로부터 IP를 가져오는 단순한 동작에도 사실 수많은 캐시 계층이 존재한다.&lt;&#x2F;p&gt;
+&lt;p&gt;DNS 서버는 사실 여러개의 단계로 나뉘어있는데, 그 단계마다도 캐시가 존재할뿐더러, 최종 클라이언트의 로컬 환경에도 캐시를 쌓아서 쓰기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 도메인 설정 값을 바꿀때는 즉시 반영되리라는 기대는 하지 않는 것이 좋다.&lt;br &#x2F;&gt;
+클라이언트 캐시까지 만료되려면 보통 며칠은 기다려야 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;beuraujeowa-kaesi&quot;&gt;브라우저와 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;우리가 사이트에 접속해서 이리저리 이동할때도, 사실 수많은 캐시 데이터들이 쌓이게 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;매번 모든 리소스를 가져오는 것은 당연히 매우 비효율적이기 때문이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223708918277&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223708918277&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+그래서 이를 잘 고려해서, 최적화된 캐시 구조를 잘 잡는 것도 성능&#x2F;처리량에 매우 주요하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;cdngwa-kaesi&quot;&gt;CDN과 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;이미지를 사용자에게 제공하는 건, 사실 굉장히 비효율적이고 확장하기 어려운 기능이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이미지는 개별 사이즈가 제법 큰데다가, 한번에 여러 이미지를 로드해서 사용자마다 뿌려주는건 디스크 I&#x2F;O, 메모리 자원, 네트워크 트래픽 전부를 엄청나게 갉아먹을 수 있기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 정적인 이미지를 제공할 때는 CDN이라고 하는 특수화된 서버를 통해, 엣지마다 데이터를 캐싱해놓고 사용하는 경우가 많다.&lt;br &#x2F;&gt;
+이 CDN 자체가 독립적인 캐시 서버인 셈이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223114800667&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223114800667&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;camgo-kaesing-jeonryag&quot;&gt;참고: 캐싱 전략&lt;&#x2F;h2&gt;
+&lt;p&gt;소프트웨어 수준에서 캐시를 구현하게 된다면, 캐시 적용 매커니즘을 정하는 것도 꽤 중요하다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223479959982&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223479959982&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>참조는 점프와 같음.link</title>
+        <published>2025-10-22T00:00:00+00:00</published>
+        <updated>2025-10-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224049294732/"/>
+        <id>https://myyrakle.github.io/blog/224049294732/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224049294732/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;without.boats&#x2F;blog&#x2F;references-are-like-jumps&#x2F;&quot;&gt;https:&#x2F;&#x2F;without.boats&#x2F;blog&#x2F;references-are-like-jumps&#x2F;&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>컴파일러 최적화가 더 느린 경우: 점프 테이블의 예.link</title>
+        <published>2025-10-21T00:00:00+00:00</published>
+        <updated>2025-10-21T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224049210398/"/>
+        <id>https://myyrakle.github.io/blog/224049210398/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224049210398/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;nemanjatrifunovic.substack.com&#x2F;p&#x2F;when-compiler-optimizations-hurt&quot;&gt;https:&#x2F;&#x2F;nemanjatrifunovic.substack.com&#x2F;p&#x2F;when-compiler-optimizations-hurt&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+컴파일러는 다중분기문을 점프테이블로 최적화하는 경우가 많지만, 실제로는 오히려 느린 경우도 많음&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Cloudflare Worker 벤치마크 &amp; 최적화 썰.link</title>
+        <published>2025-10-18T00:00:00+00:00</published>
+        <updated>2025-10-18T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/224045030732/"/>
+        <id>https://myyrakle.github.io/blog/224045030732/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/224045030732/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;unpacking-cloudflare-workers-cpu-performance-benchmarks&#x2F;&quot;&gt;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;unpacking-cloudflare-workers-cpu-performance-benchmarks&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+재미있는 지점들이 많은 글이다. 볼만하다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>분기 예측 (Branch Prediction)</title>
+        <published>2025-07-22T00:00:00+00:00</published>
+        <updated>2025-07-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223942222903/"/>
+        <id>https://myyrakle.github.io/blog/223942222903/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223942222903/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5008038a49cbc58b.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+분기 예측은 컴파일 및 최적화 과정에서 가장 중요한 부분 중 하나고, 동시에 가장 어려운 부분이기도 하다.&lt;&#x2F;p&gt;
+&lt;p&gt;파이프라인 구조와 연관이 깊다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223940931299&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223940931299&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;CPU는 branch 명령어를 만나면, 예상 분기 지점을 추측해서 거기 있는 명령어를 미리 로드해서 실행 준비를 한다.&lt;br &#x2F;&gt;
+예측이 맞다면 굉장히 빠른 성능을 보일 수 있지만, 실패한다면 그 시점에 다 버리고 다른 분기의 코드를 다시 불러와야 하기 때문에 끔찍한 성능 저하가 발생할 수 있다.&lt;br &#x2F;&gt;
+대체로 예측이 실패했을 때는 최신 프로세스 기준으로 최소 10개 정도의 명령어 실행을 손해본다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;geuraeseo-jigeumeun&quot;&gt;그래서 지금은&lt;&#x2F;h2&gt;
+&lt;p&gt;많은 현대 CPU 제조사들은 branch prediction 최적화 관련된 부분에서 많은 노력을 해왔고, 하고 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이건 지금에 이르러서도 완전히 해결되지 못한 문제이고, 하드웨어와 소프트웨어 양쪽에서 함께 최적화를 위해 힘을 쓰고 있다고 보면 된다.&lt;br &#x2F;&gt;
+CPU 제조사에서는 하드웨어 아키텍쳐 개선을 이어나가고 있고, 컴파일러 및 사용자는 branch prediction을 고려해서 어셈블리를 생성할 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;cpuga-haneun-noryeog&quot;&gt;CPU가 하는 노력&lt;&#x2F;h2&gt;
+&lt;p&gt;branch에 대한 예측은 순전히 확률을 따르고, 정확하게 일치한다는 보장이 없다.&lt;br &#x2F;&gt;
+그래도 CPU 제조사들은 어떻게든 branch 예측 적중률을 높이려고 애를 쓰고 있고, 그건 현재진행형이다.&lt;&#x2F;p&gt;
+&lt;p&gt;지난한 역사의 축적으로 인해서 최신 CPU들은 branch 예측 적중률이 꽤 좋고, 직접 branch prediction을 위해 사용자가 세부조정을 하지 않더라도 성능이 잘 나오는 편이다.&lt;br &#x2F;&gt;
+그래서 오히려 애매하게 건드리면 더 느려질 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기에는 굉장히 많은 접근법과 트릭들이 존재한다.&lt;&#x2F;p&gt;
+&lt;p&gt;공통적으로, 분기를 최적화하려면 분기 실행에 대한 기록을 남겨둬야 하기 때문에 내부적으로 Branch History Table(BHT)이라는 것을 둔다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;one-level-branch-prediction-1biteu-kaunteo-last-time-prediction&quot;&gt;One-level branch prediction - 1비트 카운터(Last time prediction)&lt;&#x2F;h4&gt;
+&lt;p&gt;비교적 단순한 축에 속하는 예측 방식이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0a224168b9541554.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이게 뭐냐면, 마지막으로 탄 분기를 적합한 분기로 판단하고 예측한다는 것이다.&lt;br &#x2F;&gt;
+처음 실행할때 A&#x2F;B 분기 중 A 경로를 탔다면, 다시 재진입했을 때도 A를 탈 것이라고 예측해서 명령어를 로드한다. 만약 그 다음에 B 분기를 탄다면 그 다음 재진입 시에는 B로 예측한다.&lt;&#x2F;p&gt;
+&lt;p&gt;실제 분기 실행 횟수와는 관계가 없고 지난번 실행을 기반으로만 예측을 하기 때문에, 분기가 한쪽으로만 오래 반복되는 경우에 효율적인 접근 방식이다.&lt;&#x2F;p&gt;
+&lt;p&gt;카운터 값은 1비트 값이다. 기다 아니다 밖에 없기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이건 일반적인 상황에서 성능이 거의 좋지 못하기 때문에, 현대 구조에서는 잘 사용되지 않는다.&lt;br &#x2F;&gt;
+A 분기로 100번를 타다가 B 분기를 한번만 타더라도 바로 prediction이 망가지기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 나온 것이 이런 문제를 완화하는 2비트 카운터 방식이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;one-level-branch-prediction-2biteu-kaunteo&quot;&gt;One-level branch prediction - 2비트 카운터&lt;&#x2F;h4&gt;
+&lt;p&gt;이건 그렇다&#x2F;아니다 로 구분하는 것에서 더 나아가서, 강한 선호&#x2F;강한 비선호&#x2F;약한 선호&#x2F;약한 비선호의 4가지로 상태를 관리한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_eecdf4b927585a45.png&quot; alt=&quot;&quot; &#x2F;&gt;
+대단한 것은 아니다.&lt;br &#x2F;&gt;
+A&#x2F;B 브랜치의 선호를 구분하고 교체하는 타이밍에 한번의 유예를 주는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러니까, A 브랜치가 강하게 선택된 상태에서 B 브랜치가 실행되더라도, 한번은 봐주고 약한 선택 상태로 전환한다. 그 상태에서 또 B가 실행된다면 B로 넘어가겠지만, A가 실행된다면 예측이 유지되는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;예측 유지율이 더 높아서 옛날에는 나름 한동안 꽤 쓰였다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;two-level-adaptive-predictor&quot;&gt;Two-level Adaptive Predictor&lt;&#x2F;h4&gt;
+&lt;p&gt;여기서는 단순 상태 플래그 처리 수준에서 벗어나서 적응형 개념을 도입한다.&lt;&#x2F;p&gt;
+&lt;p&gt;우선 브랜치별 실행 기록을 저장하기 위해 Global History Register(GHR)라는 것을 둔다. 여기까지는 기존 방식과 크게 다르지 않다.&lt;&#x2F;p&gt;
+&lt;p&gt;차이점이 생기는 부분은, 단순 브랜치별 히스토리 외에도 각 &quot;실행 흐름&quot;, 패턴에 대한 예측 정보까지 관리한다는 것이다. 이걸 Pattern history table이라고 부른다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6e4b2b479a4668c8.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이건 특정 실행 흐름, 분기의 집합마다 관리되는 일종의 해시테이블이다.&lt;br &#x2F;&gt;
+GHR의 패턴을 기반으로 해시를 추출하고 접근해서 예측 정보를 기록하고 읽어서 쓸 수 있는 구조로 응용된다.&lt;br &#x2F;&gt;
+&quot;패턴&quot;의 단위나 크기, 해시값을 어떻게 지정할지는 구현 세부사항에 따라 다르다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 접근 방식의 가장 특징은, 예측이 개별 분기 단위에만 그치는 것이 아니라, 여러 분기 간의 상관관계까지 고려해서 예측을 짤 수 있다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;현존하는&#x2F;최신 CPU들은 대부분 이 방식을 기반으로 설계되었거나, 이 방식의 변형 아키텍쳐들을 사용한다.&lt;br &#x2F;&gt;
+branch predictor 구조의 뼈대 그 자체라고 보면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;AMD의 최신 아키텍쳐인 Zen 5만 해도 Two-level Adaptive Predictor의 직접적인 변형 설계인 2-Ahead Branch Predictor라는 것을 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;이것 외에도 변형 알고리즘&#x2F;구조들이 상당히 많은데, 여기서 다 다루지는 않겠다. 이게 핵심이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;keompailreo-sujun-ceori&quot;&gt;컴파일러 수준 처리&lt;&#x2F;h2&gt;
+&lt;p&gt;CPU도 많은 노력을 하고 있지만, 컴파일러도 분기로 인한 성능 저하를 막기 위해 노력을 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;bulpilyohan-bungi-jegeo&quot;&gt;불필요한 분기 제거&lt;&#x2F;h4&gt;
+&lt;p&gt;컴파일러는 동일한 결과를 낼 수 있다면, 가급적 분기를 제거한 버전으로 코드를 생성하려고 노력한다.&lt;br &#x2F;&gt;
+혹은 사용자 수준에서도 시도를 해볼 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;branch-prediction-hinteu&quot;&gt;branch prediction 힌트&lt;&#x2F;h4&gt;
+&lt;p&gt;GCC&#x2F;Clang의 경우에는 __builtin_expect라는 컴파일러 확장을 통해서 branch prediction을 위한 힌트를 제공할 수 있다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;&#x2F;&#x2F; 컴파일러 힌트 제공&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;if&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;__builtin_expect&lt;&#x2F;span&gt;&lt;span&gt;(condition&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 1&lt;&#x2F;span&gt;&lt;span&gt;))&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;  &#x2F;&#x2F; likely&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F; 자주 실행되는 코드&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; else&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;  &#x2F;&#x2F; unlikely&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;font-style: italic;&quot;&gt;    &#x2F;&#x2F; 드물게 실행되는 코드&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;이러면 컴파일러는 &quot;likely&quot; 분기를 많이 탈 것이라고 가정하고 코드를 배치한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;pgo&quot;&gt;PGO&lt;&#x2F;h4&gt;
+&lt;p&gt;PGO는 Branch Prediction를 유도하는데에 가장 탁월한 컴파일러 수준 접근 방법 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;PGO를 사용한다면 컴파일러는 실행 기록을 기반으로 자주 걸리는 hot branch와 덜 걸리는 cold branch를 통계적으로 판단할 수 있다.&lt;br &#x2F;&gt;
+그래서 이를 기반으로 실행 빈도가 높은 hot branch를 가까이 배치해서 캐시에 타도록 하고, 실행 빈도가 낮은 cold branch를 멀리 배치해서 분기 예측률이 높아지도록 유도하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223937776756&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223937776756&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;chrisfeilbach.com&#x2F;2025&#x2F;07&#x2F;05&#x2F;understand-cpu-branch-instructions-better&#x2F;&quot;&gt;https:&#x2F;&#x2F;chrisfeilbach.com&#x2F;2025&#x2F;07&#x2F;05&#x2F;understand-cpu-branch-instructions-better&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Branch_predictor&quot;&gt;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Branch_predictor&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;enesharman.medium.com&#x2F;branch-prediction-algorithms-a7f8da1394b4&quot;&gt;https:&#x2F;&#x2F;enesharman.medium.com&#x2F;branch-prediction-algorithms-a7f8da1394b4&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.slideserve.com&#x2F;bracha&#x2F;two-level-adaptive-branch-prediction&quot;&gt;https:&#x2F;&#x2F;www.slideserve.com&#x2F;bracha&#x2F;two-level-adaptive-branch-prediction&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;ektjf731&#x2F;223053617175&quot;&gt;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;ektjf731&#x2F;223053617175&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;enesharman.medium.com&#x2F;branch-prediction-algorithms-a7f8da1394b4&quot;&gt;https:&#x2F;&#x2F;enesharman.medium.com&#x2F;branch-prediction-algorithms-a7f8da1394b4&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>파이프라인, 파이프라이닝</title>
+        <published>2025-07-21T00:00:00+00:00</published>
+        <updated>2025-07-21T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223940931299/"/>
+        <id>https://myyrakle.github.io/blog/223940931299/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223940931299/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_cb6aef96543066c1.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+파이프라이닝(Pipelining)은 현대 CPU 구조 및 최적화에 있어서 가장 중요한 부분 중 하나다.&lt;br &#x2F;&gt;
+쉽게 말하면, 이어지는 CPU 연산들을 최대한 쉴틈없이 구겨넣어서 빠르게 돌리는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;실제로 개발자 수준에서 이것을 제어할 필요는 없다. 대부분 컴파일러가 알아서 하고, 사람보다 컴파일러가 더 잘 하는 분야이기 때문이다. 사람이 이거까지 고려하면서 코드를 매번 작성하는 것은 거의 불가능하다.&lt;&#x2F;p&gt;
+&lt;p&gt;여기서는 기본적인 얼개와 최적화와 관련된 한계점들에 대해서만 간단히 다루고, 하드웨어적인 부분은 대강 넘어가겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;before-pipeline&quot;&gt;Before Pipeline&lt;&#x2F;h2&gt;
+&lt;p&gt;파이프라인 기술이 도입되기 전의 CPU들은 아주 순진하게 명령을 처리했다.&lt;br &#x2F;&gt;
+덧셈 명령과 뺄셈 명령이 들어오면 덧셈을 다 끝낸 뒤에 뺄셈을 처리하는 식이었다.&lt;&#x2F;p&gt;
+&lt;p&gt;1960년대까지만 해도 대부분의 CPU들은 그냥 그렇게 처리했었다.&lt;&#x2F;p&gt;
+&lt;p&gt;최초로 파이프라인 개념을 도입한 프로세서는 1964년의 IBM 7030 Stretch다. 초기 연구부터 구현까지를 거의 IBM에서 주도해서 창안했다. 실질적으로 의미있게 사용된 것은 70년대부터이며 그마저도 소수의 슈퍼컴퓨터에만 적용되었다.&lt;br &#x2F;&gt;
+실제로 파이프라인 개념이 널리 보급되고 적용된 것은 80년대 이후부터다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;paipeurainyi-weonri&quot;&gt;파이프라인의 원리&lt;&#x2F;h2&gt;
+&lt;p&gt;파이프라인이란, 일종의 CPU 수준 병렬 처리다.&lt;&#x2F;p&gt;
+&lt;p&gt;CPU에서 명령어를 처리하는 것은 그냥 딸깍 되는 것처럼 느낄 수도 있지만, 실제로는 복잡한 내부 처리 과정이 존재한다.&lt;br &#x2F;&gt;
+명령어를 가져오고(Fetch), 명령어를 해석하고(Decode), 명령어를 실행해서(Execute), 쓰기(Write)까지 해야 하기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;파이프라인은 이 명령어 처리 시간을 스텝별로 분리해서 구겨넣고, 단일 clock에서 여러개의 명령을 동시적으로 처리하는 것을 말한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_00f608bcb1f7a93a.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이러면 0번째 명령어 실행을 하는 도중에도 1번, 2번, 3번 명령어를 거의 동시에 우겨넣어서 실행을 할 수 있으니, 거의 4배에 달하는 처리량 최적화를 수행할 수 있는 셈이 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;물론 저 그림은 이론의 설명을 위해 지나치게 단순화된 그림이고, 실제로는 이보다 스텝이 많다. 현대 CPU는 대부분 10~20개 사이의 세부 스텝을 가지며, 동시에 10개 넘게 실행을 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;현대 CPU들에서는 이런 파이프라인을 위한 최적화 구조를 슈퍼스칼라(superscalar)라고도 부른다.&lt;br &#x2F;&gt;
+인텔에서의 최초 도입 사례는 80960CA, 펜티엄이고, AMD에서의 최초 도입 사례는 29050이다.&lt;&#x2F;p&gt;
+&lt;p&gt;요즘 x86 최신 프로세서들은 사이클당 동시 실행 개수가 10개를 넘는다. AMD Zen 5를 기준으로 한다면 사이클당 동시 실행 개수는 14이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;sajog-bubble-ceori&quot;&gt;사족: bubble 처리&lt;&#x2F;h2&gt;
+&lt;p&gt;가끔 컴파일된 어셈블리를 까보면, nop 같은 쓸데없는 명령이 도배되어있는 것을 볼 수 있다.&lt;br &#x2F;&gt;
+이것도 사실 다 원활한 파이프라인을 위해 들어가는 특수 처리라고 할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;1번 연산, 2번 연산을 순서대로 실행해야 하는데, 2번 연산이 1번 연산의 결과를 사용해야 한다면 어떻게 해야할까?&lt;br &#x2F;&gt;
+가장 간단하고 명쾌한 해결책은, 1번이 끝나기를 기다리게 하는 것이다. 그러려면 의미없는 연산을 적당히 필요한만큼 넣어서, 1번이 끝난 뒤에 2번이 실행되게 하면 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_90af4c17919b2a7e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;42743411&#x2F;understanding-bubble-vs-stall-vs-repeated-decode-fetch&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;42743411&#x2F;understanding-bubble-vs-stall-vs-repeated-decode-fetch&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이러한 접근법을 bubble이라고 한다.&lt;&#x2F;p&gt;
+&lt;p&gt;x86 instruction에는 nop라는 아무것도 하지 않는 연산이 있는데, 이건 정말 아무것도 하지 않고 1 사이클을 소모한다. 딱 한텀 기다리는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이것도 컴파일러가 알아서 해주는 부분이기 때문에, 리버싱할때를 제외하고는 신경쓸 일이 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;munje-out-of-order&quot;&gt;문제: Out of Order&lt;&#x2F;h2&gt;
+&lt;p&gt;파이프라이닝을 적용할 때 전제조건 중 하나는, 연산 순서를 제멋대로 조작할 수 있다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;생각해보자. 3번째 연산이 2번째 연산의 결과를 바탕으로 연산을 해야 한다면 애초에 미리 명령어를 밀어넣어서 병렬화를 하는 것이 불가능하다.&lt;br &#x2F;&gt;
+그래서 이럴 때 일반적인 컴파일러들은 3번째 연산의 실행을 나중으로 미루고, 의존관계가 없는 뒤의 4번째, 5번째 연산을 먼저 실행되게끔 하기도 한다. 한개라도 더 빨리빨리 넣어야 파이프라인 최적화 본연의 목적을 달성할 수 있는 것이기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;물론 컴파일러는 연산의 순서를 뒤섞더라도, 최종 결과를 망가뜨리지 않는 선에서만 한다.&lt;br &#x2F;&gt;
+그렇다고 문제가 없는 것은 아니다. 컴파일러가 순서를 뒤섞어도 된다고 판단하는 기준은 &quot;싱글 스레드&quot;에서의 결과 보장이다. 멀티스레드 환경에서는 망가질 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 파이프라이닝을 위한 순서 뒤섞기 최적화는 실제로 멀티스레드 개발에서 매우 자주 일어나는 버그의 원인 중 하나다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223356930725&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223356930725&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;munje-branch&quot;&gt;문제: branch&lt;&#x2F;h2&gt;
+&lt;p&gt;덧셈이나 뺄셈 같은 선형적인 연산들의 경우에는, 컴파일러가 순서를 파악하고 조절해서 파이프라인에 계속 밀어넣는 것이 매우 쉽다. 이런 경우들에는 파이프라인 최적화가 굉장히 잘 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;문제는 If&#x2F;Else 같은 제어 연산이 들어갈 경우다.&lt;br &#x2F;&gt;
+이런 분기 연산은 값에 따라서 다음 명령이 달라지다보니, 뭘 그 다음 명령으로 올려야할지 확실하게 알 수가 없다.&lt;br &#x2F;&gt;
+그래서 현대 CPU는 대부분 &quot;추측&quot;을 통해서 분기 다음 명령어를 로드해서 처리하고 시도한다. 이를 분기 예측(branch prediction)이라고 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;문제는 이 추측이 맞는다면 깔끔하게 잘 돌아가겠지만, 추측이 실패한다면 성능이 망가질 수 있다는 것이다.&lt;br &#x2F;&gt;
+예를 들어 A 분기를 탈줄 알고 A의 명령어를 다 파이프라인에 올렸다가, 실제로 B 분기를 타버리면, 기존에 로드한 명령어를 다 버리고 다시 로드해야 하는 것이다.&lt;br &#x2F;&gt;
+그러니까 최신 프로세서 기준으로는 예측에 실패할 때마다 최소 10개 정도의 명령어 실행을 손해본다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 If&#x2F;Else 같은 제어구문이 복잡하게 들어있는 프로그램은 그렇지 않은 프로그램에 비해 실행성능이 떨어질 수 있고, 현재 기술 수준으로는 완벽하게 해결할 수 없는 한계점이 명확하게 존재한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;223942222903&quot;&gt;https:&#x2F;&#x2F;m.blog.naver.com&#x2F;sssang97&#x2F;223942222903&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Instruction_pipelining&quot;&gt;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Instruction_pipelining&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;velog.io&#x2F;@kio0207&#x2F;%EC%BB%B4%ED%93%A8%ED%84%B0%EA%B5%AC%EC%A1%B0-%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B4%EB%8B%9D&quot;&gt;https:&#x2F;&#x2F;velog.io&#x2F;@kio0207&#x2F;%EC%BB%B4%ED%93%A8%ED%84%B0%EA%B5%AC%EC%A1%B0-%ED%8C%8C%EC%9D%B4%ED%94%84%EB%9D%BC%EC%9D%B4%EB%8B%9D&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Profile Guided Optimization (PGO)</title>
+        <published>2025-07-18T00:00:00+00:00</published>
+        <updated>2025-07-18T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223937776756/"/>
+        <id>https://myyrakle.github.io/blog/223937776756/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223937776756/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_f2d33f25651d3318.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+Profile Guided Optimization, 이하 PGO는 가장 공격적인 컴파일 최적화 방식 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;컴파일 언어를 쓰고 최적화 옵션을 이것저것 넣더라도, 최적화에 한계는 온다.&lt;&#x2F;p&gt;
+&lt;p&gt;최적화 힌트를 통한 마이크로매니징과 흑마법을 떡칠한다면 당장은 어떻게 되더라도, 그건 별로 지속 가능하지가 않다는 단점이 있다.&lt;br &#x2F;&gt;
+이럴 때 선택할 수 있는 가장 효과적인 접근법이 이 PGO라는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;ilbanjeogin-keompail&quot;&gt;일반적인 컴파일&lt;&#x2F;h2&gt;
+&lt;p&gt;우리가 컴파일이라고 표현하는 것들은 대부분 정적 분석(Static program analysis)을 통해서 엄격한 규칙 기반으로, 코드를 실행하지 않고 코드를 어셈블리로 변환하는 과정이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이런 고전적인 컴파일은 일반적인 경우에 잘 작동하고, 성능도 그럭저럭 나오긴 한다.&lt;br &#x2F;&gt;
+하지만 해당 프로그램이 낼 수 있는 최적의 성능을 낼 수는 없다는 근본적인 한계가 있다.&lt;br &#x2F;&gt;
+컴파일타임 시점의 규칙적인 분석으로는 실제로 어떤 함수가 많이 호출되는지, 어떤 분기를 많이 타는지, 어떤 입력이 많이 들어오는지 등을 절대로 미리 알 수가 없기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;PGO는 이런 한계점을 보완하고자 생긴 개념이라고 할 수 있겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pgoyi-jeogyong-gwajeong&quot;&gt;PGO의 적용 과정&lt;&#x2F;h2&gt;
+&lt;p&gt;PGO는 다음과 같은 과정을 거쳐서 수행된다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;
+&lt;p&gt;일단 프로파일링 수집을 활성화한 채로 컴파일해서 실행파일을 뽑는다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;실행파일을 실행하고, 실제 사용사례에 맞게 실행을 유도하면서 프로파일 데이터를 뽑는다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;프로파일 데이터를 가져다가 옵션을 주고 다시 컴파일을 한다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;li&gt;
+&lt;p&gt;그러면 컴팩트하게 최적화된 실행파일이 나오는 것이다.&lt;&#x2F;p&gt;
+&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;Go와 Rust(LLVM)의 사용 예시를 링크로 달아놓겠다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222888877448&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;222888877448&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223176448202&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223176448202&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pgoga-coejeoghwareul-haneun-bangbeob&quot;&gt;PGO가 최적화를 하는 방법&lt;&#x2F;h2&gt;
+&lt;p&gt;PGO의 최적화 수준과 접근법은 툴체인마다 다를 수 있는데, 여기서는 LLVM을 기준으로 설명해보겠다.&lt;br &#x2F;&gt;
+아래 항목을 제외하고도 접근법은 매우 다양하다. 자질구레한 것까지 다루면 끝도 없어서 대표적인 것 몇가지만 정리해본다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;hamsu-inraining&quot;&gt;함수 인라이닝&lt;&#x2F;h4&gt;
+&lt;p&gt;함수 호출은 생각보다 무거운 면이 있는 동작이다.&lt;br &#x2F;&gt;
+인자 넘길때마다 레지스터를 쌓거나 메모리 스택을 쌓아야 하고, 함수 진입 시점과 탈출 시점마다 jump 인스트럭션이 필요하기 때문이다.&lt;br &#x2F;&gt;
+그나마 함수로 진입할 때는 함수의 주소가 고정주소니까 괜찮은데, 함수를 이탈할 때는 return address가 여러곳일 수 있기 때문에 분기 예측으로 인한 최적화가 잘 안되는 편이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 함수 단위를 제거하고 매크로처럼 코드 본문에 삽입하는 것을 인라이닝이라고 한다. 함수 호출로 인한 오버헤드를 줄일 수 있으나, 그게 항상 의미가 있는건 아니라서 컴파일러들도 그때그때 상황 봐가면서 한다.&lt;br &#x2F;&gt;
+마구잡이로 넣어대면 코드 크기가 비대해져서 성능이 떨어질 수 있기 때문이다. 그냥 커져서 명령어 캐시 로드를 제대로 못할 수도 있고, branch prediction이 더 복잡해질 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;인라인에는 2가지 방법이 존재할 수 있는데, 특정 함수가 그냥 많이 호출되는 함수라면 그 함수를 모든 호출 지점에 인라인할 수도 있고, 특정 함수가 특정 경로에서만 자주 호출된다면 거기에만 인라인을 할 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;PGO를 적용할 경우에는 후자, 자주 호출되는 함수 호출 경로에 대해 더 공격적인 인라이닝을 수행한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;bungi-yeceug-branch-prediction&quot;&gt;분기 예측 (branch prediction)&lt;&#x2F;h4&gt;
+&lt;p&gt;branch, 그러니까 조건 분기에 대한 내용이다.&lt;br &#x2F;&gt;
+CPU는 branch 명령어를 만나면 다음에 실행될 명령어의 주소를 예측한다. 예측이 맞다면 굉장히 빠른 성능을 보일 수 있지만, 실패한다면 그 시점에 다시 코드를 캐시로 불러와야 하기 때문에 끔찍한 성능 저하가 발생할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;PGO를 사용한다면 컴파일러는 실행 기록을 기반으로 자주 걸리는 hot branch와 덜 걸리는 cold branch를 통계적으로 판단할 수 있다.&lt;br &#x2F;&gt;
+그래서 이를 기반으로 실행 빈도가 높은 hot branch를 가까이 배치해서 캐시에 타도록 하고, 실행 빈도가 낮은 cold branch를 멀리 배치해서 분기 예측률이 높아지도록 유도하는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;kodeu-reiaus-coejeoghwa&quot;&gt;코드 레이아웃 최적화&lt;&#x2F;h4&gt;
+&lt;p&gt;요새 고급 언어들에서는 함수나 코드의 위치가 성능과 연관이 없는 것처럼 동작하지만, 실제 어셈블리 수준에서는 그렇지 않다.&lt;br &#x2F;&gt;
+CPU라는 녀석도 모든 코드를 항상 들고 있지는 않고, 그 다음 코드가 가까이 위치해야지 캐시에서 빠르게 로드해서 실행을 할 수가 있기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 PGO를 사용하면 실제 실행 순서에 기반해서 명령어 블록 배치 순서를 조정하고, 자주 실행되는 Hot 코드를 가까이에, 덜 실행되는 Cold 코드를 멀리에 배치한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;ganjeob-hocul-coejeoghwa-indirect-call&quot;&gt;간접 호출 최적화 (indirect call)&lt;&#x2F;h4&gt;
+&lt;p&gt;간접 호출이란 간접 분기(indirect branch)에 의해서 함수를 호출하는 것을 말한다.&lt;br &#x2F;&gt;
+간접 분기란, 메모리(RAM)의 저장값 기준으로 분기를 태우는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;C++의 가상함수를 포함해서, 객체지향에서의 메서드 다형성 동작은 전부 간접 분기로 구현된다. 실제 객체의 타입 값을 기반으로 해당 타입의 메서드를 실행시켜야 하기 때문이다.&lt;br &#x2F;&gt;
+간접 분기는 분기 예측(branch prediction)을 망가뜨리는 주범 중 하나인지라, 이런 간접 호출이 쌓이다보면 성능에 꽤 큰 악영향을 줄 수도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;PGO를 적용한다면 실제 실행 기록을 기반으로 간접분기를 최소화할 수 있다. 경우에 따라서는 branch prediction을 추가해주거나, 가상함수 자체를 인라이닝하기도 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;rupeu-coejeoghwa-rupeu-eonrolring&quot;&gt;루프 최적화: 루프 언롤링&lt;&#x2F;h4&gt;
+&lt;p&gt;루프 언롤링은 루프 내 연산 동작을 압축하고 branch 횟수를 줄이는 최적화 방법이다.&lt;br &#x2F;&gt;
+PGO를 적용하면 실행 빈도가 높은 루프를 우선적으로 언롤링을 시도한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221800631864&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;221800631864&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h4 id=&quot;dead-code-jegeo&quot;&gt;Dead Code 제거&lt;&#x2F;h4&gt;
+&lt;p&gt;Dead Code 제거, 그러니까 사용되지 않는 코드에 대한 제거는 사실 일반 컴파일에서도 충분히 걸러질 수 있는 부분이긴 하다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 컴파일 시점에서는 알 수 없고 실제로 실행을 해봐야 dead code인지 판단할 수 있는 경우가 더러 있다.&lt;br &#x2F;&gt;
+동적 라이브러리 링킹이나, OS나 드라이버 상태에 따라서 진입 가능&#x2F;불가능한 코드 지점이 정해질 수 있기 때문이다. 이런건 PGO나 JIT을 태운 경우에만 확실하게 판단해서 제거할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이를 통해서 바이너리 크기와 성능을 최적화할 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;pgoyi-jeogyong-sarye&quot;&gt;PGO의 적용 사례&lt;&#x2F;h2&gt;
+&lt;p&gt;GCC, LLVM, MSVC, ICC 등 메이저한 컴파일러 툴체인들은 모두 PGO 기능을 기본으로 제공한다.&lt;br &#x2F;&gt;
+이런 짬이 쌓여있는 환경들은 PGO가 아주 효과적으로 동작한다. 바이너리 크기도 대부분 확연히 줄어들고, 성능도 눈에 띄게 향상된다. 2배 3배까지는 아니더라도 10~40% 정도의 속도 향상은 보통 느끼는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;Golang은 비교적 최근에 PGO를 자체적으로 구현해서 내놓았는데, 다른건 거의 없고 인라이닝만 하는거라서 성능 향상도 미미하고 바이너리가 오히려 커지더라.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jit-keompail&quot;&gt;JIT 컴파일&lt;&#x2F;h2&gt;
+&lt;p&gt;PGO가 가장 잘 사용되는 분야는 사실 일반 컴파일러가 아니라, 일부 하이브리드 런타임 언어들이다.&lt;&#x2F;p&gt;
+&lt;p&gt;PGO 컴파일이 꽤 강력하긴 하나 매번 세팅하고 프로파일 뽑고, 다시 컴파일하는 과정을 거치는 것은 번거로울 수 밖에 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;하이브리드 컴파일 언어인 Java와 C#는 JIT 컴파일, 그러니까 실시간 컴파일 최적화에서 일종의 PGO를 수행한다.&lt;br &#x2F;&gt;
+실시간으로 실행하면서 실행 기록을 수집하고, 그걸 기반으로 PGO 최적화를 그때그때 하는 것이다.&lt;br &#x2F;&gt;
+Java가 자랑하는 뛰어난 성능은 대부분 여기에서 나온다.&lt;&#x2F;p&gt;
+&lt;p&gt;Java의 최적화 구조에 대한 참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223573816314&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223573816314&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;llvm.org&#x2F;devmtg&#x2F;2020-09&#x2F;slides&#x2F;PGO_Instrumentation.pdf&quot;&gt;https:&#x2F;&#x2F;llvm.org&#x2F;devmtg&#x2F;2020-09&#x2F;slides&#x2F;PGO_Instrumentation.pdf&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;chrisfeilbach.com&#x2F;2025&#x2F;07&#x2F;05&#x2F;understand-cpu-branch-instructions-better&#x2F;&quot;&gt;https:&#x2F;&#x2F;chrisfeilbach.com&#x2F;2025&#x2F;07&#x2F;05&#x2F;understand-cpu-branch-instructions-better&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;d2.naver.com&#x2F;helloworld&#x2F;8404108?ref=pangyoalto.com&quot;&gt;https:&#x2F;&#x2F;d2.naver.com&#x2F;helloworld&#x2F;8404108?ref=pangyoalto.com&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Cloudflare의 TCMalloc 도입 사례.link</title>
+        <published>2025-05-26T00:00:00+00:00</published>
+        <updated>2025-05-26T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223877603830/"/>
+        <id>https://myyrakle.github.io/blog/223877603830/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223877603830/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;the-effect-of-switching-to-tcmalloc-on-rocksdb-memory-use&#x2F;&quot;&gt;https:&#x2F;&#x2F;blog.cloudflare.com&#x2F;the-effect-of-switching-to-tcmalloc-on-rocksdb-memory-use&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+대충 파편화가 심각해서 TCMalloc 붙여서 최적화했다는 글.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>현대 컴파일러들은 변수를 어떻게 레지스터로 선택하나요?.link</title>
+        <published>2025-02-17T00:00:00+00:00</published>
+        <updated>2025-02-17T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223763665079/"/>
+        <id>https://myyrakle.github.io/blog/223763665079/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223763665079/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;langdev.stackexchange.com&#x2F;questions&#x2F;4325&#x2F;how-do-modern-compilers-choose-which-variables-to-put-in-registers&quot;&gt;https:&#x2F;&#x2F;langdev.stackexchange.com&#x2F;questions&#x2F;4325&#x2F;how-do-modern-compilers-choose-which-variables-to-put-in-registers&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>컴파일러에 대한 오해.link</title>
+        <published>2024-12-10T00:00:00+00:00</published>
+        <updated>2024-12-10T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223689098102/"/>
+        <id>https://myyrakle.github.io/blog/223689098102/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223689098102/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;sbaziotis.com&#x2F;compilers&#x2F;common-misconceptions-about-compilers.html&quot;&gt;https:&#x2F;&#x2F;sbaziotis.com&#x2F;compilers&#x2F;common-misconceptions-about-compilers.html&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;흥미로운 내용이 가득 들어있는 꿀단지같은 글이다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>[Optimization] zero-copy</title>
+        <published>2024-10-23T00:00:00+00:00</published>
+        <updated>2024-10-23T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223629674161/"/>
+        <id>https://myyrakle.github.io/blog/223629674161/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223629674161/">&lt;p&gt;zero-copy는 극단적인 최적화가 필요할때 사용되는 테크닉 중 하나다.&lt;br &#x2F;&gt;
+쉽게 말해서 복사(copy) 행위를 최소화한 채로 최적화를 한다는 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;zero-copy가 적용되는 방식은 상황에 따라 다를 수 있지만, 통상적으로 I&#x2F;O 집약적인 부분에서 I&#x2F;O가 연속적으로 실행될 때 그 사이의 불필요한 복사를 방지하는 것을 위주로 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;yeje-pail-ilggo-jeonsonghagi&quot;&gt;예제: 파일 읽고 전송하기&lt;&#x2F;h2&gt;
+&lt;p&gt;간단한 예제를 만들고 하나씩 분석해보자.&lt;&#x2F;p&gt;
+&lt;p&gt;그냥 로컬에 있는 파일 하나를 읽어서 그걸 HTTP든 TCP든 전송한다고 치자.&lt;br &#x2F;&gt;
+별로 신경쓰지 않고 프로그램을 구현한다면 보통 이런 식으로 I&#x2F;O 체인이 발생할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_6783908373ee2da4.png&quot; alt=&quot;&quot; &#x2F;&gt;
+DMA가 커널 메모리에 파일 내용을 적재하면, 그걸 다시 프로세스 메모리로 복사한다.&lt;br &#x2F;&gt;
+그러면 프로그램은 프로세스 메모리에 적재된 파일 내용을 사용할 수 있다. 변수에 로드된 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 다시 파일 내용을 전송해야 하는데, 구현하기에 따라서 4번처럼 전송용 메모리 복사가 발생할 수도 있다.&lt;br &#x2F;&gt;
+그 다음에는 네트워크에 전송하기 위해 파일 내용을 다시 커널 메모리에 적재하고, Network Interface를 통해 실제 바깥 세상으로 나가게 된다.&lt;&#x2F;p&gt;
+&lt;p&gt;커널 메모리와 Disk&#x2F;Network의 상호 통신은 DMA에 의해 이루어지는 복사고, 나머지는 전부 CPU에 의한 복사다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;a-bulpilyohan-kodeu-sujun-bogsa-jegeo&quot;&gt;A. 불필요한 코드 수준 복사 제거&lt;&#x2F;h2&gt;
+&lt;p&gt;일단 그냥 단순히 코드 수준에서 불필요한 복사가 없는지부터 보는게 중요하다.&lt;br &#x2F;&gt;
+당연히 저기서 4번 복사는 없앨 수 있지 않겠는가?&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_04780c6b8748a74c.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이건 언어마다 다를테지만, 방법은 다 대동소이할 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;b-direct-memory-access-jeeo&quot;&gt;B. Direct Memory Access 제어&lt;&#x2F;h2&gt;
+&lt;p&gt;프로세스에서 I&#x2F;O는 기본적으로 커널메모리&amp;gt;프로세스메모리 순으로 제어가 된다.&lt;br &#x2F;&gt;
+일단 어떤 것이든 간에 커널메모리를 통해 write&#x2F;read가 발생하고, 그걸 프로세스 메모리라는 격리된 영역 안에 매핑시키는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 이것도 특수한 syscall들을 사용하면 불필요한 메모리 복사 없이 커널메모리를 바로 사용할 수 있다.&lt;br &#x2F;&gt;
+그 대표적인 방법 중 하나가 memory map이다.&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223479875946&quot;&gt;https:&#x2F;&#x2F;blog.naver.com&#x2F;sssang97&#x2F;223479875946&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;이걸 잘 응용한다면, 프로세스 메모리로의 불필요한 복사를 막을 수 있다. 또 2번의 복사를 줄일 수 있는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_60f5e55e3939387d.png&quot; alt=&quot;&quot; &#x2F;&gt;
+다시 이렇게 정리가 된다.&lt;br &#x2F;&gt;
+이제는 총 3번의 복사만으로 파일을 읽어서 전송할 수 있게 되었다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;c-mode-switching-biyong-jeolyaghagi&quot;&gt;C. mode switching 비용 절약하기&lt;&#x2F;h2&gt;
+&lt;p&gt;일반적으로 간과하기 쉬운 부분 중 하나지만, 사실 복사뿐만 아니라 시스템 호출(syscall) 또한 꽤 무거운 작업 중의 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;Linux에서 write나 read 같은 커널 기능을 호출하게 되면 프로그램은 사용자 모드에서 &quot;커널 모드&quot;로 전환하게 되는데, 이러면 커널 모드로 컨텍스트를 전환하는 도중에 많은 성능 손실이 발생할 수 있기 때문이다.&lt;br &#x2F;&gt;
+이 컨텍스트 스위칭은 레지스터, 스택포인터, 프로그램 카운터의 상태를 건드리고, CPU 캐시도 순간적으로 뻑날 수 있다. 그래서 시스템 호출은 최소화할 수 있다면 최소화하는게 바람직하다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 사실 위의 최적화 사례도 잘 뜯어보면&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a60171f5cf24435f.png&quot; alt=&quot;&quot; &#x2F;&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;컨텍스트 스위칭이 4번이나 일어나는 셈이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ed3f88d00806a4e1.png&quot; alt=&quot;&quot; &#x2F;&gt;
+mmap으로 읽을때 한번, 다시 돌아올때 한번, 네트워크 쓰기모드로 전환할때 한번, 다시 돌아올때 한번.&lt;&#x2F;p&gt;
+&lt;p&gt;그러면 저걸 한번에 모아서 할 수는 없는걸까?&lt;br &#x2F;&gt;
+있다!&lt;&#x2F;p&gt;
+&lt;p&gt;Linux는 sendfile이라는 syscall을 지원하는데, 이게 바로 파일을 읽어서 네트워크로 쏘는것까지를 하나로 뭉쳐놓은 시스템 명령이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a7a73ed154d12289.png&quot; alt=&quot;&quot; &#x2F;&gt;
+이러면 이제 mode switching이 2번으로 줄어들었다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;d-keoneol-memorigan-bogsabiyong-jeolyaghagi&quot;&gt;D. 커널 메모리간 복사비용 절약하기&lt;&#x2F;h2&gt;
+&lt;p&gt;근데 저걸 보다보면 또 의구심이 들 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_a60171f5cf24435f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+2번에서 발생하는 비용은 줄일 수 없는걸까? 어쨌든 둘다 실제 메모리인데 말이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이것도 당연히 할 수 있다!&lt;br &#x2F;&gt;
+DMA Gather라는 옵션을 sendfile과 함께 사용하면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_e39298337d4299e4.png&quot; alt=&quot;&quot; &#x2F;&gt;
+그러면 DMA가 디스크에서 파일을 읽을때, 그거를 Socket 전송을 위한 커널 메모리에 바로 적재하고 전송까지 해줄 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;이러면 최종적으로 2번의 mode switching, 한번의 copy만으로 파일-&amp;gt;네트워크 전송을 달성할 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;eungyong-sarye&quot;&gt;응용 사례&lt;&#x2F;h2&gt;
+&lt;p&gt;Kafka는 zero copy 방법론을 적극적으로 사용한 기반시스템 중 하나다.&lt;br &#x2F;&gt;
+위에서 언급했던 sendfile과 DMA gather 기능을 응용해서 빠르고 부하가 적은 전송 구조를 구현했다.&lt;&#x2F;p&gt;
+&lt;p&gt;그 외에도 Cassandra Streaming, Ceph, Apache Arrow 같은 많은 시스템들이 이를 통한 최적화된 기능을 제공한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;rust&#x2F;comments&#x2F;18cian3&#x2F;i_dont_understand_zero_copy&#x2F;&quot;&gt;https:&#x2F;&#x2F;www.reddit.com&#x2F;r&#x2F;rust&#x2F;comments&#x2F;18cian3&#x2F;i_dont_understand_zero_copy&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;medium.com&#x2F;@kaixin667689&#x2F;zero-copy-principle-and-implementation-9a5220a62ffd&quot;&gt;https:&#x2F;&#x2F;medium.com&#x2F;@kaixin667689&#x2F;zero-copy-principle-and-implementation-9a5220a62ffd&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;1860253&#x2F;what-is-the-overhead-involved-in-a-mode-switch&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;1860253&#x2F;what-is-the-overhead-involved-in-a-mode-switch&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>allocator의 종류와 특징</title>
+        <published>2024-09-22T00:00:00+00:00</published>
+        <updated>2024-09-22T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223591641545/"/>
+        <id>https://myyrakle.github.io/blog/223591641545/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223591641545/">&lt;p&gt;동적할당에 대해 어느 정도 안다고 가정한다.&lt;&#x2F;p&gt;
+&lt;p&gt;allocator는 동적할당의 실질적인 동작을 구현해주는 구성요소다.&lt;br &#x2F;&gt;
+GC 언어들은 자신만의 메모리 청크를 미리 올려두고 쓰지만, C&#x2F;C++같은 non-GC 언어들은 동적할당(malloc&#x2F;new)을 할때 내부적으로 allocator 구현에 의해 동작한다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 동적할당은 생각보다 고려할게 많다. 반복적으로 할당&#x2F;해제되는 것에 대해서 실제 메모리 배치를 compact하게 유지할 필요가 있기 때문이다.&lt;br &#x2F;&gt;
+게다가 멀티스레드 환경에서 최적화를 하는 것도 골칫거리다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gibon-allocator&quot;&gt;기본 Allocator&lt;&#x2F;h2&gt;
+&lt;p&gt;따로 별다른 설정을 하지 않는다면, 운영체제에서 기본으로 적용되는 allocator들이 있다.&lt;br &#x2F;&gt;
+windows에서는 HeapAlloc이 있고, MacOS에는 libmalloc이 있다.&lt;br &#x2F;&gt;
+Linux에서는 ptmalloc 기반의 구현을 사용한다. 버전 1&#x2F;2&#x2F;3까지 있더라.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;문제&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+일반적인 사용사례에서는 기본 allocator를 써도 충분하지만, 경우에 따라서는 단점이나 한계가 있을 수 있다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;멀티스레드 환경에서의 할당에서는 실행속도가 충분히 효율적이지 못하다.&lt;&#x2F;li&gt;
+&lt;li&gt;메모리 단편화가 발생할 수 있다.&lt;&#x2F;li&gt;
+&lt;li&gt;힙 사용량 프로파일링이 불가능하다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;&lt;strong&gt;이유&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+allocator들도 사실 내부적으로 스레드 간 동기화를 위한 Mutex나 Spinlock을 사용하곤 하는데, 그런 동기화 최적화 수준에서 성능차가 많이 벌어지는 것 같더라.&lt;br &#x2F;&gt;
+그리고 메모리 낭비를 최소화하기 위한 목적에서 보수적으로 구조를 잡다보니 할당성능이 떨어지는 부분도 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;적절한 커스텀 allocator들을 사용한다면 이 문제들을 부분적으로 해결하거나 보완해볼 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;하지만&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+다 trade-off는 존재한다.&lt;br &#x2F;&gt;
+일반적으로... 실행속도를 얻으면 메모리를 잃거나, 정지시간이 발생한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 빠르다고 무작정 박을게 아니고, 특징과 장단점을 잘 파악하고 적용해야 한다.&lt;br &#x2F;&gt;
+그리고 표준 allocator들도 놀고만 있는건 아니라서, 지금도 계속 발전중에 있음을 염두에 둬야한다. 예전 벤치마크와 현재는 다를 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;jemalloc&quot;&gt;jemalloc&lt;&#x2F;h2&gt;
+&lt;p&gt;custom allocator 중에서 가장 유명한 것 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;이것도 동시성 환경에서의 빠른 성능과 메모리 단편화 해결, 프로파일링 기능 등을 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1e2f2e8308b60b1c.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+벤치마크를 봤을때 tcmalloc과 비슷하거나 조금 더 빠른 수준인 것 같다.&lt;br &#x2F;&gt;
+기본 allocator보다는 최대 2배 정도 더 빠르다.&lt;&#x2F;p&gt;
+&lt;p&gt;2005년에 FreeBSD에서 기본 allocator로 시작했고, Linux, MacOS 등에서도 사용 가능하다. Windows는 뭔가 잘 안됐던 것으로 기억한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;클래스&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+jemalloc은 내부적으로 3가지 클래스를 나눠서 할당 영역을 관리한다.&lt;br &#x2F;&gt;
+small - 8B ~&lt;br &#x2F;&gt;
+large - 4KiB ~&lt;br &#x2F;&gt;
+huge - 4MiB ~&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;arena&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+가장 큰 메모리 단위를 arena라고 하는데, 동시성 수준에서의 최적화와 약간의 메모리 풀링을 위해 존재한다. 그래서 코어 갯수에 비례해서 arena 개수가 정해진다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_c5113ace5473628e.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+arena에는 실제 메모리를 참조하는 여러가지 정보들이 존재한다.&lt;br &#x2F;&gt;
+스레드마다 최소 한개씩의 arena가 주어지고, arena끼리는 거의 독립적으로 동작하기 때문에 동기화 비용을 최소화할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;스레드 캐싱&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+멀티스레드 환경에서의 최적화를 위해 스레드 캐싱 개념을 적용했다.&lt;br &#x2F;&gt;
+스레드마다 32KB 정도의 캐시를 두고, 캐시에 사용 가능한 메모리가 있다면 arena에 접근할 필요도 없이 바로 할당해서 쓸 수 있도록 하는 것이다.&lt;br &#x2F;&gt;
+이를 통해 빈번한 할당에서의 성능최적화를 얻을 수 있었다.&lt;br &#x2F;&gt;
+하지만 우습게도, 이 캐시를 정리하기 위해서 캐시 영역에 대해 내부적으로 Incremental GC를 돌린다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;메모리 단편화&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+내가 알기로는 메모리 단편화 문제가 가장 적다. tcmalloc보다도 적은 것으로 알고 있다.&lt;br &#x2F;&gt;
+jemalloc은 buddy allocation이라고 하는 방법을 통해서, 단편화될 수 있는 메모리를 실시간으로 분할하거나 merge해서 공간을 확보하는 방법을 사용한다.&lt;&#x2F;p&gt;
+&lt;p&gt;세부 알고리즘은 꽤 복잡한데, 대충 설명하자면 메모리 할당이 일어날때 가장 작은 메모리 블록을 찾아서 넣는 것이다. 딱 맞는 작은 블록이 없다면 큰 블록을 쪼개서 쓰고, 해제되면 다시 merge한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;메모리 반환&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+곧 아래에서 설명할 tcmalloc과 다르게 해제된 메모리는 웬만해서 바로 OS에 반환한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;단점&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+jemalloc이 모든 부분에서 완벽했다면 모든 환경에서 기본 allocator로 사용했을 것이다.&lt;br &#x2F;&gt;
+이건 실행성능을 최적화하기 위해서 memory footprint를 희생한 측면이 있다. 여기저기 캐시 박고, 메모리 들고서 재사용하고, 그런 것들이 있기 때문이다.&lt;br &#x2F;&gt;
+그래서 기본 allocator들에 비해서는, 실제 사용량보다 많은 메모리를 점유할 수도 있다. 내가 봤던 벤치마크에서는 2배 정도 더 먹기도 했다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;tcmalloc&quot;&gt;tcmalloc&lt;&#x2F;h2&gt;
+&lt;p&gt;구글에서 만든 allocator다.&lt;br &#x2F;&gt;
+C&#x2F;C++에도 종종 쓰고, Go에서는 기본 allocator로 사용하고 있다.&lt;br &#x2F;&gt;
+크롬 같은 구글 구현체들은 대부분 tcmalloc을 쓴다.&lt;&#x2F;p&gt;
+&lt;p&gt;동시성 환경에서의 빠른 성능과 메모리 단편화 해결, 프로파일링 기능 등을 제공한다.&lt;&#x2F;p&gt;
+&lt;p&gt;극단적인 멀티스레드 환경에서는 최대 2배의 성능향상을 보이고, 일반적인 환경에서도 10-20% 정도는 빨라지는 것 같다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;3 레이어&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+tcmalloc은 3가지 레이어로 나눠서 메모리 할당을 관리한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_5455369eb0815b2f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+백엔드, 미들엔드, 프론트엔드다.&lt;&#x2F;p&gt;
+&lt;p&gt;백엔드는 OS에서 직접 메모리를 할당해오고, 미들엔드는 할당해온 메모리를 적절히 관리한다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 프론트엔드는 모아놓은 메모리를 빠르게 프로그램에 나눠준다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;클래스&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+효율적인 메모리 배치를 위해 메모리 크기를 60가지의 클래스로 매우 세분화해서 관리한다. 이것으로 메모리 파편화 문제를 줄인다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;스레드 캐싱&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+tcmalloc도 위에서 설명한 jemalloc처럼 스레드 캐싱 매커니즘을 사용한다.&lt;br &#x2F;&gt;
+원리는 jemalloc과 비슷하다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;메모리 반환&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+이건 사실상 GC 런타임을 위에 올린거나 다름없어서, 메모리를 할당해제하더라도 OS에 그걸 바로 반환하지 않는다.&lt;br &#x2F;&gt;
+해제 후에도 그 메모리 풀을 활용해서 할당성능은 좋을 수 있지만, 메모리 사용량 측면에서는 jemalloc보다 비효율적일 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;단점&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+이것도 실행속도를 얻기 위해 footprint를 희생하는 케이스다.&lt;br &#x2F;&gt;
+캐시도 캐시고, GC 런타임처럼 자체 메모리 풀을 들고서 반환하지 않은 채로 쓰기 때문이디.&lt;br &#x2F;&gt;
+그래서 기본 allocator에 비해서 2-3배의 공간을 더 점유할 수 있다...&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;geu-oe&quot;&gt;그 외...&lt;&#x2F;h2&gt;
+&lt;p&gt;windows에서만 제공되는 nedalloc, 그리고 mimalloc, Hoard, concur 등등 다양한 구현체가 존재한다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 jemalloc이나 tcmalloc만큼 실행성능이 크게 좋지는 못하더라.&lt;br &#x2F;&gt;
+게다가 환경에 따라서는 오히려 표준 allocator보다 느리기도 하다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;jemalloc.net&#x2F;&quot;&gt;https:&#x2F;&#x2F;jemalloc.net&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;yscho03.tistory.com&#x2F;m&#x2F;299&quot;&gt;https:&#x2F;&#x2F;yscho03.tistory.com&#x2F;m&#x2F;299&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;8224347&#x2F;malloc-vs-heapalloc&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;8224347&#x2F;malloc-vs-heapalloc&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;blackwinghq.com&#x2F;blog&#x2F;posts&#x2F;playing-with-libmalloc&#x2F;&quot;&gt;https:&#x2F;&#x2F;blackwinghq.com&#x2F;blog&#x2F;posts&#x2F;playing-with-libmalloc&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;jemalloc.net&#x2F;&quot;&gt;https:&#x2F;&#x2F;jemalloc.net&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;engineering.fb.com&#x2F;2011&#x2F;01&#x2F;03&#x2F;core-infra&#x2F;scalable-memory-allocation-using-jemalloc&#x2F;&quot;&gt;https:&#x2F;&#x2F;engineering.fb.com&#x2F;2011&#x2F;01&#x2F;03&#x2F;core-infra&#x2F;scalable-memory-allocation-using-jemalloc&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;18033518&#x2F;what-are-the-windows-and-linux-native-os-system-calls-made-from-malloc&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;18033518&#x2F;what-are-the-windows-and-linux-native-os-system-calls-made-from-malloc&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;www.slideshare.net&#x2F;JangHoon1&#x2F;jemalloc-92835449&quot;&gt;https:&#x2F;&#x2F;www.slideshare.net&#x2F;JangHoon1&#x2F;jemalloc-92835449&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;13027475&#x2F;cpu-and-memory-usage-of-jemalloc-as-compared-to-glibc-malloc&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;13027475&#x2F;cpu-and-memory-usage-of-jemalloc-as-compared-to-glibc-malloc&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;goog-perftools.sourceforge.net&#x2F;doc&#x2F;tcmalloc.html&quot;&gt;https:&#x2F;&#x2F;goog-perftools.sourceforge.net&#x2F;doc&#x2F;tcmalloc.html&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;7852731&#x2F;c-memory-allocation-mechanism-performance-comparison-tcmalloc-vs-jemalloc&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;7852731&#x2F;c-memory-allocation-mechanism-performance-comparison-tcmalloc-vs-jemalloc&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;9866145&#x2F;what-are-the-differences-between-and-reasons-to-choose-tcmalloc-jemalloc-and-m&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;9866145&#x2F;what-are-the-differences-between-and-reasons-to-choose-tcmalloc-jemalloc-and-m&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;medium.com&#x2F;daangn&#x2F;memory-allocator-for-mongodb-1953f9cee06c&quot;&gt;https:&#x2F;&#x2F;medium.com&#x2F;daangn&#x2F;memory-allocator-for-mongodb-1953f9cee06c&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;en.m.wikipedia.org&#x2F;wiki&#x2F;Buddy_memory_allocation&quot;&gt;https:&#x2F;&#x2F;en.m.wikipedia.org&#x2F;wiki&#x2F;Buddy_memory_allocation&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>메모리 단편화와 GC, non-GC</title>
+        <published>2024-09-19T00:00:00+00:00</published>
+        <updated>2024-09-19T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223588850598/"/>
+        <id>https://myyrakle.github.io/blog/223588850598/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223588850598/">&lt;p&gt;동적할당에 대해 어느 정도 안다고 가정한다.&lt;&#x2F;p&gt;
+&lt;p&gt;동적할당은 생각보다 고려할게 많다. 반복적으로 할당&#x2F;해제되는 것에 대해서 메모리 단편화를 막기 위해 실제 메모리 배치를 compact하게 유지할 필요가 있기 때문이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;memori-danpyeonhwa-memory-fragmentation&quot;&gt;메모리 단편화 (Memory Fragmentation)&lt;&#x2F;h2&gt;
+&lt;p&gt;메모리 파편화라고도 부른다.&lt;br &#x2F;&gt;
+메모리 단편화에는 크게 2가지가 존재한다. 보통 문제가 되는건 외부 메모리 단편화다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;A. 내부 메모리 단편화(External Memory Fragmentation)&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;내부 메모리 단편화는 비교적 단순한 문제다. 그냥 정해진 블록 크기보다 작은 데이터가 할당되어서 공간이 낭비되는 현상을 가리킨다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_79b39971cd790e6b.png&quot; alt=&quot;&quot; &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&quot;&gt;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;B. 외부 메모리 단편화(External Memory Fragmentation)&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;외부 메모리 단편화는 그것과 다르게, 잦은 할당&#x2F;해제로 인해서 중간중간 성긴 구멍이 생기고, 그것으로 인해서 실제 여유공간을 전체적으로 활용할 수 없는 문제를 말한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_ea748010afae47e4.jpg&quot; alt=&quot;&quot; &#x2F;&gt;.png?type=w800)
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&quot;&gt;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+보통은 이게 문제가 될 일이 더 잦다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;osyi-memori-gwanri-gibeob&quot;&gt;OS의 메모리 관리 기법&lt;&#x2F;h2&gt;
+&lt;p&gt;OS는 메모리를 효율적으로 관리하고 단편화를 줄이기 위해 몇가지 방법을 사용한다.&lt;br &#x2F;&gt;
+페이징과 세그먼트다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;**A. 페이징 (Paging) **&lt;&#x2F;p&gt;
+&lt;p&gt;실제 메모리와 별개로 페이지(Page)라고 하는 가상 메모리 블럭들을 정의해서, 그걸 통해서 실제 메모리에 접근하는 방법이다. 대부분의 OS가 이 방법론을 사용해서 메모리를 관리한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bf3dcacea3cfab6a.jpg&quot; alt=&quot;&quot; &#x2F;&gt;.png?type=w800)
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&quot;&gt;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+이 방법을 사용하면 실제 메모리가 연속적이지 않아도 되기 때문에 외부 단편화는 해결된다.&lt;br &#x2F;&gt;
+대신 정해진 페이지 크기를 통째로 할당해서 쓰기 때문에 내부 단편화가 발생한다.&lt;&#x2F;p&gt;
+&lt;p&gt;일반적인 OS들의 페이지 기본 크기는 4K에서부터 시작한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;B. 세그먼트 (Segment)&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;페이지가 고정된 크기의 블럭을 할당해서 사용하는 방법이라면, 세그먼트는 가변적인 크기의 블럭을 할당해서 연결하는 방법이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_8fbf80cccf924e19.jpg&quot; alt=&quot;&quot; &#x2F;&gt;.png?type=w800)
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&quot;&gt;https:&#x2F;&#x2F;velog.io&#x2F;@hanhs4544&#x2F;%EB%A9%94%EB%AA%A8%EB%A6%AC-%EB%8B%A8%ED%8E%B8%ED%99%94Memory-Fragmentation&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+세그먼트는 연속적으로 할당된다.&lt;br &#x2F;&gt;
+이건 미리 할당해놓고 연결하는 그런게 아니라서 외부 단편화가 발생한다.&lt;br &#x2F;&gt;
+하지만 필요한 크기만큼만 할당하기 때문에 내부 단편화는 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;이 기법은 16비트에서 시작해서 32비트까지만 주로 사용되었고, 64비트 플랫폼부터는 버려지고 있는 추세다.&lt;&#x2F;p&gt;
+&lt;p&gt;32비트 플랫폼에서는 페이징과 세그먼트를 결합해서 사용했는데, 여기서 세그먼트는 메모리 할당을 위해서가 아니라, 메모리 보호를 위해서 사용되었다.&lt;br &#x2F;&gt;
+64비트 플랫폼에서도 부분적으로 보호를 위한 매커니즘에서 사용되고 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;strong&gt;C. 근황&lt;&#x2F;strong&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;정리하자면 32비트 플랫폼에서는 페이징과 세그먼트를 결합해서 사용했지만, 64비트 플랫폼에서는 거의 페이징 기법만을 사용해서 메모리 할당을 관리하고 있다는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;gcwa-non-gc-eoneo&quot;&gt;GC와 non-GC 언어&lt;&#x2F;h2&gt;
+&lt;p&gt;Java, V8, C# 같은 대부분의 GC 언어들은 메모리 단편화에 대한 문제를 해결하기 위해 메모리 압축(Compaction)이란 것을 실행한다.&lt;br &#x2F;&gt;
+꽤 심각한 병목이 생길 수 있음에도 단편화 하나만을 막기 위해 꽤 부담스러운 작업을 주기적으로 행하는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;근데 C&#x2F;C++&#x2F;Rust 같은 non-GC 언어들은 그런 것에 대한 고민이 별로 없는 것처럼 보인다. 왜일까?&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;non-gc-eoneo-c-c-rust&quot;&gt;non-GC 언어 (C&#x2F;C++, RUST)&lt;&#x2F;h2&gt;
+&lt;p&gt;사실 C&#x2F;C++ 같은 non-GC 언어들도 잠재적으로 메모리 단편화에 대한 문제가 존재할 수 있다.&lt;br &#x2F;&gt;
+하지만 그 대응 방법이 GC 언어와 다르고, 사용자가 직접 그 할당을 제어할 수 있다는 것이 다를 뿐이다.&lt;&#x2F;p&gt;
+&lt;p&gt;GC 언어만이 자동화된 Memory Compaction을 수행하는 이유는, GC 언어에서만 메모리 단편화가 발생해서가 아니다. 그냥 자동으로 메모리 할당을 전부 책임진다는 결정 아래에서 이어진 것일 뿐이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;A. Memory Compaction?&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+GC 언어들은 객체가 할당될때마다 그 소유권이 항상 GC 매니저에 맡겨진다. 언제든 객체가 어디있는지 알 수 있다는 것이다.&lt;br &#x2F;&gt;
+반면 C&#x2F;C++ 같은 unmanaged 언어들은 그런 책임이나 추적이 보장되지 않는다. 애초에 불가능한 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;B. 32비트와 64비트&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+32비트 플랫폼에서는 실제로 장기 실행형 C&#x2F;C++ 앱에 외부 단편화로 인한 문제가 꽤 발생할 수 있었다.&lt;br &#x2F;&gt;
+예를 들어, 32비트 플랫폼에서 2GB 짜리 메모리만 다뤄도 문제가 바로 불거질 수 있다.&lt;br &#x2F;&gt;
+4GB 정도가 상한이기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 64비트 플랫폼에서는 주소 공간이 너무 넓어서, 메모리 매핑을 거의 끝없이 만들 수 있기 때문에 외부 단편화로 인한 문제 발생률이 매우 드물어졌다.&lt;&#x2F;p&gt;
+&lt;p&gt;**C. Memory Pool **&lt;br &#x2F;&gt;
+non-GC 언어에서도 할당 최적화를 위해서 Memory Pool을 미리 고정으로 할당해놓고 돌려쓰기도 한다.&lt;br &#x2F;&gt;
+Memory Arena라고도 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;strong&gt;D. Custom Allocator&lt;&#x2F;strong&gt;&lt;br &#x2F;&gt;
+C&#x2F;C++, Rust 같은 언어들은 OS에서 제공하는 시스템 allocator를 사용한다.&lt;br &#x2F;&gt;
+하지만 jemalloc 같은 좀더 발전된 형태의 커스텀 allocator를 사용해서 usecase에 맞게 할당 효율성을 올릴 수 있다. 이건 추후 별도 포스트로 정리해보겠다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;76866904&#x2F;if-memory-fragmentation-is-no-longer-an-issue-with-64-bit-virtual-address-space&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;76866904&#x2F;if-memory-fragmentation-is-no-longer-an-issue-with-64-bit-virtual-address-space&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;64349058&#x2F;memory-defragmentation-heap-compaction-commonplace-in-managed-languages-but-n&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;64349058&#x2F;memory-defragmentation-heap-compaction-commonplace-in-managed-languages-but-n&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;44351461&#x2F;difference-between-paging-and-segmentation&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;44351461&#x2F;difference-between-paging-and-segmentation&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;23584055&#x2F;what-is-segmentation-and-paging-in-computer-science&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;23584055&#x2F;what-is-segmentation-and-paging-in-computer-science&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Memory_segmentation&quot;&gt;https:&#x2F;&#x2F;en.wikipedia.org&#x2F;wiki&#x2F;Memory_segmentation&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;57222727&#x2F;is-segmentation-completely-not-used-in-x64&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;57222727&#x2F;is-segmentation-completely-not-used-in-x64&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;40658045&#x2F;does-rusts-memory-management-result-in-fragmented-memory&quot;&gt;https:&#x2F;&#x2F;stackoverflow.com&#x2F;questions&#x2F;40658045&#x2F;does-rusts-memory-management-result-in-fragmented-memory&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>컴파일러는 어떻게 복잡한 패턴을 최적화하나요?.link</title>
+        <published>2024-07-23T00:00:00+00:00</published>
+        <updated>2024-07-23T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223522036163/"/>
+        <id>https://myyrakle.github.io/blog/223522036163/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223522036163/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;langdev.stackexchange.com&#x2F;questions&#x2F;3942&#x2F;what-are-the-ways-compilers-recognize-complex-patterns&quot;&gt;https:&#x2F;&#x2F;langdev.stackexchange.com&#x2F;questions&#x2F;3942&#x2F;what-are-the-ways-compilers-recognize-complex-patterns&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+&lt;p&gt;그것은 노가다&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>프론트엔드 개발자가 알아야하는 숫자.link</title>
+        <published>2024-04-25T00:00:00+00:00</published>
+        <updated>2024-04-25T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223426705064/"/>
+        <id>https://myyrakle.github.io/blog/223426705064/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223426705064/">&lt;p&gt;&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;vercel.com&#x2F;blog&#x2F;latency-numbers-every-web-developer-should-know&quot;&gt;https:&#x2F;&#x2F;vercel.com&#x2F;blog&#x2F;latency-numbers-every-web-developer-should-know&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>캐시라인 최적화와 배열</title>
+        <published>2024-04-21T00:00:00+00:00</published>
+        <updated>2024-04-21T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/223422783855/"/>
+        <id>https://myyrakle.github.io/blog/223422783855/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/223422783855/">&lt;p&gt;캐시라인 최적화는 CPU 캐시가 캐싱을 잘 하도록 유도하는 최적화 유도 기법이다.&lt;br &#x2F;&gt;
+캐시는 생각보다 성능에 지대한 영향을 주는 변인 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;최적화를 논할때 수학적 알고리즘을 이야기하곤 하지만, 결국 모든 코드는 하드웨어에서 돌아간다.&lt;br &#x2F;&gt;
+시간복잡도니 뭐니 하는 것도 실제 하드웨어에 올라가면 맞지 않을 때가 많다.&lt;&#x2F;p&gt;
+&lt;p&gt;이를테면 정렬 알고리즘 중 quick sort가 알고리즘적으로는 N log N ~ N^2 정도의 성능을 보여야 하지만, 다른 대부분의 정렬 알고리즘을 압도하는 실성능을 보이는 것도 캐시 최적화를 굉장히 잘 타기 때문이다.&lt;&#x2F;p&gt;
+&lt;p&gt;캐시 참조는 대략 1-10ns 정도의 시간이 소모되는 반면 메인메모리 참조는 100ns 정도가 소요된다. 최소 10배 정도는 차이가 나는 것이다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;kaesiwa-kaesirain&quot;&gt;캐시와 캐시라인&lt;&#x2F;h2&gt;
+&lt;p&gt;캐시는 약간 변칙적인 방법에 의거해서 데이터를 가져온다.&lt;&#x2F;p&gt;
+&lt;ol&gt;
+&lt;li&gt;자주 사용되는 값은 당연히 1순위로 캐시에 로드한다.&lt;&#x2F;li&gt;
+&lt;li&gt;가져온 데이터에 주변에 있는 값도 캐시에 로드한다. 이를 지역성(locality)라고 한다.&lt;&#x2F;li&gt;
+&lt;&#x2F;ol&gt;
+&lt;p&gt;그리고 캐시 메모리에서 각각의 캐시 묶음이 저장되는 영역을 캐시라인이라고 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_b1014277f525a015.png&quot; alt=&quot;&quot; &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;en.algorithmica.org&#x2F;hpc&#x2F;cpu-cache&#x2F;associativity&#x2F;&quot;&gt;https:&#x2F;&#x2F;en.algorithmica.org&#x2F;hpc&#x2F;cpu-cache&#x2F;associativity&#x2F;&lt;&#x2F;a&gt;&lt;br &#x2F;&gt;
+캐시 매커니즘은 현대에 와서는 굉장히 복잡해졌기 때문에, 간단히만 다루고 넘어간다.&lt;br &#x2F;&gt;
+여기서 이야기하고 싶은건 지역성이다.&lt;&#x2F;p&gt;
+&lt;p&gt;예를 들어 CPU는 1004번 주소의 메모리 값을 사용했다면, 근처에 있는 1005, 1006, 1007번에 있는 메모리 값도 곧 사용할 것이라고 추측하고 한번에 캐시에 로드할 수 있다.&lt;br &#x2F;&gt;
+그렇기 때문에 메모리에 가까이 위치한 변수에 접근하는 것은 캐시를 잘 탄다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;baeyeolgwa-kaesi&quot;&gt;배열과 캐시&lt;&#x2F;h2&gt;
+&lt;p&gt;배열은 항상 메모리 연속적으로 데이터가 저장된다.&lt;br &#x2F;&gt;
+그렇기 때문에 locality에 의한 캐시 최적화가 굉장히 잘 되는데, 리스트니 해시테이블이니 뭐니 해도 대부분의 경우 배열이 가장 가볍고 빠른 이유가 이것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;그래서 극적인 수준의 최적화가 필요하다면 배열을 사용하는 것이 최우선순위가 되어야 한다. 정적으로 스택에 할당된 배열인지, 동적으로 힙에 할당된 배열인지는 상관이 없다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;baeyeolyi-yeonsogjeog-jeobgeun&quot;&gt;배열의 연속적 접근&lt;&#x2F;h2&gt;
+&lt;p&gt;배열만 쓴다고 해서 무조건 캐시 최적화가 잘 되는건 아니다.&lt;br &#x2F;&gt;
+결국에는 locality가 중요한 것이기 때문에, 순서대로 접근하거나 계속 근처 가까운 곳에 접근을 해야 한다.&lt;br &#x2F;&gt;
+7 인덱스에 액세스했다가, 544에 액세스했다가 하는 널뛰기식 접근으로는 캐시 최적화가 제대로 이루어지지 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;아래는 그런 캐시 효율성의 차이를 극적으로 보여줄 수 있는 예시 코드다. 언어는 Rust다.&lt;&#x2F;p&gt;
+&lt;pre class=&quot;giallo&quot; style=&quot;color: #CDD6F4; background-color: #1E1E2E;&quot;&gt;&lt;code data-lang=&quot;javascript&quot;&gt;&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;pub struct Timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    start&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; std&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:time&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:Instant&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;impl Timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    pub fn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;font-weight: bold;&quot;&gt; new&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; Timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        Timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;            start&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt; std&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:time&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:Instant&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;now&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;        }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    pub fn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; elapsed&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;self)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; std&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:time&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:Duration&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        self&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;start&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;elapsed&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    pub fn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; elapsed_as_millis&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;self)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; u128&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        self&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;elapsed&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;as_millis&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    pub fn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; elapsed_as_secs&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;self)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; u64&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        self&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;elapsed&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;as_secs&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;const&lt;&#x2F;span&gt;&lt;span&gt; ARRAY_SIZE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; usize&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 10_000_000&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;fn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; do_something_with_indices&lt;&#x2F;span&gt;&lt;span&gt;(array: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;Vec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;i32&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; indices: &lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;Vec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;usize&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; i64&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;    let&lt;&#x2F;span&gt;&lt;span&gt; mut sum &lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;=&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    for i&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; in&lt;&#x2F;span&gt;&lt;span&gt; indices&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt;        let&lt;&#x2F;span&gt;&lt;span&gt; value&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; array[&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;*&lt;&#x2F;span&gt;&lt;span&gt;i]&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        sum&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; +=&lt;&#x2F;span&gt;&lt;span&gt; value&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; as&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt; i64&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    sum&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;fn&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; get_randome_indices&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; -&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt; Vec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span&gt;usize&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    use rand&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span&gt;:seq::SliceRandom;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let mut indices&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; (&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;ARRAY_SIZE&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;collect::&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F5C2E7;&quot;&gt;Vec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89DCEB;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;usize&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89DCEB;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let mut rng = rand::thread_rng();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    indices.shuffle(&amp;amp;mut rng);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    indices&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;fn get_sequencial_indices() -&amp;gt; Vec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;&quot;&gt;usize&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    (&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;ARRAY_SIZE&lt;&#x2F;span&gt;&lt;span&gt;)&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span&gt;collect::&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F5C2E7;&quot;&gt;Vec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89DCEB;&quot;&gt;&amp;lt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #F9E2AF;font-style: italic;&quot;&gt;usize&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89DCEB;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;gt;&lt;&#x2F;span&gt;&lt;span&gt;()&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;fn main() &lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;{&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let mut array&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; vec&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;!&lt;&#x2F;span&gt;&lt;span&gt;[&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;0&lt;&#x2F;span&gt;&lt;span&gt;; ARRAY_SIZE];&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    for i&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;&quot;&gt; in&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt; 0.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #FAB387;&quot;&gt;ARRAY_SIZE&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;        array[i] = i as i32;&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    }&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    println!(&amp;quot;Array Size&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;:&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt; {}&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;, ARRAY_SIZE);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let indices&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; get_sequencial_indices&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; Timer::&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;font-weight: bold;&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;    do_something_with_indices&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;array&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;indices);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;    println&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;Seq Access =&amp;gt; Elapsed: {}ms&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;elapsed_as_millis&lt;&#x2F;span&gt;&lt;span&gt;());&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let indices&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt; get_randome_indices&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span&gt;    let timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; =&lt;&#x2F;span&gt;&lt;span&gt; Timer::&lt;&#x2F;span&gt;&lt;span style=&quot;color: #CBA6F7;font-weight: bold;&quot;&gt;new&lt;&#x2F;span&gt;&lt;span&gt;();&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;    do_something_with_indices&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;&amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;array&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt; &amp;amp;&lt;&#x2F;span&gt;&lt;span&gt;indices);&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;    println&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;!&lt;&#x2F;span&gt;&lt;span&gt;(&lt;&#x2F;span&gt;&lt;span style=&quot;color: #A6E3A1;&quot;&gt;&amp;quot;Randome Access =&amp;gt; Elapsed: {}ms&amp;quot;&lt;&#x2F;span&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;,&lt;&#x2F;span&gt;&lt;span&gt; timer&lt;&#x2F;span&gt;&lt;span style=&quot;color: #94E2D5;&quot;&gt;.&lt;&#x2F;span&gt;&lt;span style=&quot;color: #89B4FA;font-style: italic;&quot;&gt;elapsed_as_millis&lt;&#x2F;span&gt;&lt;span&gt;());&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;
+&lt;span class=&quot;giallo-l&quot;&gt;&lt;span style=&quot;color: #9399B2;&quot;&gt;}&lt;&#x2F;span&gt;&lt;&#x2F;span&gt;&lt;&#x2F;code&gt;&lt;&#x2F;pre&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_d21633a242c7441e.png&quot; alt=&quot;&quot; &#x2F;&gt;
+인덱스 배열을 받아서 하나의 함수는 배열을 순서대로 조회해서 합산하고, 하나의 함수는 배열을 랜덤으로 조회해서 합산한다. 차이는 그것 뿐이다.&lt;br &#x2F;&gt;
+후자의 경우는 변화무쌍하게 메모리 접근을 시도하니 당연히 메모리 액세스에 캐시 미스만 주구장창 뜰 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;하지만 그것만 해도 꽤 큰 성능 차이가 발생한다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_0ec7d8bbf30e01e5.png&quot; alt=&quot;&quot; &#x2F;&gt;
+1000만번을 반복했을 경우 8배 정도의 성능차이를 보였고&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_28d8adef584b555f.png&quot; alt=&quot;&quot; &#x2F;&gt;
+1억번을 반복했을 경우 9-10배의 성능차이를 보였다.&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>응답 지연 값</title>
+        <published>2022-07-23T00:00:00+00:00</published>
+        <updated>2022-07-23T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222825777113/"/>
+        <id>https://myyrakle.github.io/blog/222825777113/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222825777113/">&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_1a397fb86dd7c5b6.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+출처는 까먹음&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>SIMD 최적화</title>
+        <published>2022-04-20T00:00:00+00:00</published>
+        <updated>2022-04-20T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            
+              myyrakle
+            
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://myyrakle.github.io/blog/222705751501/"/>
+        <id>https://myyrakle.github.io/blog/222705751501/</id>
+        
+        <content type="html" xml:base="https://myyrakle.github.io/blog/222705751501/">&lt;p&gt;SIMD는 Single Instruction Mutliple Data의 준말로, 근래에 주목받는 최적화 기법 중 하나다.&lt;&#x2F;p&gt;
+&lt;p&gt;Loop Vectorization이라고도 부른다.&lt;&#x2F;p&gt;
+&lt;p&gt;모든 어셈블리 체계에서 다 동작하진 않고, 메이저한 주요 아키텍쳐에서만 지원된다.&lt;br &#x2F;&gt;
+x86_64의 인텔과 AMD는 대부분 지원하고, Arm에서도 Neon이라는 이름으로 지원한다.&lt;br &#x2F;&gt;
+Arm의 경우에는 마이크로 프로세서에는 없고, 일반적인 데스크톱 레벨에서만 지원된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;eoddeolddae-sseugi-joheunga&quot;&gt;어떨때 쓰기 좋은가?&lt;&#x2F;h2&gt;
+&lt;p&gt;사실 일반적인 사용례에서는 그렇게 아주 눈에 띄는 성능향상을 보이지는 않는다.&lt;&#x2F;p&gt;
+&lt;p&gt;가장 효과가 좋은 부분은 벡터연산을 할 때다. 그러니까, 3D 작업을 할때 좋다는 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;이럴때는 10배가 넘는 성능향상을 보여주기도 한다고 한다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;geuraeseo-ige-mweonga&quot;&gt;그래서 이게 뭔가?&lt;&#x2F;h2&gt;
+&lt;p&gt;복수의 연산을 병렬로 한번에 처리하자는 것이다.&lt;br &#x2F;&gt;
+그래서 복수 데이터에 대한 단일 명령어(Single Instruction Mutliple Data)인 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;가령 a+b, c+d, e+f, g+h등의 연산을 처리하게 한다면, 일반적인 cpu구조에서는 a+b를 먼저 연산하고, 그다음에 c+d, e+f를 연산하고, 마지막으로 g+h를 연산하게 할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;파이프라이닝 최적화를 통한다면 이게 훨씬 빨라질 수는 있지만, 그래도 한 코어가 한번에 하나의 명령씩만 처리하는 것은 변함이 없다.&lt;&#x2F;p&gt;
+&lt;p&gt;그런데, 인텔에서 만든 SSE(Streaming SIMD Extensions)라는 명령어 확장 집합이 있다.&lt;br &#x2F;&gt;
+여기서는 명령어의 최대 크기가 16바이트다.&lt;&#x2F;p&gt;
+&lt;p&gt;이걸 사용하면 놀랍게도 16바이트 내에 여러개의 데이터를 쑤셔넣고 한번에 연산을 돌릴 수가 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;4바이트 정수 4개나, 8바이트 실수 2개를 16바이트 공간에 집어넣고, SIMD용 인스트럭션을 사용하면 되는 것이다!&lt;br &#x2F;&gt;
+그럼 저 목록을 한번에 더하거나, 곱할 수 있다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;h2 id=&quot;geuraeseo-eoddeohge-sayonghana&quot;&gt;그래서 어떻게 사용하나?&lt;&#x2F;h2&gt;
+&lt;p&gt;언어에 따라 좀 다르다.&lt;br &#x2F;&gt;
+대체로는 라이브러리를 사용하는게 마음이 편할 것이다.&lt;&#x2F;p&gt;
+&lt;p&gt;Rust에서는 아직 unstable한 기능이지만, simd 연산기능을 표준 라이브러리에서 제공한다.&lt;br &#x2F;&gt;
+그래서 다음과 같이 사용할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;&lt;img src=&quot;&#x2F;images&#x2F;img_bd35d3129f2ecca4.jpg&quot; alt=&quot;&quot; &#x2F;&gt;
+꽤나 깔끔하다. 신경쓸 것도 적고.&lt;&#x2F;p&gt;
+&lt;p&gt;c&#x2F;c++ 환경에서는 컴파일러마다 다르다.&lt;br &#x2F;&gt;
+MSVC의 경우 컴파일러 내장함수(intrinsic)을 통해서 구현이 가능하다.&lt;br &#x2F;&gt;
+GCC의 경우엔 컴파일 옵션을 추가로 줘서 처리할 수 있다.&lt;&#x2F;p&gt;
+&lt;p&gt;그리고 둘다 최적화를 위해 메모리 정렬(alignment)이라는 것이 필요하다. 배열의 요소들이 순서대로 배치되게 하는 것이다.&lt;br &#x2F;&gt;
+이것도 컴파일러 키워드를 통해 처리하면 된다.&lt;&#x2F;p&gt;
+&lt;br&gt;
+&lt;br&gt;
+&lt;p&gt;참조&lt;br &#x2F;&gt;
+&lt;a rel=&quot;external&quot; href=&quot;https:&#x2F;&#x2F;velog.io&#x2F;@kunshim&#x2F;SIMD-%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8D&quot;&gt;https:&#x2F;&#x2F;velog.io&#x2F;@kunshim&#x2F;SIMD-%ED%94%84%EB%A1%9C%EA%B7%B8%EB%9E%98%EB%B0%8D&lt;&#x2F;a&gt;&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

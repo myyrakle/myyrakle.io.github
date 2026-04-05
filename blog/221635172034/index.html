@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C++] Q: std::condition_variable은 왜 std::unique_lock만 쓰나요? | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221635172034/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C++] Q: std::condition_variable은 왜 std::unique_lock만 쓰나요?">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221635172034/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-09-01T00:00:00+00:00">
+    <meta property="article:tag" content="C++">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221635172034/">[C++] Q: std::condition_variable은 왜 std::unique_lock만 쓰나요?</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-09-01T00:00:00+00:00"><time datetime="2019-09-01T00:00:00+00:00">2019.09.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="455 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C++</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221635172034" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://stackoverflow.com/questions/13099660/c11-why-does-stdcondition-variable-use-stdunique-lock">https://stackoverflow.com/questions/13099660/c11-why-does-stdcondition-variable-use-stdunique-lock</a></p>
+<p>Q: std::condition_variable를 사용할 때 인자로 std::unique_lock만 쓰던데, 이걸 왜 하필 이것만 쓰는지 모르겠네요.</p>
+<p>제가 이 <a rel="external" href="http://en.cppreference.com/w/cpp/thread/unique_lock">문서</a>를 이해한 바에 따르면, std::unique_lock은 기본적으로 lock guard입니다. 두 lock 사이의 상태를 치환하는게 가능하죠.</p>
+<p>저는 이제껏 이런데다 pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)라는 함수를 사용했는데요. 아마 STL을 POSIX 규격으로 사용하는 것인듯합니다.<br />
+근데 이건 mutex를 인자로 받지, lock을 받는건 아니죠.</p>
+<p>여기에 무슨 차이가 있는걸까요?<br />
+std::condition_variable는 std::unique_lock에만 최적화되어있는건가요??<br />
+만약 그렇다면, 정확히 얼마나 더 빠를까요?</p>
+<br>
+<br>
+<p>A: 기술적인 이유는 없을까요?<br />
+전 cmeerw의 답을 추천합니다. 기술적인 이유까지 잘 제시했다고 보기 때문이죠.<br />
+한번 달려봅시다.</p>
+<p>표준 위원회가 condition_variable에 mutex를 넣기로 결정했다고 칩시다.<br />
+그럼 코드는 이러한 형태가 될겁니다.<br />
+**void foo() **<br />
+<strong>{ **<br />
+**    <strong><a rel="external" href="http://mut.lock">mut.lock</a></strong>(); **<br />
+**    <strong><strong>/</strong></strong>/mut가 이 스레드에서 lock을 겁니다.</strong><br />
+**    ****while (not_ready) **<br />
+**        <strong><a rel="external" href="http://cv.wait">cv.wait</a></strong>(mut); **<br />
+**    **<strong>//mut가 이 스레드에서 lock을 겁니다.</strong><br />
+**    <strong><a rel="external" href="http://mut.unlock">mut.unlock</a></strong>(); **<br />
+<strong>}</strong></p>
+<p>이건 condition_variable를 사용하지 않은 방법이죠.<br />
+**/****/mut가 이 스레드에서 lock을 겁니다.<strong>로 표시된</strong> **구역에서는 예외 안전성에 대한 문제가 있습니다.</p>
+<p>그것도 꽤 심각하죠.<br />
+만약 저 공간들이나 cv.wait에서 예외가 던져진다면, try/catch가 예외를 잡아서 잠금을 해제하지 않는 한 mutex의 잠금 상태가 누수(leak)됩니다. 잠금이 풀리지 않아요.<br />
+그런데도 이건 프로그래머들에게 요청이 많이 되는 코드 형태입니다.</p>
+<p>프로그래머가 예외 안전한 코드를 쓸 줄 알고, unique_lock도 쓸 줄 안다고 칩시다.<br />
+이제 코드는 다음과 같이 변합니다.</p>
+<p>**void foo() **<br />
+<strong>{ **<br />
+**    unique_lock<mutex> lk(mut); **<br />
+**    ***<em>//<strong><strong>mut가 이 스레드에서 lock을 겁니다.</strong><br />
+**    while (not_ready) **<br />
+**        <strong><a rel="external" href="http://cv.wait">cv.wait</a></strong>(</strong></em><a rel="external" href="http://lk.mutex">lk.mutex</a></strong>()); **<br />
+**    ****//**<strong><strong>mut가 이 스레드에서 lock을 겁니다.</strong></strong><br />
+<strong>}</strong></p>
+<p>아까보단 낫긴 하지만, 여전히 최고의 상황은 아닙니다.<br />
+저 condition_variable의 인터페이스는 프로그래머가 작업을 함에 있어 많은 노력을 필요로 합니다.<br />
+-&gt;condition_variable interface is making the programmer go out of his way to get things to work.<br />
+실수로 lk가 mutex를 참조하지 못한다면, 널포인터 역참조가 발생할 수 있습니다.</p>
+<p>그리고 condition_variable::wait는 해당 스레드가 mut에 대한 lock을 소유하고 있는지 확인할 방법이 없습니다.</p>
+<p>기억해두세요. 프로그래머는 mutex를 노출시키는 잘못된 unique_lock의 멤버함수를 선택할 수도 있습니다.<br />
+*lk.release()가 그런 예죠.</p>
+<p>그럼 이제 unique_lock<mutex>를 받아먹는 실제 condition_variable API로 코드를 작성해봅시다.</p>
+<p>**void foo() **<br />
+**{ **<br />
+**    unique_lock<mutex> lk(mut); **<br />
+**    ****//**<strong><strong><strong>mut가 이 스레드에서 lock을 겁니다.</strong></strong></strong><br />
+**    while (not_ready) **<br />
+**        <strong><a rel="external" href="http://cv.wait">cv.wait</a></strong>(lk); **<br />
+**    ****//**<strong><strong><strong>mut가 이 스레드에서 lock을 겁니다.</strong></strong></strong><br />
+<strong>}</strong></p>
+<p>이 코드는 아주 간단합니다.<br />
+예외에 안전하기도 하죠</p>
+<p>저기서 wait 함수는  lk.owns_lock()을 체크하고 false라면 예외를 던집니다.</p>
+<p>이게 condition_variable의 API 디자인을 유도한 기술적인 이유입니다.</p>
+<p>게다가 condition_variable은 lock_guard<mutex>도 인자로 받지 않습니다. 왜일까요? lock_guard<mutex>은 파괴될때까지 해당 mutex의 잠금을 소유하잖아요.</p>
+<p>하지만 condition_variable::wait가 호출될때, mutex의 lock을 묵시적으로 해제(release)되게 됩니다.<br />
+그래서 저 동작은 lock_guard의 사용사례(use case)와 구문(statement)가 부합되지 않습니다.<br />
+-&gt;So that action is inconsistent with the lock_guard use case / statement.</p>
+<p>lock을 함수에서 반환하거나, 컨테이너에 집어넣고서 예외 안전한 방법으로 스코프 기반 패턴이 아닌 mutex들의 잠금을 걸거나 해제하기 위해서는 unique_lock가 필요했습니다. 때문에 unique_lock은 condition_variable::wait에 가장 자연스런 방법입니다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221636907680/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[SQL] 기본 규칙<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221631811708/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] Cell과 RefCell<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

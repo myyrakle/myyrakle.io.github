@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 분산 우선순위 락 구현해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224093654995/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 분산 우선순위 락 구현해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224093654995/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-12-01T00:00:00+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224093654995/">[PostgreSQL] 분산 우선순위 락 구현해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-12-01T00:00:00+00:00"><time datetime="2025-12-01T00:00:00+00:00">2025.12.01</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="264 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224093654995" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트에서 확장되는 내용이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224093632164">https://blog.naver.com/sssang97/224093632164</a></p>
+<p>단순한 사용사례라면 그냥 모든 프로세스가 동등하게 경쟁하는 Lock으로도 충분할 수 있지만, 때때로는 Lock에 대한 점유 우선순위를 부여할 필요도 있다.<br />
+A와 B과 동시에 요청을 하면 A의 손을 먼저 들어줘야 하는 것이다.</p>
+<p>일반 Lock에 비하면 구현이 번거롭긴 하지만, 이것도 구현은 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="teibeul-seolgye">테이블 설계</h2>
+<p>우선순위 Lock을 구현하는 것은 일반 Lock을 구현하는 것에 비하면 다소 복잡한 편이다.<br />
+Lock에 우선순위의 개념을 적용하려면, 우선순위 큐가 필요하기 때문이다.</p>
+<p>이건 분산 Lock이 아니라 일반 Lock의 경우도 마찬가지다.</p>
+<p>일단 lock 테이블이 필요하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>		CREATE TABLE IF NOT EXISTS</span><span style="color: #89B4FA;font-style: italic;"> priority_locks</span><span> (</span></span>
+<span class="giallo-l"><span>			name TEXT PRIMARY KEY</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			owner TEXT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			priority INTEGER NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			expires_at TIMESTAMPTZ NOT NULL</span></span>
+<span class="giallo-l"><span>		)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그리고 경쟁의 우선순위를 관리할 큐 테이블은 다음과 같이 설계했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>		CREATE TABLE IF NOT EXISTS</span><span style="color: #89B4FA;font-style: italic;"> lock_queue</span><span> (</span></span>
+<span class="giallo-l"><span>			lock_name TEXT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			owner TEXT NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			priority INTEGER NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			requested_at TIMESTAMPTZ NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>			PRIMARY</span><span style="color: #89B4FA;font-style: italic;"> KEY</span><span> (lock_name</span><span style="color: #9399B2;">,</span><span> owner)</span></span>
+<span class="giallo-l"><span>		)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		CREATE INDEX IF NOT EXISTS idx_queue_priority </span></span>
+<span class="giallo-l"><span>		ON</span><span style="color: #89B4FA;font-style: italic;"> lock_queue</span><span>(lock_name</span><span style="color: #9399B2;">,</span><span> priority DESC</span><span style="color: #9399B2;">,</span><span> requested_at ASC)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>priority가 높을수록 우선순위가 높은 것이다.<br />
+그리고 queue에 넣기만 한 채로 프로세스가 죽을 경우를 대비해서 heartbeat_at 필드도 추가했다. 저걸 초과하면 유효하지 않은 큐 메세지라고 가정하는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="trylock-lock-guhyeon">TryLock, Lock 구현</h2>
+<p>좀 복잡한 편이다.<br />
+일단 TryLock은 lock과 queue 테이블 모두에 write를 해야 한다.</p>
+<p><img src="/images/img_388e5f762b5d16ae.png" alt="" /></p>
+<p>우선, INSERT를 기반으로 Lock 점유를 시도한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>		INSERT INTO</span><span style="color: #89B4FA;font-style: italic;"> priority_locks</span><span> (name</span><span style="color: #9399B2;">,</span><span> owner</span><span style="color: #9399B2;">,</span><span> priority</span><span style="color: #9399B2;">,</span><span> expires_at)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		VALUES</span><span> ($1</span><span style="color: #9399B2;">,</span><span> $2</span><span style="color: #9399B2;">,</span><span> $3</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>()</span><span style="color: #94E2D5;"> +</span><span style="color: #89B4FA;font-style: italic;"> make_interval</span><span>(</span><span style="color: #EBA0AC;font-style: italic;">secs</span><span style="color: #CBA6F7;"> =&gt;</span><span> $4))</span></span>
+<span class="giallo-l"><span>		ON</span><span style="color: #89B4FA;font-style: italic;"> CONFLICT</span><span> (name) DO UPDATE</span></span>
+<span class="giallo-l"><span>		SET owner</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> EXCLUDED</span><span style="color: #94E2D5;">.</span><span>owner</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span>		    priority</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> EXCLUDED</span><span style="color: #94E2D5;">.</span><span>priority</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		    expires_at</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> EXCLUDED</span><span style="color: #94E2D5;">.</span><span>expires_at</span></span>
+<span class="giallo-l"><span>		WHERE priority_locks</span><span style="color: #94E2D5;">.</span><span>expires_at</span><span style="color: #94E2D5;"> &lt;=</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>()</span></span>
+<span class="giallo-l"><span>		RETURNING expires_at</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이거 자체는 단순한 편이다.</p>
+<p>하지만 Lock 점유에 실패했을 경우에는 queue에 대기 정보를 넣어주는 과정이 추가된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>		INSERT INTO</span><span style="color: #89B4FA;font-style: italic;"> lock_queue</span><span> (lock_name</span><span style="color: #9399B2;">,</span><span> owner</span><span style="color: #9399B2;">,</span><span> priority</span><span style="color: #9399B2;">,</span><span> requested_at)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">		VALUES</span><span> ($1</span><span style="color: #9399B2;">,</span><span> $2</span><span style="color: #9399B2;">,</span><span> $3</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> NOW</span><span>())</span></span>
+<span class="giallo-l"><span>		ON</span><span style="color: #89B4FA;font-style: italic;"> CONFLICT</span><span> (lock_name</span><span style="color: #9399B2;">,</span><span> owner) DO UPDATE</span></span>
+<span class="giallo-l"><span>		SET priority</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> EXCLUDED</span><span style="color: #94E2D5;">.</span><span>priority</span><span style="color: #9399B2;">,</span><span> requested_at</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> EXCLUDED</span><span style="color: #94E2D5;">.</span><span>requested_at</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>Lock에서 블로킹 루프를 구현하는 부분도 좀 복잡해진다.</p>
+<p><img src="/images/img_6d01896ff9a13622.png" alt="" />
+현재 대기열에서 내 Lock의 우선순위가 가장 높다면 TryLock을 바로 또 시도하고, 아니라면 그냥 하릴없이 대기하는 식으로 처리를 해줘야 한다.<br />
+그래서 더 높은 우선순위 대기자가 있다면 이건 TryLock을 시도해보지도 못하고 계속 밀린다.</p>
+<p>그리고 queue가 살아있다는 것을 알리기 위해서 하트비트를 갱신하는 과정도 추가된다.</p>
+<p><img src="/images/img_545907b43d7ad85d.png" alt="" /></p>
+<p>그 외 부분은 그다지 복잡하진 않다. 일반 락 구현과 거의 동등하다.</p>
+<p><img src="/images/img_4e38b0b2664dce19.png" alt="" />
+Unlock을 할때는 lock과 queue를 동시에 지우기만 하면 된다.</p>
+<br>
+<br>
+<p>전체 코드는 github에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/oddments/tree/master/Go_Example/database/postgresql/pg_lock">https://github.com/myyrakle/oddments/tree/master/Go_Example/database/postgresql/pg_lock</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224093632164/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 분산 락 구현해보기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224089479698/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[C#] Native AOT 컴파일<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

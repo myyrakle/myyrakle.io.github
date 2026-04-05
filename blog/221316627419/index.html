@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[C++] about 꼬리호출(꼬리재귀) 최적화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221316627419/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[C++] about 꼬리호출(꼬리재귀) 최적화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221316627419/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2018-07-11T00:00:00+00:00">
+    <meta property="article:tag" content="C++">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221316627419/">[C++] about 꼬리호출(꼬리재귀) 최적화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2018-07-11T00:00:00+00:00"><time datetime="2018-07-11T00:00:00+00:00">2018.07.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1789 words"><time datetime="PT9M">9 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/c/">C++</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221316627419" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><a rel="external" href="https://www.artificialworlds.net/blog/2012/04/30/tail-call-optimisation-in-cpp/">https://www.artificialworlds.net/blog/2012/04/30/tail-call-optimisation-in-cpp/</a></p>
+<p>번역한 글입니다. 오역이 난무할수 있습니다.</p>
+<br>
+<p>Some programming languages make recursive programming more practical by providing the tail call optimisation.<br />
+-&gt; 일부 프로그래밍 언어들은 보다 효율적인 재귀 표현을 위해 꼬리호출 최적화를 지원합니다.</p>
+<p>For a tiny talk at the recent ACCU conference I looked at how we might do something similar in C++.<br />
+-&gt;저는 최근 ACCU 콘퍼런스에서 짧은 강연을 하기 위해서, C++에서는 어떻게 비슷한 걸 할수 있을지 생각해봤습니다.</p>
+<br>
+<p>Multiplying by two</p>
+<p>Here’s a toy problem we will use as our example.<br />
+-&gt;여기 간단한 문제가 하나 있습니다.</p>
+<p>Imagine for a second that you want to write a function that multiplies a number by two. OK, we can do that:<br />
+-&gt;한 숫자에다 2를 곱하는 함수를 만들려면 어떻게 해야할지 생각해봅시다.<br />
+대충 이런식으로 할수 있을겁니다.</p>
+<p>long times_two_hardware( long value )<br />
+{<br />
+    return value * 2;<br />
+}</p>
+<br>
+<p>Now imagine that you don’t have the “*” operator. We’re going have to use “+”:<br />
+-&gt; 그러면 이제 *연산자를 쓰지 않고 +를 써서 풀어봅시다.</p>
+<p>long times_two_loop( long value )<br />
+{<br />
+     long ret = 0;<br />
+    for ( long i = 0; i &lt; value; ++i )           <br />
+    { ret += 2; }<br />
+    return ret;<br />
+}</p>
+<p>(Obviously, this is just a silly example designed to be easy to follow.)<br />
+-&gt;확실히, 이건 따라하기만 쉬운 단순한 예제이긴 합니다.</p>
+<p>Now imagine that you read somewhere that state was bad, and you could always replace a loop with recursion.<br />
+-&gt;이번에는 어느 부분이 읽기에 상태가 좋지 않은지 읽어보고, 반복문을 재귀로 바꿔야 할 지에 대해서 생각해봅시다.</p>
+<p>Then you might get something like this:<br />
+-&gt;그러면 이런식으로 짜볼 수 있습니다.</p>
+<p>long times_two_naive_recursive( long value )<br />
+{<br />
+    if ( value == 0 )<br />
+    { return 0; }<br />
+    else<br />
+    {<br />
+        return 2 +<br />
+        times_two_naive_recursive( value - 1 );<br />
+    }<br />
+}</p>
+<br>
+<p>This is fine, but what happens when you run it for a large input?<br />
+-&gt;꽤 괜찮지만, 큰 입력을 받아서 수행한다면 무슨 일이 일어날까요?</p>
+<p>$ ulimit -S -s 16 $ ./times_two naive_recursive 100000 Segmentation fault</p>
+<p>Note that I set my stack size to be very small (16K) to make the point - actually, this will run successfully for very large arguments, but it will eat all your memory and take a long time to finish.</p>
+<p>Why does this fail?<br />
+-&gt;왜 실패한 걸까요?</p>
+<p>Because every time you call a function, the state of the current function is saved, and new information is pushed onto the stack about the new function.<br />
+-&gt;함수를 호출할때마다 현재 함수의 상태가 저장되고, 새로운 정보가 새 함수에 대한 스택 위로 저장되기 때문입니다.</p>
+<p>When you call a function from within a function multiple times, the stack grows and grows, remembering the state all the way down to the place where you started.<br />
+-&gt;함수내에서 함수를 여러번 호출하다 보면, 스택은 점점 자라게 됩니다. 그리고 함수가 시작한 장소의 상태까지 전부 기억하게됩니다.</p>
+<p>So is programming like this useless in practice?<br />
+-&gt;그렇다면 이런 프로그래밍 방법은 쓸모없는걸까요?</p>
+<br>
+<p>Tail call optimisation</p>
+<p>No, because in several programming languages, the compiler or interpreter performs the "tail call optimisation".<br />
+-&gt;아니죠. 많은 프로그래밍 언어의, 컴파일러나 인터프리터들은 '꼬리호출 최적화'라는걸 지원합니다.'</p>
+<p>When you call a function from within some other code, you normally need the state of the current code to be preserved.<br />
+-&gt;다른 코드에서 함수를 호출할 때면, 보통 현재 코드의 상태가 유지되어야 합니다.</p>
+<p>There is a special case where you don't need it, though, and this is called a tail call.<br />
+-&gt;하지만 이게 필요없는 특수한 경우가 있으니,<br />
+이게 바로 꼬리호출을 수행하는겁니다.</p>
+<p>A tail call is just the situation where you call a function and immediately return its return value as your return value.<br />
+-&gt;꼬리호출은 함수를 호출하고서 바로 그 리턴값을 즉시 리턴하는 것 뿐입니다.</p>
+<p>In this case, we don't need any of the state of the current code any more - we are just about to throw it away and return.<br />
+-&gt;이 경우에는, 현재 코드의 상태가 더이상 필요하지 않습니다. 단지 그 값을 던지고 리턴할 뿐이죠.</p>
+<p>The tail call optimisation throws away this unneeded state before calling the new function, instead of after.<br />
+-&gt;꼬리호출최적화는 새 함수를 호출하기 전에, 필요하지 않은 (현재)상태를 던져버립니다.</p>
+<p>[In practice, in compiled code, this involves popping all the local variables off the stack, pushing the new function parameters on, and jmping to the new function, instead of calling it.<br />
+-&gt;실제로, 컴파일된 코드에서는 스택의 지역변수를 전부 해제시키고, 새로운 함수에 파라미터를 전달하고나서, 새 함수로 호출하는 대신 점핑하는 등의 행동을 포함합니다.<br />
+This means that when we hit the ret at the end of the new function, we return to the original caller, instead of the location of the tail call.]<br />
+-&gt;이건 새 함수의 끝에서 ret을 마주했을 때, 꼬리호출의 위치 대신에 원래 호출자에게로 돌아간다는 사실을 의미합니다.</p>
+<p>Many recursive functions can be re-cast as tail-call versions (sometimes called iterative versions).<br />
+-&gt;많은 재귀함수들은 다시 꼬리호출버전으로 재구성될 수 있습니다. (때때로는 반복버전을 호출합니다.)</p>
+<p>The one we're looking at is one of those.<br />
+-&gt;이제 우리가 볼 것은 이들 중 하나입니다.</p>
+<p> Here is the tail-call version:<br />
+-&gt;이게 꼬리호출버전입니다.</p>
+<p>long times_two_recursive_impl( long total, long counter )<br />
+{<br />
+    if ( counter == 0 )<br />
+    { return total; }<br />
+    else<br />
+    {<br />
+        return times_two_recursive_impl( total + 2, counter - 1 );<br />
+    }<br />
+}<br />
+long times_two_recursive( long value )<br />
+{<br />
+    return times_two_recursive_impl(0, value );<br />
+}</p>
+<br>
+<p>It consists of an outer function times_two_recursive which just hands off control to the inner function times_two_recursive_impl.<br />
+-&gt;이 코드에서는 외부 함수인 function times_two_recursive가 내부함수인 function times_two_recursive_impl에게 제어권을 건네줍니다.</p>
+<p>The inner function uses a counter variable and calls itself recursively, reducing that counter by one each time, until it reaches zero, when it returns the total, which is increased by 2 each time.<br />
+-&gt;내부 함수는 카운터 변수를 사용해서 재귀적으로 호출을 합니다. 그래서 카운터가 0에 도달할 때까지 카운터를 1씩 감소시킵니다.<br />
+그리고 total이 반환될 때마다 2씩 증가시키죠.</p>
+<p>The key feature of this implementation is that the recursive function times_two_recursive_impl uses a tail call to do the recursion:<br />
+-&gt;이 구현의 가장 중요한 특징은 재귀함수 function times_two_recursive_impl이 꼬리호출로 재귀를 수행한다는 점에 있습니다.</p>
+<p>the value of calling itself is immediately returned, without reference to anything else in the function, even temporary variables.<br />
+-&gt;호출된 함수의 값은 즉시 반환됩니다. 함수에서 선언된 지역변수가 있든지 없든지 상관없이요.</p>
+<p>So, let's see what happens when we compile and run this:<br />
+-&gt;자. 그럼 이제 컴파일해서 실행결과를 봐봅시다.</p>
+<p>$ ulimit -S -s 16 $ ./times_two recursive 100000 Segmentation fault</p>
+<p>Did I mention that C++ doesn't do the tail call optimisation?*<br />
+-&gt;제가 C++이 꼬리호출최적화를 지원하지 않는다고 말했던가요?</p>
+<br>
+<p>Tail call optimisation isn't in the C++ standard.<br />
+-&gt;꼬리호출최적화는 C++의 표준 기능이 아닙니다.</p>
+<p>Apparently, some compilers, including MS Visual Studio and GCC, do provide tail call optimisation under certain circumstances (when optimisations are enabled, obviously).<br />
+-&gt;MS의 VS나 GCC같은 일부 컴파일러에서는 특정 조건 하에서 꼬리호출 최적화를 행하도록 지원해주긴 합니다.</p>
+<p> It is difficult to implement for all cases, especially in C++ since destruction of objects can cause code to be executed where you might not have expected it, and it doesn't appear to be easy to tell when a compiler will or will not do it without examining the generated assembly language.<br />
+-&gt;하지만 모든 케이스에 대해 꼬리호출의 구현을 수행하는 것은 꽤나 어렵죠. 그래서 특히 C++에서 객체가 나서는 예상치 못한 곳에서 코드가 실행되는 상황을 유발할 수 있습니다.<br />
+게다가 생성된 어셈블리에 대한 검토 없이 컴파일러가 최적화를 수행할지 않을지 단정하는 것은 쉽지 않을 것입니다.</p>
+<p>Languages which have this feature by design, like Scheme (and D?) can do it more predictably.<br />
+-&gt;스킴처럼 이러한 특징을 갖고 있는 언어들은 이 경우보단 예측하기가 쉽습니다.</p>
+<p>So how would we write code that is tail call optimised in C++?<br />
+-&gt;그래서 C++에서 꼬리호출최적화가 적용되는 코드를 짜려면 어떻게 해야할까요?</p>
+<p>Possibly of more interest to me personally:<br />
+-&gt;?</p>
+<p>if we were generating C++ as the output format for some other language, what code might we generate for tail call optimised functions?<br />
+-&gt;만약 C++에서 다른 언어들처럼 출력포맷을 발생시키고자 한다면, 어떤 코드가 꼬리호출로 최적화된 함수를 만들어낼 수 있을까요?</p>
+<br>
+<p>Tail call optimised C++</p>
+<p>Let's imagine for a second we have some classes, which I'll define later. <br />
+-&gt;나중에 정의할 클래스 몇 개가 있다고 가정해봅시다.</p>
+<p>FnPlusArgsholds a function pointer, and some arguments to be passed to it. <br />
+-&gt;FnPlusArgsholds가 함수포인터와 몇개의 인자들을 전달받습니다.</p>
+<p>Answer holds on to one of 2 things:<br />
+-&gt;Answer은 둘중 하나를 hold합니다.</p>
+<p>either a FnPlusArgs to call later, or an actual answer (return value) for our function.<br />
+-&gt;FnPlusArgs는 나중에 이 함수에서 호출할 수도 있고 실제로 답변하는 것(값의 반환)도 가능합니다.</p>
+<p>Now we can write our function like this:<br />
+-&gt;이제 함수를 이렇게 짜볼 수 있습니다.</p>
+<p>Answer times_two_tail_call_impl( long acc, long i )<br />
+{<br />
+    if ( i == 0 )<br />
+    {<br />
+        return Answer( true, null_fn_plus_args, acc );<br />
+    }<br />
+    else<br />
+    {<br />
+        return Answer(false, FnPlusArgs( times_two_tail_call_impl, acc + 2, i - 1 ), 0 );<br />
+    }<br />
+}<br />
+long times_two_tail_call( long n )<br />
+{<br />
+    return trampoline(Answer( false, FnPlusArgs(times_two_tail_call_impl, 0, n), 0 ) );<br />
+}</p>
+<br>
+<p>This has the same structure as times_two_recursive, if a little more verbose.<br />
+-&gt;이건 times_two_recursive와 비슷한 구조를 가집니다. 좀 더 장황하긴 하지만요.</p>
+<p>The important point to note, though, is that times_two_tail_call_impl doesn't call itself recursively.<br />
+-&gt;하지만 진짜 중요한 점은, times_two_tail_call_impl가 재귀적으로 호출을 하지 않는다는 것입니다.</p>
+<p>Instead, it returns an Answer object, which is a delegate saying that we have more work to do:<br />
+-&gt;대신, 이건 Answer 객체를 반환합니다. 우리가 작업할게 더 많다는 걸 뜻하죠.</p>
+<p>calling the provided function with the supplied arguments.<br />
+-&gt;지정된 인자들로 제공된 함수를 호출해야 합니다.</p>
+<br>
+<p>The Trampoline</p>
+<p>All we need now is some infrastructure to call this function, and deal with its return value, calling functions repeatedly until we have an answer.<br />
+-&gt;이제 이 함수를 호출하고 반환값을 처리해서 답이 나올 때까지 함수를 반복해서 호출하는 인프라만 있으면 됩니다.</p>
+<p>This function is called a "trampoline", and you can sort of see why:<br />
+-&gt;이 함수는 "trampoline"라고 부르는데, 그 까닭을 어느정도 이해할 수 있을겁니다.</p>
+<p>long trampoline( Answer answer )<br />
+{<br />
+    while ( !answer.finished_ )<br />
+    {<br />
+        answer = answer.tail_call_();<br />
+    }<br />
+    return answer.value_;<br />
+}</p>
+<p>While the answer we get back tells us we have more work to do, we call functions, and when we're finished we return the answer.<br />
+-&gt;answer는 우리가 뭘 더 해야할지 말해줍니다. 함수를 호출하고, 끝날때까지 answer를 반환하죠.<br />
+우리가 돌려 받는 answer는 우리가 무엇을 더 해야할지 말해줍니다. 함수를 호출하고, 끝났으면 그 answer를 반환하죠.</p>
+<p>Now all we need to get this working is the definition of Answer and FnPlusArgs:<br />
+-&gt;그리고 이 작업들에는 모두 Answer와 FnPlusArgs의 구현이 필요합니다.</p>
+<br>
+<p>struct Answer;<br />
+typedef Answer (*impl_fn_type)( long, long );</p>
+<p>struct FnPlusArgs<br />
+{<br />
+    impl_fn_type fn_;<br />
+    long arg1_;<br />
+    long arg2_;<br />
+    FnPlusArgs( impl_fn_type fn, long arg1, long arg2 );<br />
+    Answer operator()();<br />
+};</p>
+<p>FnPlusArgs::FnPlusArgs( impl_fn_type fn, long arg1, long arg2 )<br />
+: fn_( fn ) , arg1_( arg1 ) , arg2_( arg2 )<br />
+{ }</p>
+<p>Answer FnPlusArgs::operator()()<br />
+{<br />
+ㅤreturn fn_( arg1_, arg2_ );<br />
+}</p>
+<br>
+<p>impl_fn_type null_fn = NULL;<br />
+FnPlusArgs null_fn_plus_args( null_fn, 0, 0 );</p>
+<p>struct Answer<br />
+{<br />
+    bool finished_;<br />
+    FnPlusArgs tail_call_;<br />
+    long value_;<br />
+    Answer( bool finished, FnPlusArgs tail_call, long value );<br />
+};</p>
+<p>Answer::Answer( bool finished, FnPlusArgs tail_call, long value )<br />
+: finished_( finished ) , tail_call_( tail_call ) , value_( value )<br />
+{ }</p>
+<br>
+<p>The only notable thing about this is that we use operator() on FnPlusArgs to call the function it holds.<br />
+-&gt;이에 관해 주목할 만한 유일한 것은 FnPlusArgs로 operator()를 사용해서 그것이 갖고 있는 기능을 호출한다는 것입니다.</p>
+<br>
+<p>Results</p>
+<p>Now, when we run this code, we get what we wanted:<br />
+-&gt;이제 이 코드가 우리가 원하는 결과물을 뱉을지 봐봅시다.</p>
+<p>$ ulimit -S -s 16 $ ./times_two tail_call 100000 200000</p>
+<p>(I.e. it doesn't crash.)<br />
+-&gt;이제 충돌이 발생하지 않네요.</p>
+<p>So, it turns out that the tail call optimisation is just a while loop.<br />
+-&gt;꼬리재귀 최적화로 while 반복문으로 변했습니다.</p>
+<p>Sort of.<br />
+-&gt;of를 정렬해.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221317373106/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C&#x2F;C++] PI값 간단하게 산출해내기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221315944400/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust&#x2F;Winit] 레퍼런스 문서, crate winit 메인<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

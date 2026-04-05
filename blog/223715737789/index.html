@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] DynamoDB: S3 내보내기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223715737789/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] DynamoDB: S3 내보내기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223715737789/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-01-06T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223715737789/">[AWS] DynamoDB: S3 내보내기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-01-06T00:00:00+00:00"><time datetime="2025-01-06T00:00:00+00:00">2025.01.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="245 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223715737789" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>DynamoDB는 단순한 형태의 Key-Value 사용사례에 적합한 시스템이라서, 넓은 범위의 스캔이나 풀스캔 동작은 매우 느리고, 비용효율성도 썩 좋지는 못하다.</p>
+<p>그럼에도 불구하고 DynamoDB의 데이터를 기반으로 데이터 파이프라인을 돌리거나 해야한다면, S3로 내보내서 처리하는 것이 성능적으로나 비용적으로나 좋은 선택이 될 수 있다.<br />
+DynamoDB는 자체적으로 이러한 기능을 제공한다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>추가 비용이 발생한다.<br />
+DynamoDB의 읽기 요금 단위를 소모하지는 않는 대신에, 내보낸 데이터 크기의 총량으로 비용을 부과한다.<br />
+<a rel="external" href="https://aws.amazon.com/ko/dynamodb/pricing/on-demand/">https://aws.amazon.com/ko/dynamodb/pricing/on-demand/</a></p>
+<p><img src="/images/img_6b076b99f4dae151.png" alt="" />
+1테라어치 옮긴다고 하면 100gb가 부과되는 것이다. 그렇게 막 싸지는 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="s3ro-naebonaegi">S3로 내보내기</h2>
+<p>먼저 내보낼 대상 버킷이 존재해야 한다.<br />
+난 추가로 하나 만들었다.</p>
+<p><img src="/images/img_a586b4f7821f9a50.png" alt="" /></p>
+<p>그리고 데이터베이스에는 테스트용 데이터 8개 정도만 대충 넣어놨다.</p>
+<p><img src="/images/img_c965b78a4e98d9aa.png" alt="" /></p>
+<p><img src="/images/img_733267beffcbfaa1.png" alt="" />
+저기서 "S3로 내보내기" 버튼을 누른다.</p>
+<br>
+<p><img src="/images/img_e5932139c58fe762.png" alt="" />
+이걸 하려면 먼저 PITR이란 옵션이 켜져있어야 하고</p>
+<br>
+<p><img src="/images/img_795ab9ea689cb474.png" alt="" />
+옵션만 적당히 선택하고 그대로 내보내기를 시도하면 된다.<br />
+난 전체로 했다.</p>
+<br>
+<p><img src="/images/img_37f0369353898dd7.png" alt="" />
+그러면 비동기 작업이 시작된다.</p>
+<br>
+<p><img src="/images/img_1a5ba43ca94f5ce5.png" alt="" />
+이건 데이터 규모와 관계없이 상당히 오래 걸린다.<br />
+내 경우에도 데이터가 8개뿐임에도 16분이 걸렸다. 자기들 비용 최적화한다고 일정 주기 시간으로 처리하게 해둔거같다.</p>
+<p>저렇게 다 돌고 나면</p>
+<p><img src="/images/img_0093119cb91858d1.png" alt="" />
+이렇게 버킷에 최종 결과물이 생성된다.</p>
+<br>
+<p><img src="/images/img_bc10e9f4808aa0af.png" alt="" />
+데이터는 총 4개가 생성되었다. 보통 2개 정도를 하나로 묶어서 저장하는 것 같다.</p>
+<p>받아서 풀어보면</p>
+<p><img src="/images/img_a5b69dc3f6077bba.png" alt="" /></p>
+<p><img src="/images/img_4a03192e4f3d100c.png" alt="" />
+이런 식으로 데이터가 들어가있다.</p>
+<p>이걸 이제 적당히 가져다 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/S3DataExport_Requesting.html">https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/S3DataExport_Requesting.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223717759431/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] 디스크 모델 정보 조회하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223715792786/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Glue<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

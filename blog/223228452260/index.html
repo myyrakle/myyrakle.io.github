@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[MongoDB] Change Stream: Watch | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223228452260/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[MongoDB] Change Stream: Watch">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223228452260/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-10-05T00:00:00+00:00">
+    <meta property="article:tag" content="MongoDB">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223228452260/">[MongoDB] Change Stream: Watch</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-10-05T00:00:00+00:00"><time datetime="2023-10-05T00:00:00+00:00">2023.10.05</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="176 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/mongodb/">MongoDB</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223228452260" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>watch는 MongoDB에서 CDC를 구현할 때 사용할 수 있는 기능 중 하나다.</p>
+<p>특정 컬렉션, 또는 데이터베이스 단위에 Stream을 열어서 변경사항이 발생할때마다 그 변경사항을 전달받고 대응할 수 있게 하는 것이다.</p>
+<p><img src="/images/img_c56873d0f453a609.png" alt="" />
+단일 노드에는 사용이 불가능하고, replicaset이나 클러스터 모드에서만 사용 가능한 기능이다.</p>
+<p>예제코드는 Node.js다. 다른 언어라도 사용 원리에 있어서 크게 다른 점은 없을 것이다.</p>
+<p>먼저 당연히 클라이언트 객체를 생성해야 한다.</p>
+<p><img src="/images/img_809ca4b687cb6da3.png" alt="" /></p>
+<p>그러고 watch를 걸고싶은 컬렉션 객체까지 가져온 다음에, watch 함수를 호출해서 stream을 열면 그만이다.</p>
+<p><img src="/images/img_433a222b8180982c.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> changeStream</span><span style="color: #94E2D5;"> =</span><span> db</span><span style="color: #94E2D5;">.</span><span>weather</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">watch</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>changeStream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">on</span><span>(</span><span style="color: #A6E3A1;">&#39;change&#39;</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> next</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(next)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이렇게 콜백 형태로 해서 변경사항을 받아서 처리하면 된다.<br />
+매번 데이터가 변경될때마다 저 change 콜백으로 데이터가 날라올 것이다.</p>
+<p>그리고 실행해둔 상태에서</p>
+<p><img src="/images/img_531b5737f89f4f16.png" alt="" /></p>
+<p>데이터를 삽입해보면</p>
+<p><img src="/images/img_16fc3d2a02a5ece0.png" alt="" /></p>
+<p>바로바로 날라올 것이다.</p>
+<p><img src="/images/img_0b36dc2aa38a519e.png" alt="" /></p>
+<p>DB 전체에 대해서 트리거를 거는 것도 방법은 같다.<br />
+그냥 db에서 watch 메서드를 부르면 되는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span style="color: #9399B2;"> {</span><span> MongoClient</span><span style="color: #9399B2;"> }</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;mongodb&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> url</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;mongodb+srv://sssang...ngodb.net&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> client</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> MongoClient</span><span>(url)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">async function</span><span style="color: #89B4FA;font-style: italic;"> main</span><span style="color: #9399B2;">() {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  await</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">connect</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>  console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">&quot;Connected successfully to server&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> db</span><span style="color: #94E2D5;"> =</span><span> client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">db</span><span>(</span><span style="color: #A6E3A1;">&quot;test&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> collection</span><span style="color: #94E2D5;"> =</span><span> db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">collection</span><span>(</span><span style="color: #A6E3A1;">&quot;weather&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> changeStream</span><span style="color: #94E2D5;"> =</span><span> collection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">watch</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  changeStream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">on</span><span>(</span><span style="color: #A6E3A1;">&quot;change&quot;</span><span style="color: #9399B2;">, (</span><span style="color: #EBA0AC;font-style: italic;">next</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(next)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">  // wait</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  await</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #F9E2AF;font-style: italic;"> Promise</span><span>(</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">resolve</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #89B4FA;font-style: italic;"> setTimeout</span><span>(resolve</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 60000</span><span>))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">main</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  .</span><span style="color: #89B4FA;font-style: italic;">then</span><span>(</span><span style="color: #9399B2;">()</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">&quot;Done&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    process</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">exit</span><span>(</span><span style="color: #FAB387;">0</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  .</span><span style="color: #89B4FA;font-style: italic;">catch</span><span>(</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">err</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(err)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    process</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">exit</span><span>(</span><span style="color: #FAB387;">1</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_9fb4568dcfd23856.png" alt="" /></p>
+<p>그리고 아무 컬렉션에나 데이터를 쑤셔보면</p>
+<p><img src="/images/img_3d1b5ca6956af636.png" alt="" /></p>
+<p><img src="/images/img_1ff4a680fd5b8f83.png" alt="" />
+마찬가지로 데이터가 날라올 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/changeStreams/#std-label-changeStreams">https://www.mongodb.com/docs/manual/changeStreams/#std-label-changeStreams</a><br />
+<a rel="external" href="https://www.mongodb.com/docs/manual/reference/method/db.collection.watch/">https://www.mongodb.com/docs/manual/reference/method/db.collection.watch/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223230049388/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.73.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223229075293/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[MongoDB] VPC PrivateEndpoint: Atlas &lt;-&gt; AWS<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>Restful: 멱등성 키(Idempotency-Key) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223018850973/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="Restful: 멱등성 키(Idempotency-Key)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223018850973/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-02-17T00:00:00+00:00">
+    <meta property="article:tag" content="보안">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223018850973/">Restful: 멱등성 키(Idempotency-Key)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-02-17T00:00:00+00:00"><time datetime="2023-02-17T00:00:00+00:00">2023.02.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="439 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/boan/">보안</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223018850973" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>멱등성(Idempotency)은 기본적으로 수학에서 사용되는 개념인데, 웹 시스템에서도 쓴다. 같은 연산을 여러번 하더라도 상태가 달라지지 않는다는 것을 뜻한다.</p>
+<p>이를테면 Restful API에서 GET 메서드의 API는 여러번을 실행하더라도 그 응답값이나 상태값이 달라지지 않으니 당연히 멱등하다고 할 수 있다.</p>
+<p>그리고 그건 일부 가변적 Method들의 경우도 마찬가지다.<br />
+PUT 메서드의 API도 그렇다. 이름을 "John"으로 수정하는 PUT API를 호출한다면, 한번 호출하나 두번 호출하나 같은 동작을 보장해야 한다. 그러므로 멱등하다고 할 수 있다.</p>
+<p>이건 웹 표준에도 어느정도 정의가 되어있는 부분이다.</p>
+<p><img src="/images/img_33bd2a0eb7130379.png" alt="" />
+참조 <a rel="external" href="https://www.rfc-editor.org/rfc/rfc7231#section-8.1.3">https://www.rfc-editor.org/rfc/rfc7231#section-8.1.3</a>,<br />
+출처 https://docs.tosspayments.com/guides/using-api/idempotency-key<br />
+DELETE도 마찬가지로 한번 삭제하나 두번 삭제하나 같아야 하니 멱등해야 한다.<br />
+반대로 POST는 신규 리소스를 생성하는 것이니 한번 호출했을 때는 하나가 생길 것이고, 두번 호출하면 하나가 더 생겨서 2개가 생길 것이다. 따라서 멱등하지 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="munjega-doeneun-gyeongu">문제가 되는 경우</h2>
+<p>사실 같은 API를 두번 이상 쏘는 경우는 그렇게 자주 발생하지는 않는다. 클라이언트 코드를 이상하게 만든게 아니라면 말이다.</p>
+<p>하지만 어쩔수 없는 장애상황이란 것도 있기 마련이다. 네트워크가 불안정할 경우에는 API를 쏴서 API가 성공했는데 성공 응답을 받지 못할 수가 있다. 그러면 클라이언트는 그걸 모르고 다시 API를 쏠 수가 있다.</p>
+<p>일반적인 API들이라면 큰 문제가 발생하지는 않겠지만, 뭔가 돈이 오가는 중요한 기능이라면 문제가 심각해질 수도 있다. 돈이 2번 송금된다거나... 하는 끔찍한 사태 말이다.</p>
+<br>
+<br>
+<br>
+<h2 id="haegyeolcaeg-myeogdeungseong-ki">해결책: 멱등성 키</h2>
+<p>이런 위의 문제상황을 해결하기 위해 나온 개념이 바로 멱등성 키다.<br />
+이것도 웹 표준에서 제안된 부분이다.</p>
+<ol>
+<li>클라이언트는 API를 호출할때 "Idempotency-Key"라는 이름의 헤더값에 uuid 같은걸로 랜덤 키값을 생성해서 보낸다.</li>
+<li>무언가 장애상황으로 인해서 API가 실패했을 경우, 동일한 "Idempotency-Key" 값으로 API를 다시 쏜다.</li>
+<li>서버는 동일한 "Idempotency-Key"으로 들어온 요청에 대해서, 첫번째로 들어온 API 요청만 제대로 처리하고, 이후에 들어온건 status 409를 던지거나 이전에 들어왔던 리스폰스만 그대로 돌려준다.</li>
+</ol>
+<p>서버에서 이걸 하려면 Idempotency-Key와 응답값 쌍을 DB로 저장하기만 하면 된다. 그냥 캐싱이다.<br />
+보통은 DynamoDB 같은 저렴하고 간편한 Key-Value 데이터베이스를 사용하는 편이 간단할 것이다.</p>
+<p>상태코드는 이렇게 쓰면 된다고 한다.</p>
+<p><img src="/images/img_c79117bbec96eb75.png" alt="" />
+출처: https://docs.tosspayments.com/guides/using-api/idempotency-key</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://greenbytes.de/tech/webdav/draft-ietf-httpapi-idempotency-key-header-latest.html">https://greenbytes.de/tech/webdav/draft-ietf-httpapi-idempotency-key-header-latest.html</a><br />
+<a rel="external" href="https://docs.tosspayments.com/guides/using-api/idempotency-key">https://docs.tosspayments.com/guides/using-api/idempotency-key</a><br />
+<a rel="external" href="https://velog.io/@tosspayments/%EB%A9%B1%EB%93%B1%EC%84%B1%EC%9D%B4-%EB%AD%94%EA%B0%80%EC%9A%94">https://velog.io/@tosspayments/%EB%A9%B1%EB%93%B1%EC%84%B1%EC%9D%B4-%EB%AD%94%EA%B0%80%EC%9A%94</a><br />
+<a rel="external" href="https://www.rfc-editor.org/rfc/rfc7231#section-8.1.3">https://www.rfc-editor.org/rfc/rfc7231#section-8.1.3</a><br />
+<a rel="external" href="https://www.berkansasmaz.com/every-programmer-should-know-idempotency/">https://www.berkansasmaz.com/every-programmer-should-know-idempotency/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223018428325/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Go] 태그<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223017245405/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] SQS FIFO: 실시간 거래 시스템 설계<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

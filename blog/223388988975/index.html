@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] ECS: Private Server 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223388988975/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] ECS: Private Server 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223388988975/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-20T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223388988975/">[AWS] ECS: Private Server 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-20T00:00:00+00:00"><time datetime="2024-03-20T00:00:00+00:00">2024.03.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="643 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223388988975" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>MSA 전용 내부서버를 구성하다보면 서버와 서버 엔드포인트를 private, 그러니까 내부 접속 전용으로 만들어야 할 때가 있다. AWS에서는 VPC 내부에서만 접근 가능한 식으로 제약을 걸고 싶을 것이다.</p>
+<p>그럴 때는 여러가지 불편한 처리가 추가된다. 설정할 것도 많고 비용이 발생할 요소도 훨씬 늘어난다.<br />
+private 기반으로 리소스를 구성하면 비용 뻥튀기는 피할 수 없는 숙명인 것 같다.</p>
+<br>
+<br>
+<br>
+<h2 id="ecr-gwanryeon-neteuweoking-guseong">ECR 관련 네트워킹 구성</h2>
+<p>의외의 복병이 ECR 관련 설정이다.<br />
+ECS Service가 로드되려면 어디에선가 Docker 이미지를 가져와서 띄워야 하는데, 여기에서도 자잘하게 신경써야할 부분이 존재한다.</p>
+<p><img src="/images/img_583affcb3f725ba0.png" alt="" />
+이런식으로 pull이 실패할 수 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ecreul-sayonghaji-anheulddae">ECR을 사용하지 않을때</h2>
+<p>Docker hub나 Github docker 저장소 같은 다른 곳에서 이미지를 가져올때는 명백하게 외부 인터넷을 사용하게 된다.</p>
+<p><img src="/images/img_42bb9cd771144261.png" alt="" />
+이렇게 도커허브 이미지를 가져다쓴다 치면</p>
+<br>
+<p><img src="/images/img_bde805992c61bbac.png" alt="" />
+NAT 게이트웨이 설정만 잘 되어있어도 문제없이 이미지를 가져울 수 있다.<br />
+물론 NAT 통신비용은 추가로 발생한다.</p>
+<br>
+<p><img src="/images/img_cf5fbe8e06ab602a.png" alt="" />
+잘 동작했다.</p>
+<br>
+<p><img src="/images/img_f321cbba5c09e2fc.png" alt="" />
+요청도 잘 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="ecreul-sayonghalddae">ECR을 사용할때</h2>
+<p>언뜻 보면 ECR을 사용하지 않을때보다 간편하고 설정이 쉬울 것 같지만, 그렇지만은 않다.</p>
+<p>일단 테스트를 위해 nginx 이미지를 ecr private repo에 올렸다.</p>
+<p><img src="/images/img_b1d341b950e63f86.png" alt="" /></p>
+<br>
+<p><img src="/images/img_6f234f81004814c9.png" alt="" />
+그걸로 작업정의를 교체했다.</p>
+<p>그리고 그냥 실행해보면</p>
+<p><img src="/images/img_da6a34808076da57.png" alt="" />
+이런 에러가 뜰 수 있다.<br />
+같은 aws 서비스임에도 ecr 서버로 접속할 수 있는 통로가 뚫려있지 않다고 오류가 나는 것이다...</p>
+<p>여기서 가장 간단하게 해결할 수 있는 방법은 NAT 게이트웨이를 사용하는 것이다. 하지만 NAT 게이트웨이는 통신비용이 꽤 비싼 편이라, 배포가 좀 자주 일어난다면 비용 축적이 심해질 수도 있다.</p>
+<p>권장되는 방법은 그냥 VPC 엔드포인트를 뚫어서 같은 VPC 내에서 통신이 가능하도록 명시적으로 네트워크 구성을 해주는 것이다. 이게 열려있으면 NAT보다 이걸 우선으로 통신한다. 내부통신이기 때문이다.</p>
+<p><img src="/images/img_0ac0440a6606cb43.png" alt="" />
+ecr 엔드포인트 2개, s3 게이트웨이 1개, logs 엔드포인트 1개가 필요하다.<br />
+이런걸 내가 왜 수동으로 하나씩 해줘야 하는건지 모르겠지만, 아무튼 AWS는 그렇다.<br />
+모든 유저들이 모든 VPC에 모든 엔드포인트를 열어둘 것이라고 생각하고 설계를 했나보다.<br />
+저거 하나마다 다 고정비가 나간다.</p>
+<br>
+<p><img src="/images/img_59c4b9c0169e3ccb.png" alt="" /></p>
+<p><img src="/images/img_f6c2bcd379a519a5.png" alt="" />
+ecr은 당연히 ecr api로 레포지토리 정보를 확인할때 쓴다.</p>
+<br>
+<p><img src="/images/img_b75f56590ed02b58.png" alt="" /></p>
+<p><img src="/images/img_76c83ae33926cd06.png" alt="" />
+근데 또 도커 인터페이스는 그것대로 따로 요금을 뜯는다. 정신이 나간건가?</p>
+<br>
+<p><img src="/images/img_c102aeba01e284ce.png" alt="" /></p>
+<p><img src="/images/img_e85a238d631c7649.png" alt="" />
+s3 게이트웨이도 필요하다.<br />
+도대체 왜인지는 모르겠지만, 내부적으로 도커 이미지를 s3에 다운받은 다음에 그걸 쓰는 구조라고 한다.</p>
+<br>
+<p><img src="/images/img_f9ffdfc948f77ab6.png" alt="" /></p>
+<p><img src="/images/img_0013e5563af1d181.png" alt="" />
+또 로그도 필요하다. 정신나갈거같다.</p>
+<p>적당히 이렇게 4개 뚫어놓고 배포를 시도하면, 그때는 잘 받아서 올라갈 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="rodeubaelreonseo-guseong">로드밸런서 구성</h2>
+<p>당연히 로드밸런서도 ECS Service와 동일한 private 서브넷으로 깔아준다.</p>
+<p><img src="/images/img_2511b60c278851a3.png" alt="" /></p>
+<p><img src="/images/img_2e890256e0b9a4cf.png" alt="" />
+적당히 옵션 주고 만들었다. 거의 기본값이다.</p>
+<p>근데 여기서 이상한 점이 좀 있다.</p>
+<p><img src="/images/img_4dcc2ad4eb849581.png" alt="" />
+원본 IP로 조회하면 잘 동작하는데</p>
+<br>
+<p><img src="/images/img_0b9e9c51f375e37a.png" alt="" />
+로드밸런서로 꽂으면</p>
+<br>
+<p><img src="/images/img_0bb878096754ee0b.png" alt="" />
+무한히 대기하면서 블락된다.<br />
+분명히 내가 지금 curl을 날리고 있는 EC2 머신은 ECS, 로드밸런서와 동일한 서브넷을 공유하고 있다. 그럼에도 뭔가 내부통신이 수월하게 이뤄지지 않고 있는 것이다.</p>
+<p>이게 왜 그런가 하면, 로드밸런서 DNS도 DNS인지라 요청을 할때 dns lookup을 한다.<br />
+Application 로드밸런서가 고유의 IP를 가지고 있지 않고 private IP 라우팅도 안되는 반쪽짜리 로드밸런서라서 이런 문제가 발생하는 것이다.<br />
+그래서 이 문제를 해결하려면 Network Loadbalancer를 Application Loadbalancer 앞에 붙여줘야 한다.<br />
+당연히 돈이 더 나간다.</p>
+<br>
+<br>
+<br>
+<h2 id="network-loadbalancer-guseong">Network LoadBalancer 구성</h2>
+<p>먼저 Application 로드밸런서를 가리키는 target group을 만들어줘야 한다. 이거 없이는 바로 못가리킨다.</p>
+<p><img src="/images/img_8d4de135fb770f5d.png" alt="" /></p>
+<p><img src="/images/img_78abcf159e3ffe75.png" alt="" />
+방금 만든 Application을 가리키게 만든다.</p>
+<p>그다음에는 로드밸런서를 만들면 된다.</p>
+<p><img src="/images/img_6582256da5628988.png" alt="" /></p>
+<p><img src="/images/img_1daa345f6b468387.png" alt="" />
+이름 짓고, 내부 통신으로 처리하도록 한다.</p>
+<br>
+<p><img src="/images/img_1959353ea5336e98.png" alt="" />
+프라이빗 서브넷으로 다 달아주고</p>
+<br>
+<p><img src="/images/img_7eedae4d42db8f42.png" alt="" />
+방금 만든 타겟그룹으로 연결만 해주면 끝이다.</p>
+<br>
+<p><img src="/images/img_fabbf4d0bd91744f.png" alt="" />
+그럼 이렇게 로드밸런서가 만들어진다.<br />
+생성에는 몇분 정도 걸린다.</p>
+<br>
+<p><img src="/images/img_ad2f2d9b63ef2256.png" alt="" />
+생성된 dns로 꼽아보면 이제는 잘 동작할 것이다.<br />
+이렇게 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://stackoverflow.com/questions/54848292/how-to-resolve-to-private-ip-of-aws-eb-load-balancer">https://stackoverflow.com/questions/54848292/how-to-resolve-to-private-ip-of-aws-eb-load-balancer</a><br />
+<a rel="external" href="https://repost.aws/questions/QU4rV4fB3hRqqRh3CaG1Pz-g/using-endpoints-to-access-ecr-for-ecs-fargate-tasks-on-a-private-subnet">https://repost.aws/questions/QU4rV4fB3hRqqRh3CaG1Pz-g/using-endpoints-to-access-ecr-for-ecs-fargate-tasks-on-a-private-subnet</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223390211153/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Zig] 구조체<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223389852344/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Elasticsearch] APM: Transaction과 Span으로 성능추적하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Milvus] 스칼라 필드 인덱스 (메타데이터 인덱스) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223862499718/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Milvus] 스칼라 필드 인덱스 (메타데이터 인덱스)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223862499718/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-05-12T00:00:00+00:00">
+    <meta property="article:tag" content="milvus">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223862499718/">[Milvus] 스칼라 필드 인덱스 (메타데이터 인덱스)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-05-12T00:00:00+00:00"><time datetime="2025-05-12T00:00:00+00:00">2025.05.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="376 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/milvus/">milvus</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223862499718" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Milvus는 벡터 필드 이외에도, 일반 스칼라 필드에 대해서도 효율적인 인덱싱을 지원한다.<br />
+용어가 좀 일관성 없이 와리가리한다. 스칼라 필드 인덱스라고 하기도 하고, 그냥 메타데이터라고 부르기도 하더라.</p>
+<p>스칼라 인덱스의 동작 매커니즘은, 여타 컬럼베이스 DB들과 크게 다르지 않다.</p>
+<p><img src="/images/img_4203b6073c2ecd1b.png" alt="" />
+각 필드에 대한 값을 읽고, bitset 단위로 조건 캐시를 관리하면서 필터링을 수행하는 것이다.<br />
+그래서 복잡한 필터 조건에 대해서도 효율적으로 동작하고, 빠르다.</p>
+<br>
+<br>
+<br>
+<h2 id="indegseu-cuga">인덱스 추가</h2>
+<p>milvus는 스키마에 정의되어있는 필드에 한해서만 인덱스 추가가 된다. 근데 스키마 필드 추가가 동적으로 되지도 않아서 관리상 불편함이 좀 있는 편이다.</p>
+<p>이런 식으로 개별 필드에 대한 인덱스를 생성할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>### </span></span>
+<span class="giallo-l"><span>POST http</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//{{HOST}}:{{PORT}}/v2/vectordb/indexes/create</span></span>
+<span class="giallo-l"><span>Content</span><span style="color: #94E2D5;">-</span><span>Type</span><span style="color: #9399B2;">:</span><span> application</span><span style="color: #94E2D5;">/</span><span>json</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;dbName&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;default&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;collectionName&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;test_collection&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;indexName&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;idx_brand_name&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;indexParams&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;indexType&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;fieldName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;brand_name&quot;</span><span style="color: #9399B2;">,</span><span> </span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">            &quot;indexName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;idx_brand_name&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span>    ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"><span>###</span></span></code></pre>
+<p>indexType를 따로 지정하지 않으면 타입을 따라서 알아서 인덱스를 구성해준다.</p>
+<br>
+<br>
+<br>
+<h2 id="begteo-geomsaeggwa-seukalra-pildeu-pilteoring">벡터 검색과 스칼라 필드 필터링</h2>
+<p>milvus는 벡터 검색에 사전 필터링을 적용하는 것을 지원한다. 그러니까, 먼저 필터 조건에 맞는 값만 거른 다음에 그 목록을 기준으로 벡터 유사도 검색을 돌려주는 것이다.</p>
+<p>milvus의 벡터 검색 필터링에는 2가지 동작 방식이 존재한다. 둘다 뭔가 심오한 방식을 쓰거나 한건 아니고, 순진한 방식으로 구현되어 있다.</p>
+<p>첫번째 동작 방식은 Standard filtering이라고 부르는데, 매우 간단하다.</p>
+<p><img src="/images/img_ee1e0e6af24d0fe3.png" alt="" /></p>
+<p>먼저 조건에 따라서 값을 전부 필터링하고, 필터링된 값들을 메모리에 로드한 다음에 거기서 벡터 유사도 연산을 돌리는 것이다.</p>
+<p>그래서 이 방식은 필터링된 기반 데이터의 크기가 크다면 성능 효율성이 떨어질 수 있다.</p>
+<p>두번째 동작 방식은  Iterative filtering라고 부른다.</p>
+<p><img src="/images/img_23a4e4ac05291d4f.png" alt="" />
+이것도 사실 그렇게 복잡한건 아니다.<br />
+그래프 순회 중에 필터링을 할 때의 단점은, 너무 빠르게 순회가 중단되어서 원하는 값을 얻기가 어렵다는 것이다.<br />
+그래서 Iterative filtering은 그냥, 원하는 데이터 개수만큼을 얻을때까지 계속 뺑뺑이를 돌리는 것이다.</p>
+<p>이게 더 훌륭한 선택인지는 잘 모르겠지만, 이런 부분에 있어서는 qdrant가 filterable index를 포함해서 기술적으로 좀 도전을 더 한거같다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://milvus.io/docs/index-scalar-fields.md">https://milvus.io/docs/index-scalar-fields.md</a><br />
+<a rel="external" href="https://milvus.io/api-reference/restful/v2.5.x/v2/Index%20%28v2%29/Create.md">https://milvus.io/api-reference/restful/v2.5.x/v2/Index%20(v2)/Create.md</a><br />
+<a rel="external" href="https://www.reddit.com/r/vectordatabase/comments/1fj94ps/what_vector_database_support_proper_filtering/">https://www.reddit.com/r/vectordatabase/comments/1fj94ps/what_vector_database_support_proper_filtering/</a><br />
+<a rel="external" href="https://milvus.io/docs/single-vector-search.md#Filtered-search">https://milvus.io/docs/single-vector-search.md#Filtered-search</a><br />
+<a rel="external" href="https://zilliz.com/blog/what-is-new-with-metadata-filtering-in-milvus">https://zilliz.com/blog/what-is-new-with-metadata-filtering-in-milvus</a><br />
+<a rel="external" href="https://milvus.io/docs/filtered-search.md">https://milvus.io/docs/filtered-search.md</a><br />
+<a rel="external" href="https://github.com/milvus-io/milvus/discussions/35221">https://github.com/milvus-io/milvus/discussions/35221</a><br />
+<a rel="external" href="https://milvus.io/docs/scalar_index.md">https://milvus.io/docs/scalar_index.md</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223862437402/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Qdrant] 필터링 기본<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223862791822/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>SSL 환경의 상태.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

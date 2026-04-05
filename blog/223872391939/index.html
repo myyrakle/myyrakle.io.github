@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[HAProxy] 무중단 배포 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223872391939/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[HAProxy] 무중단 배포">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223872391939/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-05-21T00:00:00+00:00">
+    <meta property="article:tag" content="Proxy">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223872391939/">[HAProxy] 무중단 배포</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-05-21T00:00:00+00:00"><time datetime="2025-05-21T00:00:00+00:00">2025.05.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="163 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/proxy/">Proxy</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223872391939" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>HAProxy를 사용할 경우 무중단 배포나 교체, scale-in을 달성하는 것은 어렵지 않다.<br />
+HAProxy 설정파일을 변경 후에 reload하면 그 자체로도 다운타임 없이 교체를 수행하므로, 설정파일을 잘 갈아끼우는 것만으로도 무중단 배포가 된다.</p>
+<p>한번 시도해보자.<br />
+같은 동작을 하는 간단한 서버를 2개 실행한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;time&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/fast&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(w http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> r</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		w.Header().Set(</span><span style="color: #A6E3A1;">&quot;Content-Type&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;application/json&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		w.WriteHeader(http.StatusOK)</span></span>
+<span class="giallo-l"><span>		w.Write([]byte(</span><span style="color: #A6E3A1;">`{&quot;status&quot;:&quot;ok&quot;}`</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt.Println(</span><span style="color: #A6E3A1;">&quot;fast&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	})</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	http.HandleFunc(</span><span style="color: #A6E3A1;">&quot;/slow&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">w</span><span> http.ResponseWriter</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> r</span><span> *http.Request</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 5초 대기</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">5</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Header</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Set</span><span>(</span><span style="color: #A6E3A1;">&quot;Content-Type&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;application/json&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WriteHeader</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusOK)</span></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>([]</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">`{&quot;status&quot;:&quot;ok&quot;}`</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;slow&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 서버 시작</span></span>
+<span class="giallo-l"><span>	http.ListenAndServe(</span><span style="color: #A6E3A1;">&quot;:8081&quot;</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;time&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">HandleFunc</span><span>(</span><span style="color: #A6E3A1;">&quot;/fast&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span>(w http</span><span style="color: #94E2D5;">.</span><span>ResponseWriter</span><span style="color: #9399B2;">,</span><span> r</span><span style="color: #94E2D5;"> *</span><span>http</span><span style="color: #94E2D5;">.</span><span>Request)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		w.Header().Set(</span><span style="color: #A6E3A1;">&quot;Content-Type&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;application/json&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		w.WriteHeader(http.StatusOK)</span></span>
+<span class="giallo-l"><span>		w.Write([]byte(</span><span style="color: #A6E3A1;">`{&quot;status&quot;:&quot;ok&quot;}`</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt.Println(</span><span style="color: #A6E3A1;">&quot;fast&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	})</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	http.HandleFunc(</span><span style="color: #A6E3A1;">&quot;/slow&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> func</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">w</span><span> http.ResponseWriter</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> r</span><span> *http.Request</span><span style="color: #9399B2;">) {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 5초 대기</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(</span><span style="color: #FAB387;">5</span><span style="color: #94E2D5;"> *</span><span> time</span><span style="color: #94E2D5;">.</span><span>Second)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Header</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Set</span><span>(</span><span style="color: #A6E3A1;">&quot;Content-Type&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;application/json&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">WriteHeader</span><span>(http</span><span style="color: #94E2D5;">.</span><span>StatusOK)</span></span>
+<span class="giallo-l"><span>		w</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Write</span><span>([]</span><span style="color: #89B4FA;font-style: italic;">byte</span><span>(</span><span style="color: #A6E3A1;">`{&quot;status&quot;:&quot;ok&quot;}`</span><span>))</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;slow&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 서버 시작</span></span>
+<span class="giallo-l"><span>	http.ListenAndServe(</span><span style="color: #A6E3A1;">&quot;:8082&quot;</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_588ffa67ece10d4a.png" alt="" /></p>
+<p>그리고 HAProxy에서 일단은 하나만 라우팅한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>frontend test</span><span style="color: #94E2D5;">-</span><span>front</span></span>
+<span class="giallo-l"><span>   mode http</span></span>
+<span class="giallo-l"><span>   bind</span><span style="color: #94E2D5;"> *</span><span>:</span><span style="color: #FAB387;">8000</span></span>
+<span class="giallo-l"><span>   default_backend test</span><span style="color: #94E2D5;">-</span><span>back</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>backend test</span><span style="color: #94E2D5;">-</span><span>back</span></span>
+<span class="giallo-l"><span>   server master</span><span style="color: #FAB387;"> 0.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.0</span><span>:</span><span style="color: #FAB387;">8081</span></span></code></pre>
+<p><img src="/images/img_9333d2a63b9a3417.png" alt="" /></p>
+<p>잘 연결되었고</p>
+<p><img src="/images/img_2baa956bd44aca2b.png" alt="" /></p>
+<p>그걸 찌르는 녀석을 하나 띄웠다.<br />
+중간에 뭔가 끊긴다면 이 녀석이 감지할 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;net/http&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;time&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> attack</span><span>(i int)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;Start attack&quot;</span><span>)</span></span>
+<span class="giallo-l"><span>	for</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// localhost:3000에 GET 요청을 보냄</span></span>
+<span class="giallo-l"><span>		req</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> http</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">NewRequest</span><span>(</span><span style="color: #A6E3A1;">&quot;GET&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;http://127.0.0.1:8000/slow&quot;</span><span style="color: #9399B2;">,</span><span> nil)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">			panic</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 요청 보내기</span></span>
+<span class="giallo-l"><span>		resp</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> http</span><span style="color: #94E2D5;">.</span><span>DefaultClient</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Do</span><span>(req)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">		if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">			panic</span><span>(err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">		}</span></span>
+<span class="giallo-l"><span>		resp</span><span style="color: #94E2D5;">.</span><span>Body</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>		fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;checked&quot;</span><span style="color: #9399B2;">,</span><span> i)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">		// 0.1초 대기</span></span>
+<span class="giallo-l"><span>		time</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sleep</span><span>(time</span><span style="color: #94E2D5;">.</span><span>Millisecond</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 100</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 스레드 5개 띄우고 대기하기</span></span>
+<span class="giallo-l"><span>	for i</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;"> &lt;</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">;</span><span> i</span><span style="color: #94E2D5;">++</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		go</span><span style="color: #89B4FA;font-style: italic;"> attack</span><span>(i)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 무한 대기</span></span>
+<span class="giallo-l"><span>	for</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_05c7fc924e793f62.png" alt="" /></p>
+<p><img src="/images/img_e5f5d6182e5d549c.png" alt="" />
+그러고 돌려보면, 잘 돌아갈 것이다.</p>
+<p>그러면 이제 서버를 교체해보자.</p>
+<p><img src="/images/img_0fb7c990d3e72e8a.png" alt="" /></p>
+<p><img src="/images/img_056e1e49a9b66d47.png" alt="" />
+서버 목적지만 바꿔서 reload하면</p>
+<br>
+<p><img src="/images/img_0a1747b0f9a808ff.png" alt="" />
+중단 없이 요청이 계속해서 이어지고 있는 것을 볼 수 있을 것이다.</p>
+<p>서버를 스케일아웃하고 싶다면 저 backend server 목록을 추가해서 reload하면 되고, 서버 일부를 다운하고 싶다면 빼서 reload하면 된다.<br />
+Blue-Green 배포 같은 것도 그냥 한번에 교체해서 reload하는 식으로 처리하면 된다. 나머지는 응용의 영역이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.haproxy.com/blog/rolling-updates-and-blue-green-deployments-with-kubernetes-and-haproxy">https://www.haproxy.com/blog/rolling-updates-and-blue-green-deployments-with-kubernetes-and-haproxy</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223874715774/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Node.js] CommonJS와 ESM<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223872407888/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[HAProxy] Health Check<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

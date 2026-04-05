@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] Embedded Rust: Qemu로 실행해보기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223428566380/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] Embedded Rust: Qemu로 실행해보기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223428566380/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-04-27T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223428566380/">[Rust] Embedded Rust: Qemu로 실행해보기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-04-27T00:00:00+00:00"><time datetime="2024-04-27T00:00:00+00:00">2024.04.27</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="595 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223428566380" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>본 포스트에서는 qemu 에뮬레이션을 활용해서 arm-cortex MCU 환경에서 실행 가능한 파일을 만들고 돌려보는 것을 목표로 한다.<br />
+여기서는 LM3S6965라는 Arm-cortext M3 MCU 보드를 사용한다고 가정한다.</p>
+<p><img src="/images/img_5050a2286d2d2577.jpg" alt="" />
+실제로는 이렇게 생겨먹었다.<br />
+디스크는 256k짜리 플래시메모리, 램은 64k, CPU는 50MHz짜리 32비트 싱글코어 ARM Cortex-M3 프로세서다. 그 외에는 몇가지 입출력 포트, 주변장치가 존재한다.</p>
+<p>우리에겐 QEMU가 있기 때문에 장치가 없어도 최소한의 테스트는 가능하다. 오픈소스의 힘이다.</p>
+<p>내 테스트 환경은 우분투다.</p>
+<br>
+<br>
+<br>
+<h2 id="cargo-binutil">cargo-binutil</h2>
+<p>cargo binutil은 Rust Embedded 그룹에서 제공하는 유용한 보조도구다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo install cargo</span><span style="color: #94E2D5;">-</span><span>binutils</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>rustup component add llvm</span><span style="color: #94E2D5;">-</span><span>tools</span><span style="color: #94E2D5;">-</span><span>preview</span></span></code></pre>
+<p><img src="/images/img_c95c53c5656e7d67.png" alt="" />
+바이너리 사이즈나 형태 등을 조회하거나 변경할 수 있는 기능을 제공한다.<br />
+임베디드 환경 자체가 실행파일을 컴팩트하게 줄이는게 중요하기 때문에 또 이런게 필요하다.</p>
+<br>
+<br>
+<br>
+<h2 id="tages-cuga">타겟 추가</h2>
+<p>Rust는 target이라는 단위를 통해서 컴파일 가능한 타겟 플랫폼을 다양하게 지원한다.<br />
+여기엔 ARM 계열 마이크로 프로세서들도 포함된다.</p>
+<p><img src="/images/img_1b09085f4195420c.png" alt="" />
+저 thumb들이 arm 인스트럭션 세트를 부르는 말이다.</p>
+<p>저기서 우린 thumbv7m-none-eabi라는 것을 쓸 것이다.<br />
+우리가 에뮬레이션하고자 하는 플랫폼의 아키텍쳐다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>rustup target add thumbv7m</span><span style="color: #94E2D5;">-</span><span>none</span><span style="color: #94E2D5;">-</span><span>eabi</span></span></code></pre>
+<p><img src="/images/img_4cc9dc0f7776bc90.png" alt="" /></p>
+<p><img src="/images/img_22dc95b1206fa595.png" alt="" />
+이렇게 깔리면 문제 없이 잘 된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="qemu-seolci">QEMU 설치</h2>
+<p>하드웨어 없이 테스트를 하려면 에뮬레이터가 필요하다. 이 방면에서 qemu 외의 대안은 거의 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt install gdb</span><span style="color: #94E2D5;">-</span><span>multiarch qemu</span><span style="color: #94E2D5;">-</span><span>system</span><span style="color: #94E2D5;">-</span><span>arm</span><span style="color: #94E2D5;"> -</span><span>y</span></span></code></pre>
+<p><img src="/images/img_e1eb87bd36954703.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="peurojegteu-gibonguseong">프로젝트 기본구성</h2>
+<p>러스트 임베디드 그룹에서 관리하고 있는 입문용 템플릿이 있다. 직접 세팅하려면 arm용 crate도 주렁주렁 달고 할게 많은데, 이거면 다 된다.</p>
+<p>일단 받아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>git clone https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/rust-embedded/cortex-m-quickstart</span></span></code></pre>
+<p><img src="/images/img_9b9b7d0281304b19.png" alt="" />
+그럼 이런 형태로 프로젝트가 구성되어있을 것이다. 형태가 사뭇 다른 것을 볼 수 있다.</p>
+<p>일단 기본적인 빌드 설정부터 좀 깔아준다.<br />
+중괄호로 구멍뚫린걸 적당히 메워주면 된다.</p>
+<p><img src="/images/img_d82990a6485e8a97.png" alt="" /></p>
+<p><img src="/images/img_337b31641b0cd402.png" alt="" /></p>
+<p><img src="/images/img_08c65f380f8cd39c.png" alt="" />
+이름은 testapp으로 해줬다.</p>
+<p>그리고 .cargo/config.toml을 보면 뭐가 많은데</p>
+<p><img src="/images/img_b754096587a380ca.png" alt="" /></p>
+<p><img src="/images/img_84fa581733882b7e.png" alt="" />
+빌드 타겟을 바꾸려면 이거 갈아끼우면 된다.<br />
+우리는 그냥 기본값으로 주면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-kodeu-bunseog">기본 코드 분석</h2>
+<p>기본 형태나 한번 가볍게 훑어보고 가자.</p>
+<p><img src="/images/img_9b9b7d0281304b19.png" alt="" />
+이전 포스트에서 대부분의 임베디드 환경은 std 사용 등이 불가능하다고 했었다.<br />
+그래서 no_std로만 컴파일을 해야 하고, main 함수도 명시적으로 제공되지 않는다.</p>
+<p>위 코드에서는 entry 매크로를 통해서 main 함수의 형식을 맞췄을 뿐이다. 실제로 매크로를 확장해보면 이런 식으로 펼쳐진다.</p>
+<p><img src="/images/img_858088c918b40d41.png" alt="" />
+C 호환 함수로 치환하고 export만 한 것이다. 그러면 저 환경에서는 저게 main처럼 실행된다.</p>
+<p>panic_halt는 패닉이 발생했을 경우의 패닉 핸들러를 정의한다. 저건 패닉이 발생했을때 프로그램을 중단시키는 동작을 의미한다. 저런 핸들러가 없으면 no_std 환경은 애초에 컴파일부터가 안된다.</p>
+<p><img src="/images/img_528830e1f1a3d28c.png" alt="" /></p>
+<p>저게 실제로 하는 역할은 간단하다.</p>
+<p><img src="/images/img_71e13b864caff930.png" alt="" />
+그냥 이런 패닉 핸들러를 컨텍스트에 풀어놓을 뿐이다.</p>
+<br>
+<p><img src="/images/img_e53dff30e767b62a.png" alt="" />
+main에 달려있는 저 반환타입도 생소해보일 수 있다.<br />
+저건 함수가 절대 반환하지 않을 것임을 명시하는 never 타입이다.</p>
+<p>일반 환경에서는 그렇게 잘 사용되진 않지만, 임베디드 환경에서는 기본으로 사용된다. 메인 프로세스가 죽으면 안되기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="bildeuhaebogi">빌드해보기</h2>
+<p>이제 컴파일을 한번 돌려보자. 빌드 설정은 거의 다 되어있기 때문에, build만 때려주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo build</span><span style="color: #94E2D5;"> --</span><span>release</span></span></code></pre>
+<p><img src="/images/img_a1b81e5114a61f46.png" alt="" /></p>
+<p><img src="/images/img_37d5d9a1dd0c2096.png" alt="" />
+그러면 해당 플랫폼으로 실행파일이 뽑혀있을 것이다.</p>
+<p>다시 한번 Hello World성 프로세스를 작성해보자. 이번에는 Qemu에 올려보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #F5C2E7;font-style: italic;">#![no_main]</span></span>
+<span class="giallo-l"><span>#</span><span style="color: #94E2D5;">!</span><span>[no_std]</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use panic_halt</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> _</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use cortex_m_rt</span><span style="color: #9399B2;">:</span><span>:entry</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use cortex_m_semihosting</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>debug</span><span style="color: #9399B2;">,</span><span> hprintln</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[entry]</span></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt; !</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    hprintln!(</span><span style="color: #A6E3A1;">&quot;Hello, world!&quot;</span><span>).unwrap();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // exit QEMU</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // NOTE do not run this on hardware; it can corrupt OpenOCD state</span></span>
+<span class="giallo-l"><span>    debug</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">exit</span><span>(debug::EXIT_SUCCESS);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    loop</span><span style="color: #9399B2;"> {}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>Hello World를 호스트 콘솔에 출력하고 죽도록 했다.<br />
+이 코드에서는 간결한 프로세스 중단을 위해 exit를 직접 때렸지만, 일반적으로 저렇게 짜지는 않을 것이다.</p>
+<p>그리고 컴파일해서 qemu에 올려보면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>qemu</span><span style="color: #94E2D5;">-</span><span>system</span><span style="color: #94E2D5;">-</span><span>arm</span><span style="color: #94E2D5;"> -</span><span>cpu cortex</span><span style="color: #94E2D5;">-</span><span>m3</span><span style="color: #94E2D5;"> -</span><span>machine lm3s6965evb</span><span style="color: #94E2D5;"> -</span><span>nographic</span><span style="color: #94E2D5;"> -</span><span>semihosting</span><span style="color: #94E2D5;">-</span><span>config enable</span><span style="color: #94E2D5;">=</span><span>on</span><span style="color: #9399B2;">,</span><span>target</span><span style="color: #94E2D5;">=</span><span>native</span><span style="color: #94E2D5;"> -</span><span>kernel target</span><span style="color: #94E2D5;">/</span><span>thumbv7m</span><span style="color: #94E2D5;">-</span><span>none</span><span style="color: #94E2D5;">-</span><span>eabi</span><span style="color: #94E2D5;">/</span><span>release</span><span style="color: #94E2D5;">/</span><span>testapp</span></span></code></pre>
+<p><img src="/images/img_937e4f36a6a1cbe8.png" alt="" />
+실행하고 죽을 것이다.</p>
+<p>저기서 exit를 뺀다면 죽지 않고 뱅글뱅글 돌 것이다. 그게 일반적인 프로세스다.</p>
+<br>
+<br>
+<br>
+<h2 id="binutil-sseobogi">binutil 써보기</h2>
+<p>각박한 임베디드 환경에서는 바이너리 사이즈를 줄이는 것도 꽤 중요한 문제가 된다. 디스크가 1MB도 안되는게 보통이기 때문이다.<br />
+binutil을 사용하면 그런 분석이나 재처리 등을 꽤나 간편하게 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo readobj</span><span style="color: #94E2D5;"> --</span><span>bin testapp</span><span style="color: #94E2D5;"> -- --</span><span>file</span><span style="color: #94E2D5;">-</span><span>headers</span></span></code></pre>
+<p><img src="/images/img_9b4c6dc4fcb8769f.png" alt="" />
+이건 파일 헤더 정보를 읽는다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo size</span><span style="color: #94E2D5;"> --</span><span>bin testapp</span><span style="color: #94E2D5;"> --</span><span>release</span><span style="color: #94E2D5;"> -- -</span><span>A</span></span></code></pre>
+<p><img src="/images/img_24385cc4ab834d26.png" alt="" /></p>
+<p><img src="/images/img_16282996a81529c9.png" alt="" />
+이건 바이너리의 각 영역별 크기를 알려준다.<br />
+어디가 사이즈 병목인지 추적하기 쉽다. 릴리즈 모드로 빌드했기 때문에 디버그 정보는 거의 없는게 보일 것이다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo objdump</span><span style="color: #94E2D5;"> --</span><span>bin testapp</span><span style="color: #94E2D5;"> --</span><span>release</span><span style="color: #94E2D5;"> -- --</span><span>disassemble</span><span style="color: #94E2D5;"> --</span><span>no</span><span style="color: #94E2D5;">-</span><span>show</span><span style="color: #94E2D5;">-</span><span>raw</span><span style="color: #94E2D5;">-</span><span>insn</span><span style="color: #94E2D5;"> --</span><span>print</span><span style="color: #94E2D5;">-</span><span>imm</span><span style="color: #94E2D5;">-</span><span>hex</span></span></code></pre>
+<p><img src="/images/img_b81a319f1b9377c2.png" alt="" />
+objdump는 직접 어셈블리 코드를 뽑을때 쓴다. 인스트럭션 보고 줄이면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.rust-embedded.org/book/intro/hardware.html">https://docs.rust-embedded.org/book/intro/hardware.html</a><br />
+<a rel="external" href="https://doc.rust-lang.org/nomicon/panic-handler.html">https://doc.rust-lang.org/nomicon/panic-handler.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223429629849/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>캐시 교체 알고리즘<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223428498561/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] Embedded Rust: 기초<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] OIDC(OAuth) 기반으로 배포 파이프라인 구성하기 (with Github Action) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224236385377/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] OIDC(OAuth) 기반으로 배포 파이프라인 구성하기 (with Github Action)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224236385377/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-03-31T16:14:38.899584+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224236385377/">[AWS] OIDC(OAuth) 기반으로 배포 파이프라인 구성하기 (with Github Action)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-31T16:14:38.899584+00:00"><time datetime="2026-03-31T16:14:38.899584+00:00">2026.03.31</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="295 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224236385377" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>보통 Github Action에서 AWS 배포 워크플로를 구성한다고 하면, 액세스토큰을 받아서 Action Secret에 저장하고 그걸로 로그인을 하는 경우가 많다. 가장 직관적인 방법이기 때문이다.</p>
+<p>근데 이게 이 접근법 자체가 엄청 큰 문제까지는 아닌데, 또 아주 권장되는 사용 패턴은 또 아니다.<br />
+아무튼 토큰이라는 취약점이 하나 생기고 보안 관리 포인트가 증가하는 것이기 때문이다.</p>
+<p>그래서 AWS나 Github에서 권장하는 배포 인증 구성 방법은 OIDC를 사용하는 것이다.<br />
+이걸 사용하면 인증키같은걸 따로 받을 것 없이, 특정 레포지토리에 대한 화이트리스트를 구성해서 해당 레포지토리들은 토큰 없이 자유롭게 인가를 받게 할 수 있다. 그 방법을 간단히 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="aws-id-provider-guseonghagi">AWS: ID Provider 구성하기</h2>
+<p>먼저 공급자 구성을 해서 Github과 AWS의 신뢰관계를 만들어줘야 한다.</p>
+<p><img src="/images/img_e653e71d0f3430fb.png" alt="" />
+이동해서</p>
+<br>
+<p><img src="/images/img_008f2775b8c4e152.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">-</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//token.actions.githubusercontent.com </span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">-</span><span> sts</span><span style="color: #94E2D5;">.</span><span>amazonaws</span><span style="color: #94E2D5;">.</span><span>com</span></span></code></pre>
+<p>위와 같이 추가해준다.</p>
+<br>
+<p><img src="/images/img_24baec92bf5fd385.png" alt="" />
+그러면 이건 끝이다.</p>
+<br>
+<br>
+<br>
+<h2 id="baepoyong-role-guseong">배포용 Role 구성</h2>
+<p>이제 Action에서 사용할 계정을 생성해야 하는데, 여기서는 계정이 아니라 Role로 만들어야 한다.</p>
+<p><img src="/images/img_802e54b1a7725abc.png" alt="" />
+사용자 지정 신뢰 정책으로 선택하고</p>
+<p>다음과 같이 신뢰 정책에 레포지토리 목록을 정의해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;Version&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;2012-10-17&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;Statement&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Effect&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;Allow&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Principal&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;Federated&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;arn:aws:iam::여기ID:oidc-provider/token.actions.githubusercontent.com&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Action&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;sts:AssumeRoleWithWebIdentity&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;Condition&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;StringEquals&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;token.actions.githubusercontent.com:aud&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;sts.amazonaws.com&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">        &quot;StringLike&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">          &quot;token.actions.githubusercontent.com:sub&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;repo:조직명/레포명:*&quot;</span><span>]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>  ]</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_f19b9057a7e18495.png" alt="" />
+그러면 저 레포의 Action에 대해서 AWS가 알아서 접근 권한을 부여해준다.<br />
+브랜치 단위까지도 넣을 수 있는데, 난 그렇게는 안했다.</p>
+<p>그리고 policy에는 배포에 필요한 AWS 권한을 적절히 넣어주면 된다.</p>
+<p><img src="/images/img_6712054ea1964562.png" alt="" /></p>
+<p><img src="/images/img_de26941a8513b922.png" alt="" />
+이건 본인이 필요한 만큼</p>
+<br>
+<br>
+<br>
+<h2 id="github-actioneseo-oidc-sayonghagi">Github Action에서 OIDC 사용하기</h2>
+<p>provider에 role까지 준비가 됐다면, 이제는 Github Action에서 바로 인증을 뚫을 수 있다.<br />
+사용법은 어렵지 않다. 다음 같이 aws credential 액션 라이브러리를 사용해서 우리가 만든 role을 불러오면 되는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>name</span><span style="color: #9399B2;">:</span><span> OIDC Test</span></span>
+<span class="giallo-l"><span>on</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  push</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  workflow_dispatch</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>permissions</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  id</span><span style="color: #94E2D5;">-</span><span>token</span><span style="color: #9399B2;">:</span><span> write</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>jobs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  access</span><span style="color: #94E2D5;">-</span><span>s3</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    runs</span><span style="color: #94E2D5;">-</span><span>on</span><span style="color: #9399B2;">:</span><span> ubuntu</span><span style="color: #94E2D5;">-</span><span>latest</span></span>
+<span class="giallo-l"><span>    steps</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Configure AWS Credentials</span></span>
+<span class="giallo-l"><span>        uses</span><span style="color: #9399B2;">:</span><span> aws</span><span style="color: #94E2D5;">-</span><span>actions</span><span style="color: #94E2D5;">/</span><span>configure</span><span style="color: #94E2D5;">-</span><span>aws</span><span style="color: #94E2D5;">-</span><span>credentials@v4</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        with</span><span>:</span></span>
+<span class="giallo-l"><span>          aws</span><span style="color: #94E2D5;">-</span><span>region</span><span style="color: #9399B2;">:</span><span> ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span></span>
+<span class="giallo-l"><span>          role</span><span style="color: #94E2D5;">-</span><span>to</span><span style="color: #94E2D5;">-</span><span>assume</span><span style="color: #9399B2;">:</span><span> arn</span><span style="color: #9399B2;">:</span><span>aws</span><span style="color: #9399B2;">:</span><span>iam</span><span style="color: #9399B2;">:</span><span>:여기ID</span><span style="color: #9399B2;">:</span><span>role</span><span style="color: #94E2D5;">/</span><span>role이름</span></span></code></pre>
+<p><img src="/images/img_f9f09f26c88d77d1.png" alt="" />
+그래서 이렇게 인가가 잘 뚫리면 성공한 것이다.<br />
+이제는 적당히 잘 썰어서 워크플로를 만들면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/aws-actions/configure-aws-credentials#oidc-configuration">https://github.com/aws-actions/configure-aws-credentials#oidc-configuration</a><br />
+<a rel="external" href="https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws">https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224237261929/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] DocumentDB: 디스크 축소 관리<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224235636265/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>axios에 트로이목마 발생<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

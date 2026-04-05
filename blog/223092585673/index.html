@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] RDS: Aurora 멀티 리전 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223092585673/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] RDS: Aurora 멀티 리전 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223092585673/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-03T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223092585673/">[AWS] RDS: Aurora 멀티 리전 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-03T00:00:00+00:00"><time datetime="2023-05-03T00:00:00+00:00">2023.05.03</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="298 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223092585673" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_83480a0861dbdd47.png" alt="" />
+글로벌 서비스를 운영하게 되면 지역의 분산화는 필수적인 단계 중 하나라고 할 수 있다.<br />
+아무래도 지리적으로 멀어지다보면 레이턴시가 늘어나고 느려질 수밖에 없기 때문이다.</p>
+<p>그럴때는 보통, 서버나 DB를 여러 리전에 걸쳐 구성하고, 가까운 리전의 리소스를 호출하게 만드는 것이 기본이다.<br />
+다행히도 Aurora는 완벽하지는 않지만 멀티리전 구성을 지원한다.</p>
+<p><img src="/images/img_40e8fd6610007095.png" alt="" />
+이렇게 중심 클러스터를 하나 두고, read only 복제본을 다른 리전에 두는 식이다.</p>
+<p>writable 클러스터를 추가로 만드는건 지원되지 않는다. 그래서 쓰기 작업을 하려면 여전히 중심 클러스터까지 쏘긴 해야 한다... AWS는 어째서인지 이런 분산시스템에 대한 지원은 열성적이지 않다.</p>
+<p>여러 리전에 설쳐 write/read 가능한 고성능의 분산 데이터베이스를 원한다면 cockroachDB를 쓰거나 Cloud Spanner 같은 솔루션을 사용해야 한다. 안타깝게도 AWS에는 그런 관리형 서비스가 없다.</p>
+<p>이외에도 제한사항이 몇가지 있는데, 이건 최대 5개의 read 클러스터 복제본을 허용한다. 중심 리전까지 합해서 6개까지의 리전만 허용한다는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>클러스터를 추가로 띄우는 비용은 기존의 비용 규칙을 따르고, 쓰기 데이터 동기화에 발생하는 비용도 있다.</p>
+<p><img src="/images/img_92f54e0c19bbc3f1.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="master-keulreoseuteo">master 클러스터</h2>
+<p>멀티리전을 구성하려면, 먼저 중심이 되는 리전에 클러스터를 만들어줘야 한다.</p>
+<p><img src="/images/img_ea5424d4d0a0b52c.png" alt="" />
+저 필터로 멀티리전이 지원되는 버전을 골라서 만들 수 있다.<br />
+그리고 클러스터의 DB 인스턴스 타입은 db.r5 이상이거나, serverless v2여야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="slave-keulreoseuteo-mandeulgi">slave 클러스터 만들기</h2>
+<p>리전에 복제하는 방법은 어렵지 않다.<br />
+master 클러스터를 선택한 상태에서, 리전 추가 버튼을 눌러준다.</p>
+<p><img src="/images/img_368801dc8d4f4bbc.png" alt="" /></p>
+<br>
+<p><img src="/images/img_bf6f45440b67f346.png" alt="" />
+그리고 원하는 리전과 옵션을 고르고 만들어주면 된다.</p>
+<br>
+<p><img src="/images/img_255d7b0024c7acbc.png" alt="" /></p>
+<p><img src="/images/img_93fe6543f8d1d35b.png" alt="" />
+그럼 read-only 클러스터가 생성될 것이다.<br />
+버지니아 근방의 서버나 시스템에서는 저 엔드포인트를 통해 query를 사용하면 되는 것이다.</p>
+<p>근데 write가 안된다는 점에서 반쪽짜리라는 느낌을 지울 수가 없다... 이래도 쓰는 사람이 많으려나.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-global-database.html">https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-global-database.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-global-database-getting-started.html#aurora-global-database-creating">https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-global-database-getting-started.html#aurora-global-database-creating</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223091966658/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Lambda: Cold Start 문제<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223092729086/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Route53: Geolocation routing<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

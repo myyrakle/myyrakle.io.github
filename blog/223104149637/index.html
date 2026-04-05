@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Redis] 분산 락 (Distributed Lock) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223104149637/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Redis] 분산 락 (Distributed Lock)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223104149637/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-17T00:00:00+00:00">
+    <meta property="article:tag" content="Redis">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223104149637/">[Redis] 분산 락 (Distributed Lock)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-17T00:00:00+00:00"><time datetime="2023-05-17T00:00:00+00:00">2023.05.17</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="728 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/redis/">Redis</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223104149637" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>락은 동시성 구조를 가진 시스템에서 가장 중요한 것 중 하나다.</p>
+<p>보통은 관계형데이터베이스의 락 기능을 활용해서 락 처리를 하곤 하는데, 그것만으로는 확장성이나 성능 면에서 부족할 때가 있다.<br />
+애플리케이션 코드를 이용한 Lock 처리도 싱글 앱에서나 가능하지, 스케일아웃된 분산 환경에서는 유효하지 않다.</p>
+<p>그럴때는 Lock을 직접 구현해서 사용하곤 하는데, 보통 Redis를 중앙 메모리로 두고 Lock 기능을 직접 구현해서 사용하는 경우가 많다.</p>
+<br>
+<br>
+<br>
+<h2 id="teseuteu-hwangyeong-guseong">테스트 환경 구성</h2>
+<p>우선 redis를 docker로 간단하게 띄웠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker run</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #FAB387;"> 12345</span><span>:</span><span style="color: #FAB387;">6379</span><span> redis</span></span></code></pre>
+<p>그리고 아래는 Rust로 작성한 예제코드다.<br />
+개념 설명을 위한 것이기 때문에 꼭 코드 전체를 다 이해할 필요는 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use futures</span><span style="color: #9399B2;">:</span><span>:future</span><span style="color: #9399B2;">:</span><span>:join_all</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use redis</span><span style="color: #9399B2;">:</span><span>:Commands</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #9399B2;">,</span><span> Box</span><span style="color: #94E2D5;">&lt;</span><span>dyn std</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:Error</span><span style="color: #94E2D5;"> +</span><span> Send</span><span style="color: #94E2D5;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let redis_client</span><span style="color: #94E2D5;"> =</span><span> redis::Client::</span><span style="color: #89B4FA;font-style: italic;">open</span><span>(</span><span style="color: #A6E3A1;">&quot;redis://127.0.0.1:12345/&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let mut redis_connection</span><span style="color: #94E2D5;"> =</span><span> redis_client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get_connection</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let _</span><span style="color: #94E2D5;">:</span><span> ()</span><span style="color: #94E2D5;"> =</span><span> redis_connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">set</span><span>(</span><span style="color: #A6E3A1;">&quot;counter&quot;</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 10000번 반복합니다.</span></span>
+<span class="giallo-l"><span>    let _</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> join_all</span><span>((</span><span style="color: #FAB387;">0..10000</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">into_iter</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">map</span><span>(</span><span style="color: #94E2D5;">|</span><span>_</span><span style="color: #94E2D5;">|</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        let redis_client</span><span style="color: #94E2D5;"> =</span><span> redis_client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">clone</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        return tokio</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">spawn</span><span>(async move</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            let mut redis_connection</span><span style="color: #94E2D5;"> =</span><span> redis_client</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get_connection</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            let old</span><span style="color: #94E2D5;">:</span><span> i32</span><span style="color: #94E2D5;"> =</span><span> redis_connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(</span><span style="color: #A6E3A1;">&quot;counter&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            let</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #94E2D5;"> =</span><span> old</span><span style="color: #94E2D5;"> +</span><span style="color: #FAB387;"> 1</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">            println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;new: {}&quot;</span><span style="color: #9399B2;">,</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span>);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>            let _: ()</span><span style="color: #94E2D5;"> =</span><span> redis_connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">set</span><span>(</span><span style="color: #A6E3A1;">&quot;counter&quot;</span><span style="color: #9399B2;">,</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>);</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    .</span><span>await;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let counter: i32</span><span style="color: #94E2D5;"> =</span><span> redis_connection</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(</span><span style="color: #A6E3A1;">&quot;counter&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;counter: {}&quot;</span><span style="color: #9399B2;">,</span><span> counter);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>코드의 로직 자체는 매우 단순하다.<br />
+redis에서 "counter"라는 키에 멀티스레드로 10000번 동시에 반복하면서 증가를 시키고 있다.</p>
+<p><img src="/images/img_bd7da059ddc56af1.png" alt="" />
+원래 기대한대로라면 10000번 반복했으니 10000이 되어야 하지만,</p>
+<br>
+<p><img src="/images/img_f3245a10715e9323.png" alt="" />
+결과는 그렇지 않다.</p>
+<p>get으로 값을 가져오고, set으로 다시 설정하는 미묘한 간극에서 동시성 충돌이 발생했기 때문이다.<br />
+이를테면 counter가 2인 상태에서 동시에 2개의 스레드가 "2" 값을 받아오면, 2-&gt;3, 3-&gt;4로 값이 늘어나는 것이 아니라 2-&gt;3, 2-&gt;3 와 같이 중복할당을 해버리기 때문이다.</p>
+<p>이러한 상황을 막기 위해 사용하는 것이 Lock이다.<br />
+사실 그냥 동시에 접근이 불가능하도록 막아버리는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="setnx-gibanyi-spin-lock">setnx 기반의 Spin Lock</h2>
+<p>Spin Lock은 Lock이 대기중일때 뺑글뺑글 돈다고 해서 부르는 명칭인데, 구현은 어렵지 않다.</p>
+<p>매 프로세스마다 redis의 setnx 명령으로 lock 값을 저장하고, 이미 lock이 있다면 대기하고, 프로세스가 끝나면 lock 값을 제거하게 하면 된다.</p>
+<p>setnx는 기존에 값이 존재하면 0을 리턴하는 atomic한 명령이라, 1을 반환할때까지 무한루프를 돌려서 대기를 타게 하면 된다. 이렇게 말이다.</p>
+<p><img src="/images/img_5bafc8fe8e386547.png" alt="" /></p>
+<p>그리고 나갈때는 del로 제거해주면 된다.</p>
+<p><img src="/images/img_bbd74a4f30c0e6d5.png" alt="" /></p>
+<p>이러면 아주 간단한 Spin Lock의 완성이다.</p>
+<p><img src="/images/img_d2c77989252a9772.png" alt="" /></p>
+<p>자. 이제 기대한대로 동작할 것이다.</p>
+<p><img src="/images/img_c13c301537a667f2.png" alt="" /></p>
+<p>잘 동작하는 것 같다.</p>
+<p>하지만 여기에는 단점이 좀 있는데...<br />
+애플리케이션단에서 무한루프 돌며 기다리는건 그렇다 치고, setnx를 와장창 날려대기 때문에 Redis에 가해지는 부담이 엄청나다는 것이다.</p>
+<p>이걸 해결하려면 애플리케이션 단에서 무한루프를 sleep도 걸어가면서 천천히 하는 방법이 있긴 한데, best practice라고 말하기는 어렵다.</p>
+<br>
+<br>
+<br>
+<h2 id="redis-pub-sub-gibanyi-lock-guhyeon">Redis pub/sub 기반의 Lock 구현</h2>
+<p>Redis는 다행스럽게도 pub/sub이라는 이벤트 기반의 시스템을 제공한다.</p>
+<p>그러니까, 이걸로 lock을 풀때마다 알림을 보내서, 그때 다시 setnx를 시도하도록 하면, 무작정 쏟아지는 setnx의 횟수를 줄여서 Redis의 부담을 줄이는 것이다.</p>
+<p>Lock 해제를 할때 Lock이 풀렸다고 알려주고</p>
+<p><img src="/images/img_ce5adfa0b2ab5747.png" alt="" /></p>
+<p>Lock 진입을 할때는 루프를 돌려고 할때마다 저 pub/sub을 기반으로 블럭을 걸어주면 된다.</p>
+<p><img src="/images/img_cb59fca612bae840.png" alt="" />
+이러면 lock이 해제될때만 setnx로 lock 진입을 시도할 것이다.</p>
+<p>동작은 이전과 거의 동일하고,</p>
+<p>일반 SpinLock은 Redis CPU가 이정도로 먹던게</p>
+<p><img src="/images/img_5f67f44c4a4f614c.png" alt="" /></p>
+<p>거의 절반 정도로 줄어들었다.</p>
+<p><img src="/images/img_ca7bf5d1416b175f.png" alt="" />
+이 로직은 꼭 다 직접 구현할 필요는 없고, 괜찮은 Redis 클라이언트 구현체가 있다면 그걸 쓰면 된다.</p>
+<p>그런데 여기에도 문제가 있긴 있으니.. Redis마저 분산화된 멀티노드 Redis 클러스터에서는 기대한대로 동작하지 않을 수 있다는 것이다. 노드끼리 값이 다를 수 있으니까!</p>
+<br>
+<br>
+<br>
+<h2 id="redlock">Redlock</h2>
+<p>Redlock은 가장 권장되는 형태의 Lock 알고리즘이다.<br />
+pub/sub 기반의 Lock에 멀티노드 Redis 환경까지 고려한 것이다.</p>
+<p>자세한 것은 공식문서를 참조하면 좋다.<br />
+<a rel="external" href="https://redis.io/docs/manual/patterns/distributed-locks/">https://redis.io/docs/manual/patterns/distributed-locks/</a></p>
+<p>멀티노드에서의 충돌을 피하기 위해 이러한 로직을 따른다.</p>
+<ol>
+<li>
+<p>현재 시간을 밀리초 단위로 가져온다.</p>
+</li>
+<li>
+<p>N개의 노드에서 모두 동일한 키 이름과 무작위 값으로 순차적으로 Lock을 획득하려고 시도한다.<br />
+여기서 각 노드에 잠금을 설정할 때 클라이언트는 총 Lock 자동 해제 시간과 비교하여 작은 타임아웃을 사용하여 Lock을 획득한다.<br />
+예를 들어, 자동 해제 시간이 10초인 경우 타임아웃은 대략 5-50 밀리초 범위일 수 있다. 이렇게 함으로써 클라이언트는 다운된 Redis 노드와 통신을 시도하는 동안 오랜 시간 동안 블록되는 것을 방지한다.<br />
+노드가 사용 불가능한 경우 가능한 빨리 다음 노드와 통신을 시도해야 한다.</p>
+</li>
+<li>
+<p>클라이언트는 Lock을 획득하기 위해 단계 1에서 얻은 타임스탬프를 현재 시간에서 빼어 경과된 시간을 계산한다.<br />
+클라이언트가 대다수의 노드(적어도 3개)에서 Lock을 획득하고, Lock을 획득하는 데 걸린 총 시간이 Lock의 validity time보다 작은 경우에만 Lock이 획득된 것으로 간주된다.</p>
+</li>
+<li>
+<p>Lock이 획득된 경우, validity time은 단계 3에서 계산된 경과 시간을 초기 validity time에서 뺀 값으로 간주된다.</p>
+</li>
+<li>
+<p>만약 클라이언트가 어떤 이유로 인해 Lock을 얻지 못했다면 (N/2+1 개의 인스턴스를 잠글 수 없었거나 유효 시간이 음수인 경우), 클라이언트는 Lock을 얻지 못한 것으로 여겼던 모든 노드를 unlock한다.</p>
+</li>
+</ol>
+<p>그리고 여기에는 몇가지 구현체들이 존재한다.</p>
+<p><img src="/images/img_c04f363b2210397b.png" alt="" />
+보면 좀 이상한것도 많다. 스타 개수 보고 괜찮으면 골라쓰자..<br />
+당장 내가 써본 Rust 구현체도 제대로 된 물건이 아니었고, Go도 그랬다.<br />
+Node.js 구현체는 왜 없지...?</p>
+<p>아무튼 저기서 Redisson이 이 방면에서 좀 잘 쓰이는 것 같았다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://redis.io/docs/manual/patterns/distributed-locks/">https://redis.io/docs/manual/patterns/distributed-locks/</a><br />
+<a rel="external" href="https://hyperconnect.github.io/2019/11/15/redis-distributed-lock-1.html">https://hyperconnect.github.io/2019/11/15/redis-distributed-lock-1.html</a><br />
+<a rel="external" href="https://hudi.blog/distributed-lock-with-redis/">https://hudi.blog/distributed-lock-with-redis/</a><br />
+<a rel="external" href="http://redisgate.kr/redis/command/setnx.php">http://redisgate.kr/redis/command/setnx.php</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223107501813/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>로드 밸런싱(Load Balancing)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223103102724/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] napi-rs로 Node.js와 연결하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

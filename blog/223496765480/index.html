@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Github] Action으로 커버리지 측정 자동화하기 (Rust) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223496765480/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Github] Action으로 커버리지 측정 자동화하기 (Rust)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223496765480/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-06-30T00:00:00+00:00">
+    <meta property="article:tag" content="Github">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223496765480/">[Github] Action으로 커버리지 측정 자동화하기 (Rust)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-06-30T00:00:00+00:00"><time datetime="2024-06-30T00:00:00+00:00">2024.06.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="123 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/github/">Github</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223496765480" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222978542288">https://blog.naver.com/sssang97/222978542288</a></p>
+<br>
+<p><img src="/images/img_d16c7c2e79a53a43.png" alt="" />
+PR 돌릴 때마다 테스트 커버리지 돌려서 커버리지를 보고해주는 시스템을 만들었다.</p>
+<br>
+<p><img src="/images/img_321abaee80500983.png" alt="" />
+링크 타고 들어가면 tarpaulin 자체 포맷으로 UI 조회도 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="guseong">구성</h2>
+<p>내 경우에는 액션 워크플로 돌떄마다 커버리지 웹뷰를 별도의 static page용 repo에 push하고 그걸 띄우는 형태로 응용해서 저걸 구현했다.</p>
+<p><img src="/images/img_509ec456dd623eab.png" alt="" /></p>
+<p><img src="/images/img_eeefd1c85aa65690.png" alt="" />
+전용 페이지 레포 만들어서 Page 활성화하고,</p>
+<p>이런식으로 워크플로를 구성했다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>name</span><span style="color: #9399B2;">:</span><span> Test</span><span style="color: #94E2D5;"> &amp;</span><span> Coverage</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>on</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  pull_request</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>permissions</span><span style="color: #9399B2;">:</span><span>                # Job</span><span style="color: #94E2D5;">-</span><span>level permissions configuration starts here</span></span>
+<span class="giallo-l"><span>  contents</span><span style="color: #9399B2;">:</span><span> write           # </span><span style="color: #A6E3A1;">&#39;write&#39;</span><span> access to repository contents</span></span>
+<span class="giallo-l"><span>  pull</span><span style="color: #94E2D5;">-</span><span>requests</span><span style="color: #9399B2;">:</span><span> write      # </span><span style="color: #A6E3A1;">&#39;write&#39;</span><span> access to pull requests</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>jobs</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  check</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    name</span><span style="color: #9399B2;">:</span><span> Rust project</span></span>
+<span class="giallo-l"><span>    runs</span><span style="color: #94E2D5;">-</span><span>on</span><span style="color: #9399B2;">:</span><span> ubuntu</span><span style="color: #94E2D5;">-</span><span>latest</span></span>
+<span class="giallo-l"><span>    steps</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Checkout repository</span></span>
+<span class="giallo-l"><span>        uses</span><span style="color: #9399B2;">:</span><span> actions</span><span style="color: #94E2D5;">/</span><span>checkout@v4</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        with</span><span>: </span></span>
+<span class="giallo-l"><span>          persist</span><span style="color: #94E2D5;">-</span><span>credentials</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> false</span><span> </span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> uses</span><span style="color: #9399B2;">:</span><span> actions</span><span style="color: #94E2D5;">-</span><span>rs</span><span style="color: #94E2D5;">/</span><span>toolchain@v1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        with</span><span>:</span></span>
+<span class="giallo-l"><span>          toolchain</span><span style="color: #9399B2;">:</span><span> stable</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Cache Cargo</span><span style="color: #A6E3A1;">&#39;s directories</span></span>
+<span class="giallo-l"><span>        uses</span><span style="color: #9399B2;">:</span><span> actions</span><span style="color: #94E2D5;">/</span><span>cache@v4</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        with</span><span>:</span></span>
+<span class="giallo-l"><span>          save</span><span style="color: #94E2D5;">-</span><span>always</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>          key</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> runner</span><span style="color: #94E2D5;">.</span><span>os</span><span style="color: #9399B2;"> }}</span><span style="color: #94E2D5;">-</span><span>coverage</span><span style="color: #94E2D5;">-</span><span>$</span><span style="color: #9399B2;">{{</span><span style="color: #89B4FA;font-style: italic;"> hashFiles</span><span>(</span><span style="color: #A6E3A1;">&#39;Cargo.lock&#39;</span><span>)</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>          path</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ./</span><span>target</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ~/.</span><span>cargo</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ~/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>registry</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ~/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>git</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ~/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>bin</span><span style="color: #94E2D5;">/</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ~/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>registry</span><span style="color: #94E2D5;">/</span><span>index</span><span style="color: #94E2D5;">/</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ~/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>registry</span><span style="color: #94E2D5;">/</span><span>cache</span><span style="color: #94E2D5;">/</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            ~/.</span><span>cargo</span><span style="color: #94E2D5;">/</span><span>git</span><span style="color: #94E2D5;">/</span><span>db</span><span style="color: #94E2D5;">/</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Install cargo</span><span style="color: #94E2D5;">-</span><span>tarpaulin</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span> cargo install cargo</span><span style="color: #94E2D5;">-</span><span>tarpaulin</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Run cargo</span><span style="color: #94E2D5;">-</span><span>tarpaulin</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          cargo tarpaulin</span><span style="color: #94E2D5;"> -</span><span>l</span><span style="color: #94E2D5;"> --</span><span>out Html</span><span style="color: #94E2D5;"> |</span><span> tail</span><span style="color: #94E2D5;"> -</span><span>n</span><span style="color: #FAB387;"> 1</span><span style="color: #94E2D5;"> |</span><span> grep</span><span style="color: #94E2D5;"> -</span><span>o</span><span style="color: #A6E3A1;"> &#39;[^+][0-9]</span><span style="color: #F5C2E7;">\+\.</span><span style="color: #A6E3A1;">[0-9]</span><span style="color: #F5C2E7;">\+</span><span style="color: #A6E3A1;">%&#39;</span><span style="color: #94E2D5;"> &gt;</span><span> coverage_total_percent</span><span style="color: #94E2D5;">.</span><span>txt</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Set coverage env variable</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          echo</span><span style="color: #A6E3A1;"> &quot;COVERAGE=$(cat coverage_total_percent.txt)&quot;</span><span style="color: #94E2D5;"> &gt;&gt;</span><span> $GITHUB_ENV</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Clone html_reports repository</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          git clone https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/myyrakle/html_reports</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Generate Random Name </span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          echo</span><span style="color: #A6E3A1;"> &quot;REPORT_NAME=$(date +%s)&quot;</span><span style="color: #94E2D5;"> &gt;&gt;</span><span> $GITHUB_ENV</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Copy coverage report</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          cp</span><span style="color: #94E2D5;"> ./</span><span>tarpaulin</span><span style="color: #94E2D5;">-</span><span>report</span><span style="color: #94E2D5;">.</span><span>html</span><span style="color: #94E2D5;"> ./</span><span>html_reports</span><span style="color: #94E2D5;">/</span><span>$</span><span style="color: #9399B2;">{{</span><span> env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">REPORT_NAME</span><span style="color: #9399B2;"> }}</span><span style="color: #94E2D5;">.</span><span>html</span><span style="color: #94E2D5;"> |</span><span> </span></span>
+<span class="giallo-l"><span>          cd</span><span style="color: #94E2D5;"> ./</span><span>html_reports </span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Add</span></span>
+<span class="giallo-l"><span>        working</span><span style="color: #94E2D5;">-</span><span>directory</span><span style="color: #9399B2;">:</span><span> html_reports</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          git add</span><span style="color: #94E2D5;"> .</span><span> </span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Commit</span></span>
+<span class="giallo-l"><span>        working</span><span style="color: #94E2D5;">-</span><span>directory</span><span style="color: #9399B2;">:</span><span> html_reports</span></span>
+<span class="giallo-l"><span>        run</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>          git config</span><span style="color: #94E2D5;"> --</span><span>global user</span><span style="color: #94E2D5;">.</span><span>email</span><span style="color: #A6E3A1;"> &quot;sssang97@naver.com&quot;</span><span style="color: #94E2D5;"> |</span><span> </span></span>
+<span class="giallo-l"><span>          git config</span><span style="color: #94E2D5;"> --</span><span>global user</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #A6E3A1;"> &quot;myyrakle&quot;</span><span style="color: #94E2D5;"> |</span><span> </span></span>
+<span class="giallo-l"><span>          git commit</span><span style="color: #94E2D5;"> -</span><span>m</span><span style="color: #A6E3A1;"> &quot;Add report&quot;</span><span> </span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Push changes</span></span>
+<span class="giallo-l"><span>        uses</span><span style="color: #9399B2;">:</span><span> ad</span><span style="color: #94E2D5;">-</span><span>m</span><span style="color: #94E2D5;">/</span><span>github</span><span style="color: #94E2D5;">-</span><span>push</span><span style="color: #94E2D5;">-</span><span>action@master</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        with</span><span>:</span></span>
+<span class="giallo-l"><span>          github_token</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">GH_TOKEN</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>          directory</span><span style="color: #9399B2;">:</span><span> html_reports</span></span>
+<span class="giallo-l"><span>          repository</span><span style="color: #9399B2;">:</span><span> myyrakle</span><span style="color: #94E2D5;">/</span><span>html_reports</span></span>
+<span class="giallo-l"><span>          force</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> true</span></span>
+<span class="giallo-l"><span>          ref</span><span style="color: #9399B2;">:</span><span> master</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> name</span><span style="color: #9399B2;">:</span><span> Add comment to PR</span></span>
+<span class="giallo-l"><span>        uses</span><span style="color: #9399B2;">:</span><span> thollander</span><span style="color: #94E2D5;">/</span><span>actions</span><span style="color: #94E2D5;">-</span><span>comment</span><span style="color: #94E2D5;">-</span><span>pull</span><span style="color: #94E2D5;">-</span><span>request@v1</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        with</span><span>:</span></span>
+<span class="giallo-l"><span>          GITHUB_TOKEN</span><span style="color: #9399B2;">:</span><span> $</span><span style="color: #9399B2;">{{</span><span> secrets</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">GH_TOKEN</span><span style="color: #9399B2;"> }}</span></span>
+<span class="giallo-l"><span>          message</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>            ✅ </span><span style="color: #94E2D5;">**</span><span>Total Coverage</span><span style="color: #94E2D5;">**</span><span>: $</span><span style="color: #9399B2;">{{</span><span> env</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">COVERAGE</span><span style="color: #9399B2;"> }}</span><span>  </span></span>
+<span class="giallo-l"><span>            🔗 [Coverage View](https:</span><span style="color: #9399B2;font-style: italic;">//myyrakle.github.io/html_reports/${{ env.REPORT_NAME }}) &lt;sub&gt;(최대 몇분 정도의 지연시간이 발생할 수 있습니다.)&lt;/sub&gt;</span></span></code></pre>
+<p>이걸 쓰고 싶다면</p>
+<ol>
+<li>repository: myyrakle/html_reports 이걸 직접 만들어서 넣어주고</li>
+<li>[Coverage View](<a rel="external" href="https://myyrakle.github.io/html_reports">https://myyrakle.github.io/html_report</a>... 이거도 레포 구성에 따라서 맞춰주고</li>
+<li>GH_TOKEN 시크릿도 적절히 넣어주면 된다.</li>
+</ol>
+<br>
+<p><img src="/images/img_a56c354a0133a473.png" alt="" />
+내 경우에는 이정도 권한만 넣어줬다.<br />
+Content Write, PR Write, Workflow Write</p>
+<br>
+<p><img src="/images/img_2f437f559cec75a2.png" alt="" /></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223495801532/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] NFS로 온프레미스 Persistent Volume 구성하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223495085238/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] 데드락 걸린 CRD 삭제하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

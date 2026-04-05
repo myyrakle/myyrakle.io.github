@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] Cell과 RefCell | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221631811708/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] Cell과 RefCell">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221631811708/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-08-29T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221631811708/">[Rust] Cell과 RefCell</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-08-29T00:00:00+00:00"><time datetime="2019-08-29T00:00:00+00:00">2019.08.29</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="168 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221631811708" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>러스트는 전반적으로 제약사항이 상당히 많고 빡빡한 편이다. 상수성도 엄격히 지켜야하고, 소유권도 깐깐하게 지적해대고...</p>
+<p>근데 이러면 안전한 구조를 보장하게끔 유도할 순 있지만. 그럼에도 불가피하게 구조상 안전하지 않은 형식이 필요할 경우가 있다.</p>
+<p>러스트는 이러한 경우에 쓸 수 있는 래퍼 타입들을 std::cell 모듈에서 제공한다.<br />
+손으로 하려면 unsafe로 도배해야 하는 지저분한 코드를 직접 작성하지 않아도 되게끔 해주는 것이다.</p>
+<br>
+<p><strong>Cell</strong><br />
+기본적으로 가변(&amp;mut self) 메서드들은 가변(let mut) 변수에서만 동작하도록 되어있다.<br />
+하지만 Cell타입을 사용하면, 가변적인 동작을 불변(let) 변수에서도 수행할 수 있다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+잘 돈다.</p>
+<br>
+<p><strong>RefCell</strong><br />
+이건 Cell의 동적할당 버전이라 할 수 있다.<br />
+RefCell 객체는 borrow와 borrow_mut라는 메서드로 참조를 획득할 수 있는데, 이 참조를 Ref와 RefMut라는 래퍼타입으로 관리한다.<br />
+이 두 타입의 사용법은 기존의 &amp;, &amp;mut와 거의 동일하다 봐도 된다. 그리고 이걸로 런타임에 소유권을 체크한다.</p>
+<p>마찬가지로 변수가 가변이든 불변이든 불변 borrow를 얻어서 값의 변경을 꾀할 수 있다.
+<img src="/images/img_9f91a3123635ee77.gif" alt="image" /></p>
+<p><img src="/images/img_9f91a3123635ee77.gif" alt="image" />
+잘 돈다.</p>
+<p>그리고 RefCell은 공유 스마트포인터인 Rc와 찰떡궁합이다. 가변소유권을 여러개 사용할 필요가 있을때, Rc 안에 내장해서 사용한다.<br />
+Rc 포스팅을 참고할것.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221635172034/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[C++] Q: std::condition_variable은 왜 std::unique_lock만 쓰나요?<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221631319925/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] if let, while let 구문. refutable 패턴<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

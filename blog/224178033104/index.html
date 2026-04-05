@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] ArgoCD Notification으로 Slack에 배포 알림 구성하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224178033104/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] ArgoCD Notification으로 Slack에 배포 알림 구성하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224178033104/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-02-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224178033104/">[k8s] ArgoCD Notification으로 Slack에 배포 알림 구성하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-02-10T00:00:00+00:00"><time datetime="2026-02-10T00:00:00+00:00">2026.02.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="177 words"><time datetime="PT1M">1 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224178033104" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>빠른 개발 환경 흐름을 완성하기 위해서는, 빠르게 배포하고, 배포가 완료되었을때 그 시점을 잘 잡는 것이 중요하다. 하지만 기본 k8s 구성에서는 이걸 제때 잡기가 쉽지는 않다. 계속 kubectl로 모니터링을 할 수도 없는 노릇이니 말이다.</p>
+<p>배포가 완료된 시점에 Slack 등을 통해서 완료를 확실하게 알 수 있다면 참 편할 것이다.</p>
+<p>다행히도 ArgoCD를 쓸 경우에는 이런 부분이 좀 간편해진다. 자체적으로 알림용 도구를 지원하기 때문이다.</p>
+<p>먼저 nofiticaion 리소스가 실행되고 있는지 확인한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl get deployment</span><span style="color: #94E2D5;"> -</span><span>n argocd</span><span style="color: #FAB387;"> 2</span><span style="color: #94E2D5;">&gt;/</span><span>dev</span><span style="color: #94E2D5;">/</span><span style="color: #CBA6F7;">null</span><span style="color: #94E2D5;"> |</span><span> grep notification</span><span style="color: #94E2D5;"> ||</span><span> echo</span><span style="color: #A6E3A1;"> &quot;ArgoCD namespace not found. Checking other namespaces...&quot;</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> kubectl get deployment</span><span style="color: #94E2D5;"> -</span><span>A</span><span style="color: #94E2D5;"> |</span><span> grep argocd</span></span></code></pre>
+<p><img src="/images/img_1cc5be60d3eeaead.png" alt="" /></p>
+<p>ConfigMap을 작성하고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> v1</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> ConfigMap</span></span>
+<span class="giallo-l"><span>metadata</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  name</span><span style="color: #9399B2;">:</span><span> argocd</span><span style="color: #94E2D5;">-</span><span>notifications</span><span style="color: #94E2D5;">-</span><span>cm</span></span>
+<span class="giallo-l"><span>  namespace</span><span style="color: #9399B2;">:</span><span> argocd  # ArgoCD namespace로 변경</span></span>
+<span class="giallo-l"><span>data</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  # Slack Bot Token 설정</span></span>
+<span class="giallo-l"><span>  service</span><span style="color: #94E2D5;">.</span><span>slack: </span><span style="color: #94E2D5;">|</span></span>
+<span class="giallo-l"><span>    token</span><span style="color: #9399B2;">:</span><span> Slack 토큰</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  # Deployment 완료 템플릿</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #94E2D5;">.</span><span>deployment</span><span style="color: #94E2D5;">-</span><span>success</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>    message</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>      ✅ </span><span style="color: #94E2D5;">*</span><span>Deployment Completed</span><span style="color: #94E2D5;">*</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Application</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>app</span><span style="color: #94E2D5;">.</span><span>metadata</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>spec</span><span style="color: #94E2D5;">.</span><span>destination</span><span style="color: #94E2D5;">.</span><span>namespace</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Namespace</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>app</span><span style="color: #94E2D5;">.</span><span>spec</span><span style="color: #94E2D5;">.</span><span>destination</span><span style="color: #94E2D5;">.</span><span>namespace</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>spec</span><span style="color: #94E2D5;">.</span><span>destination</span><span style="color: #94E2D5;">.</span><span>server</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Cluster</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>app</span><span style="color: #94E2D5;">.</span><span>spec</span><span style="color: #94E2D5;">.</span><span>destination</span><span style="color: #94E2D5;">.</span><span>server</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Revision</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span>substr</span><span style="color: #FAB387;"> 0 7</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>sync</span><span style="color: #94E2D5;">.</span><span>revision</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>operation</span><span style="color: #94E2D5;">.</span><span>initiatedBy</span><span style="color: #94E2D5;">.</span><span>username</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Synced by</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>operation</span><span style="color: #94E2D5;">.</span><span>initiatedBy</span><span style="color: #94E2D5;">.</span><span>username</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>syncResult</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Deployed Resources</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> range</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>syncResult</span><span style="color: #94E2D5;">.</span><span>resources</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #89B4FA;font-style: italic;"> or</span><span> (eq</span><span style="color: #94E2D5;"> .</span><span>kind</span><span style="color: #A6E3A1;"> &quot;Deployment&quot;</span><span>) (eq</span><span style="color: #94E2D5;"> .</span><span>kind</span><span style="color: #A6E3A1;"> &quot;StatefulSet&quot;</span><span>) (eq</span><span style="color: #94E2D5;"> .</span><span>kind</span><span style="color: #A6E3A1;"> &quot;Application&quot;</span><span>)</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span>      • </span><span style="color: #9399B2;">{{</span><span style="color: #94E2D5;">.</span><span>kind</span><span style="color: #9399B2;">}}</span><span style="color: #94E2D5;">/</span><span style="color: #9399B2;">{{</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #9399B2;">}}{{</span><span style="color: #CBA6F7;">if</span><span style="color: #94E2D5;"> .</span><span>namespace</span><span style="color: #9399B2;">}}</span><span> (</span><span style="color: #9399B2;">{{</span><span style="color: #94E2D5;">.</span><span>namespace</span><span style="color: #9399B2;">}}</span><span>)</span><span style="color: #9399B2;">{{</span><span>end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  # Deployment 실패 템플릿</span></span>
+<span class="giallo-l"><span>  template</span><span style="color: #94E2D5;">.</span><span>deployment</span><span style="color: #94E2D5;">-</span><span>failed</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>    message</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span>      ❌ </span><span style="color: #94E2D5;">*</span><span>Deployment Failed</span><span style="color: #94E2D5;">*</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Application</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>app</span><span style="color: #94E2D5;">.</span><span>metadata</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>spec</span><span style="color: #94E2D5;">.</span><span>destination</span><span style="color: #94E2D5;">.</span><span>namespace</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Namespace</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>app</span><span style="color: #94E2D5;">.</span><span>spec</span><span style="color: #94E2D5;">.</span><span>destination</span><span style="color: #94E2D5;">.</span><span>namespace</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>message</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Error</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>message</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>syncResult</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      *</span><span>Failed Resources</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">*</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> range</span><span style="color: #94E2D5;"> .</span><span>app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>syncResult</span><span style="color: #94E2D5;">.</span><span>resources</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;"> if</span><span> ne</span><span style="color: #94E2D5;"> .</span><span>status</span><span style="color: #A6E3A1;"> &quot;Synced&quot;</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span>      • </span><span style="color: #9399B2;">{{</span><span style="color: #94E2D5;">.</span><span>kind</span><span style="color: #9399B2;">}}</span><span style="color: #94E2D5;">/</span><span style="color: #9399B2;">{{</span><span style="color: #94E2D5;">.</span><span>name</span><span style="color: #9399B2;">}}{{</span><span style="color: #CBA6F7;">if</span><span style="color: #94E2D5;"> .</span><span>namespace</span><span style="color: #9399B2;">}}</span><span> (</span><span style="color: #9399B2;">{{</span><span style="color: #94E2D5;">.</span><span>namespace</span><span style="color: #9399B2;">}}</span><span>)</span><span style="color: #9399B2;">{{</span><span>end</span><span style="color: #9399B2;">}}</span><span style="color: #94E2D5;"> -</span><span style="color: #9399B2;"> {{</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">      {{</span><span style="color: #94E2D5;">-</span><span> end</span><span style="color: #9399B2;">}}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  # Trigger 설정</span></span>
+<span class="giallo-l"><span>  trigger</span><span style="color: #94E2D5;">.</span><span>on</span><span style="color: #94E2D5;">-</span><span>deployed</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> description</span><span style="color: #9399B2;">:</span><span> Application is synced and healthy</span></span>
+<span class="giallo-l"><span>      send</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> deployment</span><span style="color: #94E2D5;">-</span><span>success</span></span>
+<span class="giallo-l"><span>      when</span><span style="color: #9399B2;">:</span><span> app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>phase</span><span style="color: #CBA6F7;"> in</span><span> [</span><span style="color: #A6E3A1;">&#39;Succeeded&#39;</span><span>] and app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>health</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;"> ==</span><span style="color: #A6E3A1;"> &#39;Healthy&#39;</span></span>
+<span class="giallo-l"><span>    oncePer</span><span style="color: #9399B2;">:</span><span> app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>finishedAt</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  trigger</span><span style="color: #94E2D5;">.</span><span>on</span><span style="color: #94E2D5;">-</span><span>deployment</span><span style="color: #94E2D5;">-</span><span>failed</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> description</span><span style="color: #9399B2;">:</span><span> Application sync failed</span></span>
+<span class="giallo-l"><span>      send</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> deployment</span><span style="color: #94E2D5;">-</span><span>failed</span></span>
+<span class="giallo-l"><span>      when</span><span style="color: #9399B2;">:</span><span> app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>phase</span><span style="color: #CBA6F7;"> in</span><span> [</span><span style="color: #A6E3A1;">&#39;Error&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;Failed&#39;</span><span>]</span></span>
+<span class="giallo-l"><span>    oncePer</span><span style="color: #9399B2;">:</span><span> app</span><span style="color: #94E2D5;">.</span><span>status</span><span style="color: #94E2D5;">.</span><span>operationState</span><span style="color: #94E2D5;">.</span><span>finishedAt</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  # 기본 구독 설정</span></span>
+<span class="giallo-l"><span>  subscriptions</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> |</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> recipients</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> slack</span><span style="color: #9399B2;">:</span><span>슬랙 채널 ID</span></span>
+<span class="giallo-l"><span>      triggers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> on</span><span style="color: #94E2D5;">-</span><span>deployed</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> on</span><span style="color: #94E2D5;">-</span><span>deployment</span><span style="color: #94E2D5;">-</span><span>failed</span></span></code></pre>
+<p>그걸 적용한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl apply</span><span style="color: #94E2D5;"> -</span><span>f argocd</span><span style="color: #94E2D5;">-</span><span>notifications</span><span style="color: #94E2D5;">-</span><span>config</span><span style="color: #94E2D5;">.</span><span>yaml</span></span></code></pre>
+<p><img src="/images/img_5c62c28b69f7ab05.png" alt="" /></p>
+<p>그리고 기존 Application에 annotation을 추가해준다.<br />
+여기에 슬랙 채널 ID를 넣으면 된다.</p>
+<p><img src="/images/img_54dc710a5e7d2d84.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl patch app serverroom</span><span style="color: #94E2D5;">-</span><span>apps</span><span style="color: #94E2D5;"> -</span><span>n argocd</span><span style="color: #94E2D5;"> --</span><span style="color: #CBA6F7;">type</span><span style="color: #F9E2AF;font-style: italic;"> merge -p &#39;{</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">  &quot;metadata&quot;: {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">    &quot;annotations&quot;: {</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">      &quot;notifications.argoproj.io/subscribe.on-deployed.slack&quot;: &quot;채널ID&quot;,</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">      &quot;notifications.argoproj.io/subscribe.on-deployment-failed.slack&quot;: &quot;채널ID&quot;</span></span>
+<span class="giallo-l"><span>    }</span></span>
+<span class="giallo-l"><span>  }</span></span>
+<span class="giallo-l"><span>}</span><span style="color: #A6E3A1;">&#39;</span></span></code></pre>
+<p><img src="/images/img_dd30147037c717d0.png" alt="" />
+그럼 이런 식으로 Deployment의 배포가 완료될때마다 - 정확히는 ArgoCD Sync가 될때마다 트리거되어서 알림이 전송될 것이다.</p>
+<p>근데 이 방식에는 좀 단점이 있다. argocd가 Sync에 대한 정보를 상세하게 주지는 않는다는 것이다. 어떤 Deployment가 변경된 것인지 알 수가 없다.<br />
+그래서 이걸 잘 활용하려면, argocd Application을 시스템별로 쪼개서 Apps of App 패턴을 잘 구현해야 하고 개별 App 단위에 대해서 Noti를 받도록 구성해야 한다.</p>
+<p>그래서 관리포인트가 좀 복잡해질 수 있다는 것이 단점이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://argo-cd.readthedocs.io/en/stable/operator-manual/notifications/">https://argo-cd.readthedocs.io/en/stable/operator-manual/notifications/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224179499697/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>분산 트랜잭션: calvin<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224178940751/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Grafana] Loki를 통한 로깅 환경 구성<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

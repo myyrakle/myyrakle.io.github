@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] FFI: bindgen을 통한 편리한 통합 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223623326477/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] FFI: bindgen을 통한 편리한 통합">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223623326477/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-10-18T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223623326477/">[Rust] FFI: bindgen을 통한 편리한 통합</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-10-18T00:00:00+00:00"><time datetime="2024-10-18T00:00:00+00:00">2024.10.18</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="340 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223623326477" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>bindgen은 Rust에서 직접 만들어서 제공하는 C/C++ FFI용 서드파티 라이브러리다.<br />
+이게 있어야 FFI를 할 수 있는건 아닌데, 번거로운 FFI 작업을 좀 단순화하기 좋다.</p>
+<p>FFI 자체에 대한 방법은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/221661630758">https://blog.naver.com/sssang97/221661630758</a></p>
+<p>알다시피 FFI에서 가장 귀찮은 작업은, C/C++ 헤더를</p>
+<p><img src="/images/img_58d7c0045981dd9a.png" alt="" /></p>
+<p>Rust 버전으로 재작성하는 것이다.</p>
+<p><img src="/images/img_89f74e97a28e46db.png" alt="" />
+.lib 같은 구현부는 링크만 잘 시켜주면 되지만, 이건 껍데기를 똑같이 맞춰줘야 해서 직접 작성하려면 번거롭다.<br />
+bindgen은 그런 노가다를 줄여주는 보조도구다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajeon-jogeon">사전 조건</h2>
+<p>Rust 자체가 LLVM 체인이다보니 Clang 9.0 이상이 필요하다.</p>
+<p><img src="/images/img_0235aee9c72ed2b6.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="cli-gibanyi-bindgen">CLI 기반의 bindgen</h2>
+<p>bindgen은 라이브러리 형태로 사용할 수도 있고, CLI 형태로 사용할 수도 있다.<br />
+일단 간단하게 CLI 먼저 돌리면서 동작 방식을 확인해보자.</p>
+<p>설치한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo install bindgen</span><span style="color: #94E2D5;">-</span><span>cli</span></span></code></pre>
+<p><img src="/images/img_c4bc303cfd997fc7.png" alt="" /></p>
+<p>그러면 bindgen이라는 명령으로 사용할 수 있을텐데</p>
+<p><img src="/images/img_c9b6831d00163ee4.png" alt="" /></p>
+<p>이런 파일이 있으면</p>
+<p><img src="/images/img_58d7c0045981dd9a.png" alt="" /></p>
+<p>그걸 input으로 주고, 출력 경로를 지정해서 실행하면 된다.</p>
+<p><img src="/images/img_bf9fca4403d349da.png" alt="" /></p>
+<p><img src="/images/img_b57fb90c099d46ef.png" alt="" />
+그럼 이렇게 알아서 만들어준다.<br />
+저거 갖다가 심으면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="build-rs-gibaneuro-jadonghwahagi">build.rs 기반으로 자동화하기</h2>
+<p>CLI로도 그럭저럭 쓸 수는 있지만, 잘 통합된 형태라고 말하기는 어렵다.<br />
+그래서 권장되는 사용 형태는 CLI에서 하던 저 변환 작업을 build.rs에서 처리하도록 구성하는 것이다.</p>
+<p>build.rs에 대해 잘 모른다면, 별도 포스트를 참고한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223113602058">https://blog.naver.com/sssang97/223113602058</a></p>
+<p>기존에 있는 동적 라이브러리나 정적 라이브러리를 갖다 써도 되지만, 이번에는 직접 정적 라이브러리를 만들어서 붙여보자.</p>
+<p>코드는 간단하게 준비했다.</p>
+<p><img src="/images/img_d1ad44ea081a602e.png" alt="" />
+평범한 헤더와</p>
+<br>
+<p><img src="/images/img_19b1a68f64b74745.png" alt="" />
+그 구현이다.</p>
+<p>clang을 가져다가 오브젝트 파일로 컴파일하고, 정적 라이브러리로 적당히 말았다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>clang</span><span style="color: #94E2D5;"> -</span><span>c</span><span style="color: #94E2D5;"> -</span><span>o</span><span style="color: #94E2D5;"> ./</span><span>lib</span><span style="color: #94E2D5;">/</span><span>foo</span><span style="color: #94E2D5;">.</span><span>o</span><span style="color: #94E2D5;"> ./</span><span>lib</span><span style="color: #94E2D5;">/</span><span>foo</span><span style="color: #94E2D5;">.</span><span>c</span><span style="color: #94E2D5;"> -</span><span>fPIC</span></span>
+<span class="giallo-l"><span>ar r</span><span style="color: #94E2D5;"> ./</span><span>lib</span><span style="color: #94E2D5;">/</span><span>libfoo</span><span style="color: #94E2D5;">.</span><span>a</span><span style="color: #94E2D5;"> ./</span><span>lib</span><span style="color: #94E2D5;">/</span><span>foo</span><span style="color: #94E2D5;">.</span><span>o</span></span></code></pre>
+<p><img src="/images/img_d66d73ff08fcec43.png" alt="" /></p>
+<p><img src="/images/img_8efe3860cbd036a6.png" alt="" />
+그럼 이렇게 lib 안에 예쁘게 모아놓을 수 있을 것이다.<br />
+우리에게 필요한건 foo.h 헤더와 libfoo.a 라이브러리다.</p>
+<p>이제 빌드 종속성에 bindgen을 추가해주고</p>
+<p><img src="/images/img_4021916d1316ff29.png" alt="" /></p>
+<p>프로젝트 루트 경로에 build.rs를 구성한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:path</span><span style="color: #9399B2;">:</span><span>:PathBuf</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 라이브러리 경로 지정</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;cargo:rustc-link-search=./lib&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 라이브러리 링크</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;cargo:rustc-link-lib=foo&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // bindgen 생성</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> bindings</span><span style="color: #94E2D5;"> =</span><span> bindgen::Builder::</span><span style="color: #89B4FA;font-style: italic;">default</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">header</span><span>(</span><span style="color: #A6E3A1;">&quot;./lib/foo.h&quot;</span><span>)</span><span style="color: #9399B2;font-style: italic;"> // 기준 헤더</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">parse_callbacks</span><span>(Box::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">bindgen</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">CargoCallbacks</span><span style="color: #9399B2;">)</span><span>)</span></span>
+<span class="giallo-l"><span>        .generate</span><span style="color: #9399B2;">()</span></span>
+<span class="giallo-l"><span>        .expect</span><span style="color: #9399B2;">(</span><span style="color: #A6E3A1;">&quot;Unable to generate bindings&quot;</span><span style="color: #9399B2;">)</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 생성한 코드를 소스파일로 생성</span></span>
+<span class="giallo-l"><span>    let out_path</span><span style="color: #94E2D5;"> =</span><span> PathBuf::</span><span style="color: #89B4FA;font-style: italic;">from</span><span>(</span><span style="color: #A6E3A1;">&quot;./src&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>    bindings</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">write_to_file</span><span>(out_path</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">join</span><span>(</span><span style="color: #A6E3A1;">&quot;bindings.rs&quot;</span><span>))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">expect</span><span>(</span><span style="color: #A6E3A1;">&quot;Couldn&#39;t write bindings!&quot;</span><span>);</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>이렇게 두기만 해도 컴파일될때마다 Cargo가 자동으로 돌려서 generation을 수행한다.</p>
+<br>
+<p><img src="/images/img_b562d02eb1898b6b.png" alt="" />
+그러면 이제 코드에서 돌린 대로 바인딩된 코드가 안에 놓인다.</p>
+<br>
+<p><img src="/images/img_660fe64a1196c5c5.png" alt="" />
+이제 저걸 갖다쓰면 되는 것이다.</p>
+<br>
+<p><img src="/images/img_7cf099cab81f13e7.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>mod bindings</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;Start!!&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    unsafe</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> mut name</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> [std</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;">os</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;">raw</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;">c_char; </span><span style="color: #FAB387;font-style: italic;">20</span><span style="color: #F9E2AF;font-style: italic;">]</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #FAB387;">0</span><span>; </span><span style="color: #FAB387;">20</span><span>]</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        for</span><span> (i</span><span style="color: #9399B2;">,</span><span> c)</span><span style="color: #CBA6F7;"> in</span><span style="color: #A6E3A1;"> &quot;John&quot;</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">chars</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">enumerate</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>            name[i]</span><span style="color: #94E2D5;"> =</span><span> c</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> std</span><span>::os</span><span style="color: #9399B2;">:</span><span>:raw</span><span style="color: #9399B2;">:</span><span>:c_char</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        let</span><span> mut foo </span><span style="color: #94E2D5;">=</span><span> bindings::Person</span><span style="color: #9399B2;"> {</span><span> age</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 20</span><span style="color: #9399B2;">,</span><span> name</span><span style="color: #9399B2;"> };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>        bindings</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">introduce</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>mut foo</span><span style="color: #CBA6F7;"> as</span><span> *</span><span style="color: #F9E2AF;font-style: italic;">mut bindings</span><span>::Person)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;End!!&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_825adb8b8bcb04a9.png" alt="" />
+잘 돈다.</p>
+<p>이런 느낌으로 쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/rust-lang/rust-bindgen">https://github.com/rust-lang/rust-bindgen</a><br />
+<a rel="external" href="https://rust-lang.github.io/rust-bindgen/library-usage.html">https://rust-lang.github.io/rust-bindgen/library-usage.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223624628855/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.82.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223620526048/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Go] entgo: 시작해보기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

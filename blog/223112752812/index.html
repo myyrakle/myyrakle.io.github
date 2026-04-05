@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana] prometheus와 통합하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223112752812/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana] prometheus와 통합하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223112752812/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2023-05-26T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223112752812/">[Grafana] prometheus와 통합하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2023-05-26T00:00:00+00:00"><time datetime="2023-05-26T00:00:00+00:00">2023.05.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="291 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223112752812" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_fc978a9833f0dabf.png" alt="" />
+Grafana는 2014넌에 나온 모니터링 전용 웹앱이다.</p>
+<p>독립적으로 사용할 수는 없고,</p>
+<p><img src="/images/img_37cfe5ea941432f4.png" alt="" />
+이런 데이터 소스들과 연동해서 편리하게 복잡한 조건의 모니터링 환경을 구성할 수 있다는게 장점이다.</p>
+<p>대부분은 prometheus와 연동해서 사용하고, 여기서도 그 용례를 간단히 다뤄볼 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="dockerro-ddyiugi">Docker로 띄우기</h2>
+<p>가장 쉽게 Grafana를 띄우는 방법은 컨테이너를 그대로 올리는 것이다.<br />
+기본 포트는 3000 포트다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker run</span><span style="color: #94E2D5;"> --</span><span>name</span><span style="color: #94E2D5;">=</span><span>grafana</span><span style="color: #94E2D5;"> -</span><span>p</span><span style="color: #FAB387;"> 3000</span><span>:</span><span style="color: #FAB387;">3000</span><span> grafana</span><span style="color: #94E2D5;">/</span><span>grafana</span></span></code></pre>
+<p><img src="/images/img_45dff868a487effa.png" alt="" /></p>
+<p>그리고 그 링크로 접속하면 바로 로그인 페이지가 나온다.</p>
+<p><img src="/images/img_08f20bde04a7f381.png" alt="" />
+초기 계정은 admin/admin이다.</p>
+<br>
+<p><img src="/images/img_fcb394beb6c81c63.png" alt="" />
+로그인해서 패스워드 재설정을 하면 된다.</p>
+<br>
+<p><img src="/images/img_2ed5d0543b1d7ebc.png" alt="" />
+그럼 뭐 이런 대시보드 페이지로 이동될 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="prometheuswa-yeondonghagi">prometheus와 연동하기</h2>
+<p>Connections-&gt;Add New Datesource를 누르고</p>
+<p><img src="/images/img_1c3bbf04e96a2f3d.png" alt="" /></p>
+<p>프로메테우스를 고르고</p>
+<p><img src="/images/img_ab1814ef0ca632e0.png" alt="" /></p>
+<p>프로메테우스 접속 정보를 넣어준다.</p>
+<p><img src="/images/img_7c68eecdedfb26bf.png" alt="" /></p>
+<p>내 경우에는 docker 컨테이너 &lt;-&gt; docker 컨테이너라서 호스트의 localhost를 통해 접속하도록 URL을 넣어줬다.</p>
+<p><img src="/images/img_a686f08c96da6ef1.png" alt="" /></p>
+<p>그리고 생성하면</p>
+<p><img src="/images/img_550ac2161ea6679e.png" alt="" />
+이런식으로 Exploer 항목이 추가되었을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="daesibodeu-cugahagi">대시보드 추가하기</h2>
+<p>Exploer 기능으로도 메트릭을 확인하고 가공할 수 있긴 하지만, 아무래도.. 영 편하지는 않다.<br />
+다행히도 대시보드에는 우리보다 앞선 사람들이 만들어둔 템플릿들이 꽤 많다.</p>
+<p>쿠버네티스에서 스탠다드한 형태의 대시보드를 구성해보겠다.</p>
+<p>먼저 대시보드로 진입해서 "Import"를 한다.</p>
+<p><img src="/images/img_0ae5f4e2b8efea0b.png" alt="" /></p>
+<p>그리고 여기서 원하는 모니터링 구성 템플릿을 찾는다.<br />
+<a rel="external" href="https://grafana.com/grafana/dashboards/">https://grafana.com/grafana/dashboards/</a></p>
+<p>내 경우에는<br />
+<a rel="external" href="https://grafana.com/grafana/dashboards/7249-kubernetes-cluster/">https://grafana.com/grafana/dashboards/7249-kubernetes-cluster/</a><br />
+이걸 골랐는데, 고유번호가 7249다.</p>
+<p>그러면 저기다가 그 숫자만 넣어서</p>
+<p><img src="/images/img_175d03e28e121842.png" alt="" /></p>
+<p>로드해주면 자동으로 다 붙는다.</p>
+<p><img src="/images/img_db315f3d42b8c878.png" alt="" /></p>
+<p>이렇게. 짜잔.</p>
+<p><img src="/images/img_1b450d443db664e1.png" alt="" />
+내 테스트 환경이 k8s가 아니라 통짜 도커라 비어있는 지표가 약간 있다.</p>
+<br>
+<p><img src="/images/img_a65075b6027bac64.png" alt="" />
+아무튼 CPU나 메모리 리소스 현황 같은 부분들을 꽤 직관적으로 살펴볼 수 있단 점에서는 좋다.</p>
+<p>이거 말고도 템플릿을 다양하고, 무료다.<br />
+취향껏 골라쓰면 된다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://hub.docker.com/r/grafana/grafana">https://hub.docker.com/r/grafana/grafana</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Grafana">https://en.wikipedia.org/wiki/Grafana</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223112560400/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Prometheus] 시작<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223110057439/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] unsafe: private field 접근하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

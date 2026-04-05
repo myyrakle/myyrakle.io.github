@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Taint와 Toleration | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223645592718/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Taint와 Toleration">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223645592718/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-11-04T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223645592718/">[k8s] Taint와 Toleration</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-11-04T00:00:00+00:00"><time datetime="2024-11-04T00:00:00+00:00">2024.11.04</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="632 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223645592718" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>쿠버네티스는 멀티 노드 분산 환경에서의 컨테이너 관리를 위한 시스템이다.<br />
+멀티노드에 컨테이너를 알뜰하게 채우는건 좋은데, 그렇다고 해서 항상 컨테이너가 랜덤 노드에 할당되어서는 목표를 이룰 수 없을 경우가 많을 것이다.</p>
+<p>예를 들어, 특정 노드에 메모리가 꽉 차서 터지려는 상황이면 어떻게 해야겠는가? 당연히 그 노드에는 더 이상 pod를 띄우지 않도록 해야할 것이다.</p>
+<p>이를 관리하기 위한 노드-Pod 할당 거부 매커니즘이 Taint와 Tolerations다.</p>
+<p>허용 기반의 매커니즘을 알고 싶다면 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223647137454">https://blog.naver.com/sssang97/223647137454</a></p>
+<br>
+<br>
+<br>
+<h2 id="taint">Taint</h2>
+<p>Taint는 node 단위에 기록되고 관리되는 일종의 메타데이터다.</p>
+<p><img src="/images/img_3e3e7742695e46a7.png" alt="" />
+taint는 "오염됨"을 뜻하는 부정적인 단어인데, 말 그대로 노드에 이상이 생겼거나, 기타 이유로 pod를 띄워서는 안된다는 것을 표현한다. 쉽게 말해 노드가 새로운 Pod를 거부하는 개념이다.</p>
+<p>예를 들어, kubeadm 등으로 클러스터를 구성했다면 컨트롤 플레인 노드는 기본적으로 NoSchedule taint가 구성되어있을 것이다.</p>
+<p><img src="/images/img_ae35ce490dbcf1ec.png" alt="" />
+이것은 해당 노드에 Pod를 띄우지 않기를 원하는 taint다.<br />
+기본 설정이 이런 이유는, control plain은 관리만을 전담하고 실제 pod를 띄우는건 worker들로 한정하는 것을 관리상 권장하기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="taintyi-deungroggwa-jegeo">Taint의 등록과 제거</h2>
+<p>만약 멀쩡한 노드에 NoSchedule Taint를 걸어서 pod 생성을 막고 싶다면, 이렇게 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl taint nodes 노드이름 taint값</span></span></code></pre>
+<p><img src="/images/img_85884b75e518f577.png" alt="" />
+그러면 이제부터는 Pod 생성이 막히는 것이다.</p>
+<br>
+<p><img src="/images/img_11861cbf8c7d14a1.png" alt="" />
+만약 전부 taint나 기타 조건에 걸려서 pod가 들어갈 곳이 없으면, 스케줄되지 않아서 거의 무한 pending 상태가 된다.</p>
+<br>
+<p>반대로, Taint를 제거하고 싶다면 뒤에 - 부호만 붙이면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl taint nodes 노드이름 taint값</span><span style="color: #94E2D5;">-</span></span></code></pre>
+<p><img src="/images/img_752646cf85921b90.png" alt="" />
+그러면 삭제가 되고</p>
+<p>생성도 될 것이다.</p>
+<p><img src="/images/img_4d678f83b4ae4c7e.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="taintyi-guseonggwa-sogseong">Taint의 구성과 속성</h2>
+<p>방금 우리가 예제에서 사용한 Taint는 node-role.kubernetes.io/control-plane:NoSchedule이었다.</p>
+<p>이건 사실 node-role.kubernetes.io/control-plane와 NoSchedule 2가지로 분리된다.<br />
+node-role.kubernetes.io/control-plane가 Key고, NoSchedule가 Effect라고 한다.</p>
+<p>사실 전체 형태는 "Key=Value:Effect"인데, Value가 생략 가능한 것이다.<br />
+아래는 value까지 포함해서 taint를 정의하는 간단한 예제다.</p>
+<p><img src="/images/img_1ef55c17517aca08.png" alt="" />
+Key와 Value는 일종의 네임스페이스나 태그에 불과해서 어떤 값이든 들어갈 수 있다. 이걸 기반으로 Pod를 부분적으로 허용해줄지 말지를 선택하는데, 바로 아래에서 설명할 Toleration과 연관이 깊다.</p>
+<p>Effect는 크게 3가지가 지원된다.</p>
+<ol>
+<li>NoSchedule - "NoSchedule"를 허용하지 않는 Pod를 거부함. 기존 실행은 보존함.</li>
+<li>PreferNoSchedule - "PreferNoSchedule"를 허용하지 않는 Pod를 "선호하지 않음" (가능은 함)</li>
+<li>NoExecute - "NoExecute"를 허용하지 않는 Pod를 거부하고, 기존의 실행도 강제로 종료함</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="toleration">Toleration</h2>
+<p>Taint가 Pod를 거부하는 Node의 속성이라면, Toleration는 다시 그 거부 목록에 대해서 예외적인 허용을 추가하는 기능이다.</p>
+<p><img src="/images/img_c4f6f53946b00ba6.png" alt="" />
+단어의 뜻과 동일하다.</p>
+<p>다시 기본 taint를 건 다음에 toleration을 적용해서 안되던걸 되게 해보겠다.</p>
+<p><img src="/images/img_fa904abf334a2303.png" alt="" /></p>
+<p><img src="/images/img_5083fdc83e6930fc.png" alt="" />
+다시 제대로 먹혔다.</p>
+<p>그러면 이제 띄우고자 하는 pod spec에, 다음과 같이 tolerations을 작성해줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>  tolerations</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span> key</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;node-role.kubernetes.io/control-plane&quot;</span></span>
+<span class="giallo-l"><span>    operator</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;Equal&quot;</span></span>
+<span class="giallo-l"><span>    effect</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;NoSchedule&quot;</span></span></code></pre>
+<p>이건 key가 "node-role.kubernetes.io/control-plane"고  effect가 "NoSchedule"인 taint는 무시하고 들어가겠다는 것이다.<br />
+여기서 value는 생략되었지만 필요하다면 넣을 수 있다.<br />
+operator는 Equal/Exists 2가지가 지원되며, 생략시 기본값은 Equal이다. Equal은 key:value완전 일치에만 매칭되며, Exists는 key만 일치해도 매칭된다.</p>
+<br>
+<p><img src="/images/img_fb331c79711897b9.png" alt="" />
+아무튼 적당히 지정하고 실행하면</p>
+<br>
+<p><img src="/images/img_43107619d8c2590f.png" alt="" />
+taint가 걸려있음에도 불구하고 잘 생성되는 것을 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="taint-tolerationreul-iyonghan-risoseu-gwanri">Taint&amp;Toleration를 이용한 리소스 관리</h2>
+<p>Taint는 단순히 컨트롤 플레인에 Pod 할당 막는 용도로 사용되는게 아니라, 리소스 부족으로 인한 문제를 관리하는 것에도 사용된다.</p>
+<p>예를 들면, 노드에 메모리가 부족해지면 k8s의 node controller는 해당 노드에 node.kubernetes.io/memory-pressure:NoSchedule 라는 taint를 건다. 이를 통해 리소스가 부족한 노드에 Pod를 할당하지 않도록 한다.<br />
+그리고 메모리 문제가 해소되면 node.kubernetes.io/memory-pressure:NoSchedule를 풀어서 다시 Pod 할당이 가능해지도록 하는 것이다.</p>
+<p>이러한 시스템 수준 taint 목록에는 대략 아래와 같은 것들이 있다.</p>
+<ol>
+<li>node.kubernetes.io/not-ready: 노드가 아직 준비되지 않음</li>
+<li>node.kubernetes.io/unreachable: 노드 컨트롤러에서 노드에 도달할 수 없음. 이는 NodeCondition이 Ready" Unknown"인 것과 일치함.</li>
+<li>node.kubernetes.io/memory-pressure: 메모리 부족<br />
+4, node.kubernetes.io/disk-pressure: 디스크 압력</li>
+<li>node.kubernetes.io/pid-pressure: PID 압력</li>
+<li>node.kubernetes.io/network-unavailable: 노드의 네트워크를 사용할 수 없음</li>
+<li>node.kubernetes.io/unschedulable: 노드에 스케줄링 할 수 없음</li>
+<li>node.cloudprovider.kubernetes.io/uninitialized: 클라우드 내부 관리용. 거의 몰라도됨.</li>
+</ol>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/ko/docs/concepts/scheduling-eviction/taint-and-toleration/">https://kubernetes.io/ko/docs/concepts/scheduling-eviction/taint-and-toleration/</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/50966318/difference-between-noexecute-noschedule-prefernoschedule">https://stackoverflow.com/questions/50966318/difference-between-noexecute-noschedule-prefernoschedule</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223647137454/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] pod의 node 배치<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223645594088/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] control plain 노드에 pod 띄우기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

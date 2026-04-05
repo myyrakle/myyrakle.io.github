@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Grafana Tempo] 쿼리 최적화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223795331329/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Grafana Tempo] 쿼리 최적화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223795331329/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-03-14T00:00:00+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223795331329/">[Grafana Tempo] 쿼리 최적화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-03-14T00:00:00+00:00"><time datetime="2025-03-14T00:00:00+00:00">2025.03.14</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="430 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223795331329" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Tempo는 전통적인 데이터베이스들과 다르게 인덱스나 뭐 그런 개념은 없다.<br />
+그래서 쿼리 최적화에 접근하는 방식도 좀 다르다.</p>
+<br>
+<br>
+<br>
+<h2 id="kaesing">캐싱</h2>
+<p>Tempo는 일반적으로 메모리를 조금 넉넉하게 잡아주고, 캐시 달아주는 정도로도 충분한 사용성을 가져갈 수 있다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223772135638">https://blog.naver.com/sssang97/223772135638</a></p>
+<p>이걸로도 부족하다면 세심한 옵션 선택을 시도해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="query-frontend">Query Frontend</h2>
+<p>쿼리를 받아서 실행하는 것은 Query Frontend라는 서브시스템에 의해서 이루어진다.<br />
+애초에 이건 로컬 디스크에만 저장하는게 아니라, S3 같은 외부 저장소를 기반으로도 동작할 수 있게 되어있기 때문에, 메인 시스템과 스토리지 접근이 약간 느슨하게 분리되어 있다.</p>
+<p>그래서 Tempo에서 쿼리 최적화는 query_frontend 같은 옵션을 통해 병렬처리 같은 세부설정을 조정하는 정도로만 제어가 가능하다.</p>
+<p>일단 query의 동작 방식을 간단히 정리해보겠다.</p>
+<p><img src="/images/img_4b6c00e3d3df5099.png" alt="" /></p>
+<ol>
+<li>Query를 날리면 일단 query frontend라는 앞단 시스템이 쿼리를 받는다. 여기서 하나의 쿼리는 batch라고도 부른다.</li>
+<li>query frontend는 querier라는 동시성 태스크들을 여러개 띄워서 작업을 분할한다. querier의 개수는 쿼리가 긁어와야할 데이터 크기에 비례한다.</li>
+<li>querier들이 각각의 스캔/필터 작업을 완료했다면, 다시 query frontend에 전달한다. frontend는 받은 데이터를 중복제거하고 잘 가공해서 client에게 잘 반환해준다.</li>
+</ol>
+<p>그리고 tempo의 데이터 스캔은 기본적으로 시간 범위 내의 풀스캔이다. RDB들처럼 인덱스 잡아서 특정 값만 빠르게 골라오고 그런게 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="timeout-neulrigi">timeout 늘리기</h2>
+<p>어쩔 수 없이 엄청나게 넓은 범위의 쿼리를 날려야 한다면, 어떻게 해도 느릴 수 밖에 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>server</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  http_server_read_timeout</span><span style="color: #9399B2;">:</span><span> 2m</span></span>
+<span class="giallo-l"><span>  http_server_write_timeout</span><span style="color: #9399B2;">:</span><span> 2m</span></span></code></pre>
+<p>느리더라도 동작은 하길 원한다면 타임아웃을 늘리는게 좋다.<br />
+이렇게 하면 쿼리의 최대 실행시간이 2분으로 늘어난다. 기본값은 각각 30초다.</p>
+<br>
+<br>
+<br>
+<h2 id="query-frontend-obsyeon-jojeong">query frontend 옵션 조정</h2>
+<p>query frontend라는 옵션 영역이 따로 있다. 대부분의 쿼리 튜닝은 여기서 이루어진다.</p>
+<p><img src="/images/img_a4481537bc7ac933.png" alt="" /></p>
+<p>건드릴 수 있는 여지는 이것저것 많지만, 대표적인 것들만 몇가지 정리해본다.</p>
+<p>concurrent_jobs은 동시에 처리할 수 있는 작업, 동시성 태스크의 개수를 설정할 수 있는 옵션이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>query_frontend</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  search</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    concurrent_jobs</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 2000</span></span></code></pre>
+<p>기본값은 1000이다.<br />
+이게 충분해야 디스크 조회 범위가 크더라도 분산처리를 통해서 빠르게 데이터를 긁어올 수 있다.<br />
+하드웨어 스펙이 충분하다면 이걸 키워보는 것도 좋다.</p>
+<p>target_bytes_per_job라는 옵션도 건드려볼만 하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>query_frontend</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  search</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    target_bytes_per_job</span><span style="color: #9399B2;">:</span><span> 100MiB</span></span></code></pre>
+<p>이건 query frontend가 동시성 job을 분리하는 기준이 된다. 기본값은 100MB다.<br />
+이게 100MiB인데 스캔할 데이터의 추정 크기가 500MiB라면, 5개의 태스크로 분할하는 것이다.</p>
+<p>그래서 크기를 늘리면 작업 수가 줄어드는 대신 각각의 작업들이 처리하는 디스크 영역이 커지고, 크기를 줄이면 작업 수가 늘고 각각의 작업이 처리하는 디스크 영역이 작아진다.</p>
+<p>이건 더 늘리거나 줄이라고 단언하기가 어려운 것 같다.<br />
+하지만 조금은 늘리는게 대체로 성능 향상에 도움이 되는 것 같더라. 200MB 정도?</p>
+<p>querier를 늘리는 것도 방법이다. max_concurrent_queries는 동시에 처리할 수 있는 querier의 개수를 늘린다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>querier</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    max_concurrent_queries</span><span style="color: #9399B2;">:</span><span style="color: #FAB387;"> 40</span></span></code></pre>
+<p>기본값은 20이다.<br />
+이것도 하드웨어 스펙이 괜찮다면 올릴만하다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/setup/size/">https://grafana.com/docs/tempo/latest/setup/size/</a><br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/configuration/#query-frontend">https://grafana.com/docs/tempo/latest/configuration/#query-frontend</a><br />
+<a rel="external" href="https://grafana.com/docs/tempo/latest/operations/backend_search/">https://grafana.com/docs/tempo/latest/operations/backend_search/</a><br />
+<a rel="external" href="https://github.com/grafana/tempo/issues/2252">https://github.com/grafana/tempo/issues/2252</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223797898434/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>링 버퍼 (Ring Buffer)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223794006408/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Docker] Log<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

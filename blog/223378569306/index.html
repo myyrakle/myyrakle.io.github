@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] memory 프로파일링: with jemalloc | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223378569306/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] memory 프로파일링: with jemalloc">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223378569306/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-03-10T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223378569306/">[Rust] memory 프로파일링: with jemalloc</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-03-10T00:00:00+00:00"><time datetime="2024-03-10T00:00:00+00:00">2024.03.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="424 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223378569306" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust에서 메모리 추적을 달성할 수 있는 몇가지 방법 중 하나가 jemalloc 할당 기능을 이용하는 것이다.<br />
+왜나면, jemalloc은 자체적으로 memory 추적 기능을 제공하기 때문이다.</p>
+<p>이 방법은 거의 linux, mac 환경에서만 사용할 수 있다. windows에서는 조금 불편할 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="jemalloc-gibon-guseong">jemalloc 기본 구성</h2>
+<p>먼저 jemalloc을 사용할 수 있게끔 할당자를 구성해줘야 한다.<br />
+적절한 래퍼 crate를 하나 추가해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>tikv</span><span style="color: #94E2D5;">-</span><span>jemallocator</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.5.4&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;profiling&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;unprefixed_malloc_on_supported_platforms&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span></code></pre>
+<p><img src="/images/img_33dea7d5b4fdd56d.png" alt="" /></p>
+<p>가장 먼저 전역변수 구성을 통해 기본 할당자를 바꿔준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">cfg</span><span>(</span><span style="color: #89B4FA;font-style: italic;">not</span><span>(target_env</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;msvc&quot;</span><span>))]</span></span>
+<span class="giallo-l"><span>#[global_allocator]</span></span>
+<span class="giallo-l"><span>static ALLOC</span><span style="color: #9399B2;">:</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #94E2D5;"> =</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이거만 해도 자동으로 jemalloc을 통해 할당을 하게 된다.</p>
+<p>이번에는 프로파일 설정을 켜보자. 이것도 전역변수 방출을 통해 이뤄진다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">allow</span><span>(non_upper_case_globals)]</span></span>
+<span class="giallo-l"><span>#[export_name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;malloc_conf&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>pub static malloc_conf</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> &amp;</span><span>[u8]</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span>    b</span><span style="color: #A6E3A1;">&quot;prof:true,prof_active:true,lg_prof_sample:29,lg_prof_interval:30</span><span style="color: #F5C2E7;">\0</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>malloc_conf라는 전역변수를 방출하면 jemalloc이 가져다가 쓰는 것이다.</p>
+<p>지정한 옵션의 의미는 대략 이렇다.</p>
+<ol>
+<li>prof:true,prof_active:true는 둘다 프로파일링을 활성화하겠다는 의미를 가진다. prof_active는 즉각적인 활성화/비활성화 제어를 위해 존재한다.</li>
+<li>lg_prof_sample:29는 이건.. 뭐라고 하지? 측정되는 샘플 간의 간격을 뜻한다. 크기가 커질수록 성능 오버헤드가 줄어들지만 프로파일 정확도도 내려간다.</li>
+<li>lg_prof_interval:30는 1GB(2^30) 단위가 할당될때마다 덤프를 하겠다는 뜻이다.</li>
+</ol>
+<p>자세한 것은 문서를 참고한다.<br />
+<a rel="external" href="https://linux.die.net/man/3/jemalloc">https://linux.die.net/man/3/jemalloc</a></p>
+<p>아래는 예제 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[package]</span></span>
+<span class="giallo-l"><span>name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;just_test&quot;</span></span>
+<span class="giallo-l"><span>version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.1.0&quot;</span></span>
+<span class="giallo-l"><span>edition</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;2021&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span># See more keys and their definitions at https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//doc.rust-lang.org/cargo/reference/manifest.html</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[dependencies]</span></span>
+<span class="giallo-l"><span>axum</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.7.4&quot;</span></span>
+<span class="giallo-l"><span>tokio</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> versopm</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;1&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;full&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span>
+<span class="giallo-l"><span>tikv</span><span style="color: #94E2D5;">-</span><span>jemallocator</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span><span> version</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.5.4&quot;</span><span style="color: #9399B2;">,</span><span> features</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;profiling&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;unprefixed_malloc_on_supported_platforms&quot;</span><span>]</span><span style="color: #9399B2;"> }</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:thread</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use axum</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>http</span><span style="color: #94E2D5;">:</span><span>:StatusCode</span><span style="color: #9399B2;">,</span><span> response</span><span style="color: #94E2D5;">:</span><span>:IntoResponse</span><span style="color: #9399B2;">,</span><span> routing</span><span style="color: #94E2D5;">:</span><span>:get</span><span style="color: #9399B2;">,</span><span> Router</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">cfg</span><span>(</span><span style="color: #89B4FA;font-style: italic;">not</span><span>(target_env</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;msvc&quot;</span><span>))]</span></span>
+<span class="giallo-l"><span>#[global_allocator]</span></span>
+<span class="giallo-l"><span>static ALLOC</span><span style="color: #9399B2;">:</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #94E2D5;"> =</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">allow</span><span>(non_upper_case_globals)]</span></span>
+<span class="giallo-l"><span>#[export_name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;malloc_conf&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>pub static malloc_conf</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> &amp;</span><span>[u8]</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span>    b</span><span style="color: #A6E3A1;">&quot;prof:true,prof_active:true,lg_prof_sample:29,lg_prof_interval:30</span><span style="color: #F5C2E7;">\0</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // build our application with a route</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> app</span><span style="color: #94E2D5;"> =</span><span> Router::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(root))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/eat-cpu&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(eat_cpu))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/eat-memory&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(eat_memory))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // run our app with hyper, listening globally on port 3000</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> listener</span><span style="color: #94E2D5;"> =</span><span> tokio::net::TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:3000&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    axum</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">serve</span><span>(listener</span><span style="color: #9399B2;">,</span><span> app)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// basic handler that responds with a static string</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> root</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Hello, World!&quot;</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> eat_cpu</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut hash_set </span><span style="color: #94E2D5;">=</span><span> std::collections::HashSet::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0..1000000</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        hash_set</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insert</span><span>(i)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;cpu&quot;</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> eat_memory</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut v</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> Vec</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">i32</span><span style="color: #89DCEB;">&gt;</span><span style="color: #94E2D5;"> =</span><span> Vec::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 200mb of memory</span></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0..50_000_000</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        v</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(i)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;memory&quot;</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>CPU에 부하를 주는 코드와 메모리에 부하를 주는 코드가 둘다 있는 서버다.</p>
+<p>저러고 서버를 실행한 다음에, 메모리 할당을 유도해서 메모리 임계치에 이르면</p>
+<p><img src="/images/img_b359ab6277066b21.png" alt="" />
+자동으로 덤프 파일을 이렇게 던진다.<br />
+저걸 갖다가 잘 지지고 볶으면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="graphvizro-sigaghwahagi">graphviz로 시각화하기</h2>
+<p>덤프 파일을 어떻게 눈으로 볼 수 있게 만들어보자.<br />
+다음 종속성들을 설치한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo apt</span><span style="color: #94E2D5;">-</span><span>get install libjemalloc</span><span style="color: #94E2D5;">-</span><span>dev graphviz</span><span style="color: #94E2D5;"> -</span><span>y</span></span></code></pre>
+<p><img src="/images/img_9ea39b988776b34b.png" alt="" /></p>
+<p>그러면 jeprof라는 도구가 깔리는데</p>
+<p><img src="/images/img_7afd3bed3a55c9df.png" alt="" /></p>
+<p>이걸 다음과 같은 형태로 실행한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>jeprof</span><span style="color: #94E2D5;"> --</span><span>svg 실행파일 덤프파일</span><span style="color: #94E2D5;"> &gt;</span><span> heapdump</span><span style="color: #94E2D5;">.</span><span>svg</span></span></code></pre>
+<p><img src="/images/img_fc73dce73489037a.png" alt="" />
+그러면 svg 파일이 생성이 되는데</p>
+<br>
+<p><img src="/images/img_d676aa2eaff3c666.png" alt="" />
+이걸 보고 따라가면 된다.</p>
+<br>
+<p><img src="/images/img_c5a002d93c3ea36f.png" alt="" />
+실제로 메모리를 많이도 쳐먹는 eat_memory 함수가 트레이스에 잡힌 것을 볼 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="prof-dongjeogeuro-ggeossda-kyeogi">prof 동적으로 껐다 켜기</h2>
+<p>근데 저 prof를 항상 켜놓는건 경우에 따라 성능적 손해가 될 수도 있다.</p>
+<p>샘플링이 찰때마다 파일이 쌓이는 것도 그렇고, 이걸 켠 상태에서는 메모리 할당에 약간의 오버헤드가 생긴다.<br />
+물론 그 성능 저하가 심각한 편은 아니다. 최대 2% 정도라고 한다.<br />
+그래서 이건 선택의 문제다. Facebook의 경우에는 이런 옵션을 항상 켜둔다고 한다.</p>
+<p>그래도 이 prof를 선택적으로 껐다 켜고 싶다면, 방법은 있다.</p>
+<p><img src="/images/img_eda2db76dd48704b.png" alt="" />
+우선 prof_active 설정을 기본 false 값으로 깔아준다.<br />
+prof는 true여야 한다.</p>
+<p>그리고 prof_active를 선택적으로 변경할 수 있도록 구현을 해주면 된다.<br />
+그러려면 내부 C 함수를 호출해야 하는데, 다행히 누가 래퍼를 좀 만들어둔게 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>jemalloc_pprof</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;0.1.0&quot;</span></span></code></pre>
+<p><img src="/images/img_b8f2f94a203575e4.png" alt="" />
+집어넣고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>pub async fn</span><span style="color: #89B4FA;font-style: italic;"> enable_heap_debug</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>impl IntoResponse</span><span style="color: #9399B2;">,</span><span> (StatusCode</span><span style="color: #9399B2;">,</span><span> String)</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut prof_ctl</span><span style="color: #94E2D5;"> =</span><span> jemalloc_pprof::</span><span style="color: #FAB387;">PROF_CTL</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_ref</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span>await;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    if prof_ctl.activated() </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        return</span><span style="color: #89B4FA;font-style: italic;"> Ok</span><span>(</span><span style="color: #A6E3A1;">&quot;heap profiling already activated&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    prof_ctl</span></span>
+<span class="giallo-l"><span>        .activate()</span></span>
+<span class="giallo-l"><span>        .map_err(|err| (StatusCode</span><span style="color: #94E2D5;">:</span><span>:INTERNAL_SERVER_ERROR</span><span style="color: #9399B2;">,</span><span> err.to_string()))?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 30초 동안만 활성화</span></span>
+<span class="giallo-l"><span>    thread</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(std::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_secs</span><span>(</span><span style="color: #FAB387;">30</span><span>));</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    prof_ctl</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">deactivate</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(</span><span style="color: #A6E3A1;">&quot;heap profiling activated&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_d5abf1009849c53b.png" alt="" />
+다음과 같이 제어 로직을 구현한다.<br />
+이 경우에는 API가 호출되면 30초 동안만 프로파일링이 활성화되도록 했다.<br />
+제어 스타일은 취향에 따라 선택하면 된다.</p>
+<p>아래는 전체 코드다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use std</span><span style="color: #9399B2;">:</span><span>:thread</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use axum</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #9399B2;">{</span><span>http</span><span style="color: #94E2D5;">:</span><span>:StatusCode</span><span style="color: #9399B2;">,</span><span> response</span><span style="color: #94E2D5;">:</span><span>:IntoResponse</span><span style="color: #9399B2;">,</span><span> routing</span><span style="color: #94E2D5;">:</span><span>:get</span><span style="color: #9399B2;">,</span><span> Router</span><span style="color: #9399B2;">};</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">cfg</span><span>(</span><span style="color: #89B4FA;font-style: italic;">not</span><span>(target_env</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;msvc&quot;</span><span>))]</span></span>
+<span class="giallo-l"><span>#[global_allocator]</span></span>
+<span class="giallo-l"><span>static ALLOC</span><span style="color: #9399B2;">:</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #94E2D5;"> =</span><span> tikv_jemallocator</span><span style="color: #9399B2;">:</span><span>:Jemalloc</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">allow</span><span>(non_upper_case_globals)]</span></span>
+<span class="giallo-l"><span>#[export_name</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &quot;malloc_conf&quot;</span><span>]</span></span>
+<span class="giallo-l"><span>pub static malloc_conf</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> &amp;</span><span>[u8]</span><span style="color: #94E2D5;"> =</span></span>
+<span class="giallo-l"><span>    b</span><span style="color: #A6E3A1;">&quot;prof:true,prof_active:false,lg_prof_sample:29,lg_prof_interval:30</span><span style="color: #F5C2E7;">\0</span><span style="color: #A6E3A1;">&quot;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[tokio::main]</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // build our application with a route</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> app</span><span style="color: #94E2D5;"> =</span><span> Router::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(root))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/eat-cpu&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(eat_cpu))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/eat-memory&quot;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> get</span><span>(eat_memory))</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        .</span><span style="color: #89B4FA;font-style: italic;">route</span><span>(</span><span style="color: #A6E3A1;">&quot;/debug/heap/enable&quot;</span><span style="color: #9399B2;">,</span><span> axum::routing::</span><span style="color: #89B4FA;font-style: italic;">get</span><span>(enable_heap_debug))</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // run our app with hyper, listening globally on port 3000</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> listener</span><span style="color: #94E2D5;"> =</span><span> tokio::net::TcpListener::</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(</span><span style="color: #A6E3A1;">&quot;0.0.0.0:3000&quot;</span><span>)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>    axum</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">serve</span><span>(listener</span><span style="color: #9399B2;">,</span><span> app)</span><span style="color: #94E2D5;">.</span><span>await</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">// basic handler that responds with a static string</span></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> root</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;Hello, World!&quot;</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> eat_cpu</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut hash_set </span><span style="color: #94E2D5;">=</span><span> std::collections::HashSet::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0..1000000</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        hash_set</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">insert</span><span>(i)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;cpu&quot;</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>async fn</span><span style="color: #89B4FA;font-style: italic;"> eat_memory</span><span>()</span><span style="color: #94E2D5;"> -&gt; &amp;</span><span style="color: #A6E3A1;">&#39;static str {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> mut v</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> Vec</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">i32</span><span style="color: #89DCEB;">&gt;</span><span style="color: #94E2D5;"> =</span><span> Vec::</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 200mb of memory</span></span>
+<span class="giallo-l"><span>    for i</span><span style="color: #CBA6F7;"> in</span><span style="color: #FAB387;"> 0..50_000_000</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        v</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">push</span><span>(i)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;memory&quot;</span></span>
+<span class="giallo-l"><span>}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>pub async fn</span><span style="color: #89B4FA;font-style: italic;"> enable_heap_debug</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> Result</span><span style="color: #94E2D5;">&lt;</span><span>impl IntoResponse</span><span style="color: #9399B2;">,</span><span> (StatusCode</span><span style="color: #9399B2;">,</span><span> String)</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let mut prof_ctl</span><span style="color: #94E2D5;"> =</span><span> jemalloc_pprof::</span><span style="color: #FAB387;">PROF_CTL</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">as_ref</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">lock</span><span>()</span><span style="color: #94E2D5;">.</span><span>await;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    if prof_ctl.activated() </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        return</span><span style="color: #89B4FA;font-style: italic;"> Ok</span><span>(</span><span style="color: #A6E3A1;">&quot;heap profiling already activated&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    prof_ctl</span></span>
+<span class="giallo-l"><span>        .activate()</span></span>
+<span class="giallo-l"><span>        .map_err(|err| (StatusCode</span><span style="color: #94E2D5;">:</span><span>:INTERNAL_SERVER_ERROR</span><span style="color: #9399B2;">,</span><span> err.to_string()))?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">    // 30초 동안만 활성화</span></span>
+<span class="giallo-l"><span>    thread</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">sleep</span><span>(std::time::Duration::</span><span style="color: #89B4FA;font-style: italic;">from_secs</span><span>(</span><span style="color: #FAB387;">30</span><span>));</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    prof_ctl</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">deactivate</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">unwrap</span><span>();</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(</span><span style="color: #A6E3A1;">&quot;heap profiling activated&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이러면 enable 함수가 실행중이지 않을 때는 프로파일링이 수행되지 않고, 성능에도 아무런 지장이 없을 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.polarsignals.com/blog/posts/2023/12/20/rust-memory-profiling">https://www.polarsignals.com/blog/posts/2023/12/20/rust-memory-profiling</a><br />
+<a rel="external" href="https://www.magiroux.com/rust-jemalloc-profiling/">https://www.magiroux.com/rust-jemalloc-profiling/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223380948234/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Linux] 리눅스 배포판, 버전 확인하기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223377703932/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 문자열: str 타입<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

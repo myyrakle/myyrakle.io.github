@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Redis] 시스템구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223487017370/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Redis] 시스템구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223487017370/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-06-21T00:00:00+00:00">
+    <meta property="article:tag" content="Redis">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223487017370/">[Redis] 시스템구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-06-21T00:00:00+00:00"><time datetime="2024-06-21T00:00:00+00:00">2024.06.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="478 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/redis/">Redis</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223487017370" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>사람들이 Redis에 대해서 설명할때 자주 말하는 특징 중 하나는, 싱글 스레드 시스템이라는 것이다.<br />
+그 전반적인 구조에 대해서 한번 정리를 해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="in-memori-siseutem">인 메모리 시스템</h2>
+<p>이게 뭐냐면, 메모리, 그러니까 RAM에 데이터를 저장하는 DB라는 것이다.<br />
+그래서 디스크에 데이터를 저장하는 고전적인 의미에서의 DB라고는 부를 수 없다.</p>
+<p>일반적인 RDB들이 디스크에 데이터를 저장하고, 메모리를 최적화의 수단으로 사용한다.</p>
+<p><img src="/images/img_12eb69c15f68e69f.png" alt="" />
+큰 데이터를 저장하기 유리하고, 장애시의 대응도 안정적이지만, 성능, 특히 레이턴시를 극단적으로 최적화하는데는 한계가 있다. 기본적으로 캐시를 타지 못하면 디스크를 거치기 때문에다.<br />
+보통은 밀리세컨드 수준이라고 봐도 된다.</p>
+<p>하지만 레디스는 바로 데이터를 메모리에 저장하고, 디스크를 선택적인 백업 수단으로 사용한다.</p>
+<p><img src="/images/img_a8e7fa542365c801.png" alt="" /></p>
+<p>그래서 레디스는 기본 성능이 일단 빠르다.</p>
+<p>공간도 작고 서버 재부팅시 데이터가 날라간다는 점이 있지만,<br />
+단순한 메모리 전달자 수준이라서 레이턴시를 마이크로세컨드 수준으로 보장할 수 있다는게 가장 큰 장점이다.</p>
+<p>근데 그정도로 민감한 레이턴시 보장이 필요한게 아니라면 굳이 레디스를 쓸 이유는 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="singgeul-seuredeu-siseutem">싱글 스레드 시스템</h2>
+<p>Redis는 일단 싱글 스레드 시스템은 맞다.<br />
+DB 엔진 수준에서 동시에 한번의 연산만이 가능하다.</p>
+<p>그래서 Redis는 멀티코어에 올려도 이점이 별로 없다.<br />
+성능 확장을 위해서는 단일코어 머신을 여러개 띄워서 스케일아웃하는 형태로 확장을 해야 한다.</p>
+<p>레디스가 싱글 스레드 구조를 채택한 이유는 구조를 단순하게 유지하기 위한 점이 크다.<br />
+멀티스레드 동기화나 복잡한 성능 저하 요인이 별로 없기 때문에 오히려 성능이 괜찮은 부분도 있다.</p>
+<p>그리고 단일 스레드로 동작하기 때문에 원자성을 강력하게 보장할 수 있다는 장점도 있다.</p>
+<p>Redis 7에서는 스레드를 도입하겠다는 말이 있긴 한데, 정해진건 아니다.</p>
+<br>
+<br>
+<br>
+<h2 id="i-o-meoltipeulregsing">I/O 멀티플렉싱</h2>
+<p>근데 단일 스레드를 쓴다고 해서 동시성을 활용하지 못한다는 것은 아니다.</p>
+<p>Redis의 코어 엔진 자체는 싱글 스레드지만, Request를 받아서 사용자 요청을 핸들링하는 부분은 멀티스레드를 통해 다중화한다.</p>
+<p><img src="/images/img_9e3b9095ccaf1507.png" alt="" />
+그래서 사실 실제 read/write 수준에서 발생하는 병목은 해결하진 못하지만, 탄력적으로 네트워크 요청/응답을 다중화해서 사용자 수준에서 느끼는 처리량은 크게 나쁘지 않다.<br />
+요청 태스크들이 단일 이벤트루프에 요청을 쏘면, 코어 엔진은 이벤트루프를 기반으로 결과를 핸들링한다.</p>
+<p>네트워크 핸들링에는 epoll/kqueue을 활용한다.</p>
+<p>Redis 6에서 Thread가 추가되었다고 말하는 것도 이 네트워크 I/O 핸들링을 위해서 멀티스레드를 활용했다는 말이다.</p>
+<br>
+<br>
+<br>
+<h2 id="hwagjang">확장</h2>
+<p>레디스는 자체적인 한계 탓에 스케일업은 좀 효율성이 떨어지고, 서버를 여러개 띄워서 사용량을 확장하는 멀티노드 구성을 많이 사용한다.</p>
+<p>Redis에서 멀티노드를 구성하는 방법은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223485062023">https://blog.naver.com/sssang97/223485062023</a></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://velog.io/@hope1213/Redis-%EC%A0%95%EB%A7%90-%EC%8B%B1%EA%B8%80%EC%8A%A4%EB%A0%88%EB%93%9C%EC%9D%BC%EA%B9%8C">https://velog.io/@hope1213/Redis-%EC%A0%95%EB%A7%90-%EC%8B%B1%EA%B8%80%EC%8A%A4%EB%A0%88%EB%93%9C%EC%9D%BC%EA%B9%8C</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/48035646/if-redis-is-single-threaded-how-can-it-be-so-fast">https://stackoverflow.com/questions/48035646/if-redis-is-single-threaded-how-can-it-be-so-fast</a><br />
+<a rel="external" href="https://www.linkedin.com/pulse/why-heck-single-threaded-redis-lightning-fast-beyond-in-memory-kapur">https://www.linkedin.com/pulse/why-heck-single-threaded-redis-lightning-fast-beyond-in-memory-kapur</a><br />
+<a rel="external" href="https://redis.io/blog/multiplexing-explained/">https://redis.io/blog/multiplexing-explained/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223486699655/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 데이터베이스의 덤프와 복원<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223485042182/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] Data directory 변경<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

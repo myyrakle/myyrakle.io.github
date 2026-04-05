@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] Control Plane과 가용성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224210673704/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] Control Plane과 가용성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224210673704/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2026-03-10T00:00:00+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224210673704/">[k8s] Control Plane과 가용성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-03-10T00:00:00+00:00"><time datetime="2026-03-10T00:00:00+00:00">2026.03.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="512 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224210673704" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>control plane은 쿠버네티스의 심장이라고 할 수 있는 존재다.<br />
+각 노드에 서버를 프로비저닝하고, 그 서버들의 상태를 저장하는 가장 중요한 상태 저장소이기 때문이다.</p>
+<p>그래서 control plane이 다운된다면 쿠버네티스 클러스터 전체의 신뢰도가 사라지게 된다.<br />
+여기서는 control plane을 구성하고 관리하는 방법들, 선택지들에 대해서 간단히 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="basic-akitegcyeo">Basic 아키텍쳐</h2>
+<p>대부분의 k8s 배포판에서는 전형적인 master-slave 구조로 구성을 해준다.<br />
+master 노드에 control plane 서버와 etcd 저장소를 세팅하고, control plane 서버가 etcd에 데이터를 저장하면서 워커 노드들을 통제하는 것이다.</p>
+<p><img src="/images/img_c8c99f19ac2529e9.png" alt="" />
+가용성이 매우 중요한 경우가 아니라면 이 정도로도 충분하다.</p>
+<p>하지만 상기했듯이 이건 리스크가 제법 크다.<br />
+control plane에 장애가 발생한다면 Pod에 대한 스케줄링이 일단 중단된다. 개별 Pod들은 개별 Node의 컨테이너 런타임이 관리하니까 기존 Pod들도 죽진 않지만, 지속적인 안정성을 담보할 수 없는 것이다. 장애가 발생한 Pod의 재실행이라든지, 신규 리소스의 재할당 등이 망가진다.</p>
+<p>그리고 마스터 노드의 디스크에 문제가 생긴다면 쿠버네티스의 상태 자체가 영구적으로 망가질 수도 있다.<br />
+쿠버네티스라고 뭘 마법처럼 잘 저장해주는게 아니라, etcd라는 데이터베이스에 그냥 API 서버들처럼 서버들의 상태를 저장하는 것이기 때문이다.<br />
+저게 소실되면 그냥 서버 전체 정보가 전부 증발하는 것이다.</p>
+<p>참고: 여기서는 etcd를 계속 언급하지만, 하나의 예시일 뿐이다. etcd 말고 다른 DB를 쓸 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gogayongseong-gujo">고가용성 구조</h2>
+<p>아무튼 그래서 정말 가용성이 중요한 경우에는 Control Plane을 다중으로 구성하는 것을 권장한다.<br />
+이론적인 고가용성을 달성하려면 최소 3개의 Control Plain 노드가 필요하다.</p>
+<p><img src="/images/img_e283ca685e044f40.png" alt="" />
+그림으로 표현하면 대충 이런 식이 될 것이다.</p>
+<p>근데 여기서도 갈림길이 생긴다. 사실 Control Plane 자체를 다중화하는 것은 그렇게 어려운 문제는 아니다.<br />
+Control Plane 자체는 상태 저장소가 아니라 API 서버이기 때문에 상태에 대한 문제가 없기 때문이다.</p>
+<p>결국 중요한 것은 상태를 어디 저장하는지다. 그러면 이 상황에서 데이터를 어디에 저장해야 할까?<br />
+2가지 선택지가 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gogayongseong-oebu-db">고가용성 - 외부 DB</h2>
+<p>가장 단순하고 직관적인 선택지는, 그냥 etcd 클러스터를 별도로 구성하는 것이다.</p>
+<p><img src="/images/img_3f4f70b84a640268.png" alt="" />
+일반적인 DB 클러스터 구성하듯이 적절히 멀티노드 구성하고, 그 DB 클러스터를 Control Plane들이 참조하게 한다. 우리가 흔히 생각하는 API 서버와 DB의 관계다.</p>
+<p>이러면 control plane이 하나 죽거나, etcd 노드가 하나 뻗더라도 전체 가용성을 저해하지 않고 서비스 운영이 가능해진다. 나머지 노드들이 대신 처리해줄 수 있기 때문이다.</p>
+<p>이 경우 ETCD 클러스터가 설치된 노드들은 독립적인 별도 장비를 사용하는 편이다.그래서 대체로 하드웨어가 좀 더 많이 필요하다.</p>
+<p>kubeadm으로 외부 etcd를 구성하려면, init/join할때 다음과 같이 외부 etcd 접속정보만 적절히 넣어주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">---</span></span>
+<span class="giallo-l"><span>apiVersion</span><span style="color: #9399B2;">:</span><span> kubeadm</span><span style="color: #94E2D5;">.</span><span>k8s</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>v1beta4</span></span>
+<span class="giallo-l"><span>kind</span><span style="color: #9399B2;">:</span><span> ClusterConfiguration</span></span>
+<span class="giallo-l"><span>kubernetesVersion</span><span style="color: #9399B2;">:</span><span> stable</span></span>
+<span class="giallo-l"><span>controlPlaneEndpoint</span><span style="color: #9399B2;">:</span><span style="color: #A6E3A1;"> &quot;LOAD_BALANCER_DNS:LOAD_BALANCER_PORT&quot;</span><span> # change</span><span style="color: #F38BA8;"> this</span><span> (see below)</span></span>
+<span class="giallo-l"><span>etcd</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  external</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    endpoints</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//ETCD_0_IP:2379 # change ETCD_0_IP appropriately</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//ETCD_1_IP:2379 # change ETCD_1_IP appropriately</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">      -</span><span> https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//ETCD_2_IP:2379 # change ETCD_2_IP appropriately</span></span>
+<span class="giallo-l"><span>    caFile</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>kubernetes</span><span style="color: #94E2D5;">/</span><span>pki</span><span style="color: #94E2D5;">/</span><span>etcd</span><span style="color: #94E2D5;">/</span><span>ca</span><span style="color: #94E2D5;">.</span><span>crt</span></span>
+<span class="giallo-l"><span>    certFile</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>kubernetes</span><span style="color: #94E2D5;">/</span><span>pki</span><span style="color: #94E2D5;">/</span><span>apiserver</span><span style="color: #94E2D5;">-</span><span>etcd</span><span style="color: #94E2D5;">-</span><span>client</span><span style="color: #94E2D5;">.</span><span>crt</span></span>
+<span class="giallo-l"><span>    keyFile</span><span style="color: #9399B2;">:</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>kubernetes</span><span style="color: #94E2D5;">/</span><span>pki</span><span style="color: #94E2D5;">/</span><span>apiserver</span><span style="color: #94E2D5;">-</span><span>etcd</span><span style="color: #94E2D5;">-</span><span>client</span><span style="color: #94E2D5;">.</span><span>key</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="gogayongseong-naebu-db">고가용성 - 내부 DB</h2>
+<p>또 하나의 방법은, 개별 Control Plane 노드에 etcd를 각자 구성하게 하는 것이다.<br />
+stacked etcd라고도 부르고, 비교적 더 일반적인 선택지다.</p>
+<p><img src="/images/img_7ac1cc6906ccfa3c.png" alt="" />
+Control Plane와 etcd 한 쌍이 하나의 독립적인 DB가 되고, Control Plane 그룹이 하나의 분산 DB가 되는 것이다.<br />
+kubeadm의 HA 구성에서는 실제로 Raft 알고리즘을 통해 데이터를 분산하고 공유한다. Leader도 선출하고 그런다. 그래서 최소 쿼럼 충족을 위해 3개 이상의 노드가 필수적이다.</p>
+<p>외부 etcd 방식에 비해 하드웨어 자원이 덜 필요하다는 장점이 있다. 마찬가지로 가용성 수준은 괜찮다.<br />
+하나의 노드가 뻗더라도 나머지 노드들로 새 Leader를 선출하든지 해서 안정성을 유지할 수 있다.</p>
+<p>만약 노드를 control plain 노드로 등록하려면, join할때 전용 플래그를 넣으면 된다.<br />
+kubeadm 배포판의 경우에는 --control-plane 플래그를 넣으면, node로 참여함과 동시에 control plane으로 설정된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubeadm join</span><span style="color: #94E2D5;"> --</span><span>control</span><span style="color: #94E2D5;">-</span><span>plane</span><span style="color: #94E2D5;"> ...</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/ha-topology/">https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/ha-topology/</a><br />
+<a rel="external" href="https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/">https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224212003710/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Quarkus] 소개<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224210725043/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] 다중 영역에서의 클러스터<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

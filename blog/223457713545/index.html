@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Algorithm] consistent hash (hash ring) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223457713545/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Algorithm] consistent hash (hash ring)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223457713545/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2024-05-25T00:00:00+00:00">
+    <meta property="article:tag" content="자료구조&#x2F;알고리즘">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223457713545/">[Algorithm] consistent hash (hash ring)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2024-05-25T00:00:00+00:00"><time datetime="2024-05-25T00:00:00+00:00">2024.05.25</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="346 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/jaryogujo-algorijeum/">자료구조&#x2F;알고리즘</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223457713545" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>consistent hash은 DB의 샤딩 같은 분산 저장에 응용되는 테크닉이다. hash ring이라고도 부른다.</p>
+<p>대표적인 대형 분산 DB인 Dynamo와 Cassandra가 이 방식으로 샤딩을 구현한다.</p>
+<br>
+<br>
+<h2 id="munje">문제</h2>
+<p>예를 들어, 데이터를 특정 조건을 기준으로 각각의 노드-샤트에 나눠서 저장한다고 가정해보자.</p>
+<p><img src="/images/img_d02c5ba4e845dc0f.png" alt="" />
+https://binux.tistory.com/119<br />
+그러면 데이터의 특정 샤드 키를 기준으로 해시값을 생성하고, 그 값을 각각의 샤드에 저장하는 것이 일반적인 방법이다.</p>
+<p>가령, 샤드 키가 정수고 샤드가 3개라면 나머지 연산(x%3) 을 통해 0~2의 해시값을 추출해서 저장할 수 있을 것이다.</p>
+<p>그런데 샤드가 2개 늘어서 5개가 된다면 어떨 것 같은가?<br />
+그러면 해시 계산법도 샤드 개수에 맞춰 변경될텐데, (x%5) 기존 저장 데이터들을 바뀐 해시값으로는 매칭시킬 수가 없다.</p>
+<p>그렇다고 샤드가 바뀔때마다 해시값에 맞춰서 데이터 재배치를 계속 돌리는 것도 말이 안되는 방법이다.</p>
+<br>
+<br>
+<h2 id="hash-ring">hash ring</h2>
+<p>hash ring은 조금 독특한 방법으로 이러한 문제틀을 해결한다. 재배치를 아예 피하지는 못하고, 좀 줄이는 정도다.</p>
+<p><img src="/images/img_407dbef5a7a93a6a.png" alt="" />
+https://binux.tistory.com/119<br />
+일단 유한한 범위를 가지는 실수 해시값을 추출하게끔 만든다. 예를 들어 0~1로 범위를 잡을 수 있겠다.</p>
+<p>그리고 샤드가 3개라면, 각각의 샤드는 해시값 영역을 가진다. 1샤드는 0~0.3, 2샤드는 0.3~0.6, 3샤드는  0.6~1 같은 식으로 할당하고, 각각의 해시값을 저 범위에 들어가는 샤드로 매칭시키는 것이다.</p>
+<br>
+<p><img src="/images/img_e6faa8c5e8f1858b.png" alt="" />
+https://binux.tistory.com/119<br />
+이 구조에서 샤드가 추가되면, 적당히 어느 범위에 새로운 샤드의 영역을 부여해준다.<br />
+0.6~1를 차지하던 3샤드의 범위를 가져가서 0.8~1 영역을 배정하고, 해당 위치로 매칭되던 항목들만 재배치해주면 된다.</p>
+<br>
+<p><img src="/images/img_d2e01f18bd21e87f.png" alt="" />
+https://binux.tistory.com/119<br />
+그리고 샤드가 제거될 때는 그 영역에 있던 매칭 항목만 재배치해주면 된다.</p>
+<p>근데 여기에는 문제가 있다. 위의 그림 2가지만 봐도 알겠지만, 샤드가 추가되거나 줄어들다보면 샤드가 갖고있는 영역이 불균등하게 분포될 수 있다는 것이다.<br />
+hash ring은 이러한 단점을 극복하기 위해 vnode라는 매커니즘을 사용한다.</p>
+<br>
+<br>
+<h2 id="vnode">vnode</h2>
+<p>가상 노드라는 말인데, 그렇게 거창하지는 않다.</p>
+<p><img src="/images/img_e0e687e1a21020f3.jpg" alt="" /></p>
+<p><img src="/images/img_d55b480d5a58ee25.jpg" alt="" />
+그냥 실제 샤드 하나마다 여러개의 vnode 영역을 잡아놓고, 자잘하고 랜덤하게 영역을 차지하게 두는 것이다.<br />
+그래서 해시값이 나오면 그 주변에 위치한 vnode의 실제 샤드에 저장하도록 한다.</p>
+<p>범위를 더 잘게 쪼개고 흩뿌려서 집중을 줄이는 간단한 방법론이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.designgurus.io/course-play/grokking-the-advanced-system-design-interview/doc/6376795982f3782df575c65f">https://www.designgurus.io/course-play/grokking-the-advanced-system-design-interview/doc/6376795982f3782df575c65f</a><br />
+<a rel="external" href="https://binux.tistory.com/119">https://binux.tistory.com/119</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223458517195/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>rombok v0.1.2<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223456555706/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] etcd<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

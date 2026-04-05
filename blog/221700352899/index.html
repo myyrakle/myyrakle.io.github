@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] 동적 디스패치 (번역) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/221700352899/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] 동적 디스패치 (번역)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/221700352899/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2019-11-07T00:00:00+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/221700352899/">[Rust] 동적 디스패치 (번역)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2019-11-07T00:00:00+00:00"><time datetime="2019-11-07T00:00:00+00:00">2019.11.07</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="221 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/221700352899" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>먼저 이전 포스팅을 참조하길 바란다.<br />
+<a rel="external" href="https://m.blog.naver.com/sssang97/221681140178">https://m.blog.naver.com/sssang97/221681140178</a></p>
+<p>러스트는 트레잇 객체라 불리는 기능을 통해 동적 디스패치를 구현한다.</p>
+<p>Foo라는 타입이 있을 경우, &amp;Foo나 Box<Foo> 등을 트레잇 객체 타입이라고 한다. 이러한 녀석들은 런타임에만 실제 타입을 알 수 있다.</p>
+<p>트레잇 객체는 포인터를 통해 트레잇을 구현한 구상 타입을 해당 트레잇 타입으로 캐스팅하거나(예: &amp;x as &amp;Foo), 트레잇 타입의 매개변수로 강제전달(coercion)할때 생성된다.</p>
+<p>이러한 트레잇 객체의 강제전달(coercions)과 캐스팅은 <strong>&amp;mut T</strong> -&gt; <strong>&amp;mut Foo</strong>와, <strong>Box<T></strong> -&gt; <strong>Box<Foo></strong> 형태의 포인터들에 대해서도 잘 동작한다.<br />
+강제전달과 캐스팅은 이런 점에서는 동등하다.</p>
+<p>이러한 동작은 포인터의 타입에 대한 컴파일러의 지식을 '지우는' 것처럼 보인다.<br />
+이런 이유로 트레잇 객체를 가리켜 '타입 지우개'라고 부르기도 한다.</p>
+<p>다시 위의 예제로 돌아가보자. 이제 우리는 트레잇 객체를 얻어서 동적 디스패치를 수행하도록 할 수 있다.</p>
+<br>
+<p>**fn do_something(x: &amp;Foo) **<br />
+**{ **<br />
+**    x.method(); **<br />
+**} **</p>
+<p>**fn main() **<br />
+**{ **<br />
+**    let x = 5u8; **<br />
+**    do_something(&amp;x as &amp;Foo); **<br />
+**} **</p>
+<p>혹은 강제전달로</p>
+<p>**fn do_something(x: &amp;Foo) **<br />
+**{ **<br />
+**    x.method(); **<br />
+**} **</p>
+<p>**fn main() **<br />
+**{ **<br />
+**    let x = "Hello".to_string(); **<br />
+**    do_something(&amp;x); **<br />
+**} **</p>
+<p>트레잇 객체를 받는 함수는 Foo를 구현하는 각각의 타입들에 대해서는 알고 있는게 없다.</p>
+<p>그래서 정적 디스패치와는 다르게 하나의 복사본만이 생성되고, 대체로 더 적은 코드를 결과로 뱉는다.(아닐수도 있다.)</p>
+<p>하지만, 이런저런 추가 비용들이 좀 따른다.<br />
+더 느린 가상함수를 호출해야 하고,<br />
+함수 인라인이나 관련 최적화들을 억제해야 하기 때문이다.</p>
+<br>
+<p><a rel="external" href="https://doc.rust-lang.org/1.30.0/book/first-edition/trait-objects.html#representation">https://doc.rust-lang.org/1.30.0/book/first-edition/trait-objects.html#representation</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/221702272074/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Git] 시작<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/221700370814/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Rust] 트레잇 객체의 구조 (번역)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

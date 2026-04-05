@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>DynamoDB의 구조 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223720945846/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="DynamoDB의 구조">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223720945846/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-01-10T00:00:00+00:00">
+    <meta property="article:tag" content="데이터베이스">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223720945846/">DynamoDB의 구조</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-01-10T00:00:00+00:00"><time datetime="2025-01-10T00:00:00+00:00">2025.01.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="948 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/deiteobeiseu/">데이터베이스</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223720945846" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>다이나모는 분산 DB 환경에 있어서 중요한 제반을 쌓은 데이터베이스 시스템 중 하나다.<br />
+그 개략적인 구조에 대해서 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="yeogsa">역사</h2>
+<p>DynamoDB는 처음부터 서비스로 공개하려고 만든게 아니라, 아마존에서 내부 시스템 관리용으로 사용하던 것을 고도화하던 것이 어쩌다보니 공개 서비스가 된 것이다.<br />
+아마존도 처음에는 RDB를 쓰다가, 나중에는 팀마다 가벼운 Dynamo의 프로토타입 - KV DB를 단일 노드로 띄워서 구성하곤 했었다. 그러다가 매번 설치하고 구성하는게 불편하니까 이래저래 엮다보니 분산 DB가 탄생한 것이다.</p>
+<p>이게 AWS 서비스로서 출시된건 2012년이지만, 그 이전부터 어느 정도 내부적으로 완성해서 사용하기는 했을 것이다. 한참 전인 2007년에 설계를 어느 정도 마치고 이론적 기반을 "DynamoDB 백서"로 공개했다. 지금도 자유롭게 읽을 수 있다.</p>
+<p>게다가 DynamoDB 자체는 오픈소스가 아니지만 DynamoDB 개발자들이 오픈소스 활동도 많이 하고 해서 전반적인 분산 DB 환경에 큰 영향을 끼쳤다.<br />
+대표적으로 CassandraDB가 DynamoDB의 아이디어를 상당수 가져가서 만들어진 오픈소스 DB다.</p>
+<br>
+<br>
+<br>
+<h2 id="indegseu-gujo-lsm-teuri">인덱스 구조: LSM 트리</h2>
+<p>CassandraDB를 포함한 NoSQL DB들이 전통적인 RDB들과 차별화되는 부분이  인덱스 구조다.</p>
+<p>LSM 기반의 인덱스 시스템을 사용하고, 이를 기반으로 데이터를 저장하기 때문에 RDB 대비해서 write 성능, 그 중에서도 append(insert) 성능이 매우 뛰어나다.</p>
+<p>자세한 원리나 구조는 별도 포스트를 참조한다.</p>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223232181952">https://blog.naver.com/sssang97/223232181952</a></p>
+<br>
+<br>
+<br>
+<h2 id="teibeul-gujo">테이블 구조</h2>
+<p>DynamoDB는 단순한 Key-Value 데이터베이스라서, 스키마를 엄밀하게 정의하지는 않고 쓴다.<br />
+일반 값들은 그때그때 아무렇게나 쑤셔넣을 수 있고, 중요한건 파티션 키와 정렬 키다. 이건 사전에 정의해야 한다.</p>
+<p><img src="/images/img_410b32aa3503ff8a.jpg" alt="" />
+<a rel="external" href="https://medium.com/rate-labs/%EC%95%84-%ED%95%B4%EB%B4%90-dynamodb-%EB%93%A4%EC%96%B4%EA%B0%84%EB%8B%A4-f8da282bc625">https://medium.com/rate-labs/%EC%95%84-%ED%95%B4%EB%B4%90-dynamodb-%EB%93%A4%EC%96%B4%EA%B0%84%EB%8B%A4-f8da282bc625</a><br />
+파티션 키는 가장 기본이 되는 키로, 저 값을 기준으로 어떤 파티션에 저장할지를 결정한다.<br />
+파티션키만 사용하고 정렬키를 사용하지 않는다면 파티션 키가 데이터의 유일성을 보장한다.</p>
+<p>파티션키와 정렬키를 사용할 경우에는 파티션키+정렬키의 조합으로 데이터 유일성이 보장된다.</p>
+<p>데이터를 탐색할 때는 항상 데이터가 저장된 파티션을 찾고 -&gt; 파티션에서 정렬 키를 기준으로 스캔을 하기 때문에 파티션키+정렬키가 항상 조건에 포함되는 것이 이상적인 사용 방식이다.</p>
+<p>테이블 사용 설계 관련해서는 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223680577129">https://blog.naver.com/sssang97/223680577129</a></p>
+<br>
+<br>
+<br>
+<h2 id="cap">CAP</h2>
+<p><a rel="external" href="https://blog.naver.com/sssang97/223115732041">https://blog.naver.com/sssang97/223115732041</a><br />
+DynamoDB는 multi master 구조로 일관성을 희생하는 대신, 매우 높은 가용성과 쓰기/읽기 확장능력을 달성한 시스템이다.</p>
+<p>그래서 일반적으로 읽기를 해서 값을 가져오더라도 그게 최신 값이 아닐 수도 있다.</p>
+<p>하지만 강력한 일관성 옵션 ConsistentRead를 사용해서 읽기를 요청한다면 최신 값을 가져오도록 할 수 있다. 대신 읽기 비용 단위가 2배로 과금된다.</p>
+<br>
+<br>
+<br>
+<h2 id="teuraenjaegsyeon">트랜잭션</h2>
+<p>DynamoDB에도 의외로 트랜잭션 단위가 제공된다.</p>
+<p>TransactWriteItems API를 사용하면 최대 100개의 쓰기 작업을 한번에 묶어서 원자적으로 처리되게 할 수 있다. 여러 테이블에 동시에 날리는 것도 가능하다.<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/transaction-apis.html">https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/transaction-apis.html</a></p>
+<p>DynamoDB의 분산 트랜잭션은 2단계 커밋을 응용해서 만들어졌다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223465481384">https://blog.naver.com/sssang97/223465481384</a></p>
+<p>트랜잭션 처리도 통상적으로 기존 쓰기/읽기와 비교해서 2배 정도의 요금 단위가 부과된다고 보면 된다.</p>
+<p>이건 경쟁자인 카산드라에 비해 우위를 가지는 부분이다. 카산드라는 트랜잭션 단위가 없다.</p>
+<br>
+<br>
+<br>
+<h2 id="dongsi-sseugi-ceori">동시 쓰기 처리</h2>
+<p>DynamoDB에서 동시에 동일 데이터에 대해서 수정을 시도한다면 어떻게 될까?</p>
+<p>DynamoDB는 시간값, 타임스탬프를 기준으로 최신의 값만을 반영하고 예전 값은 버리는 방식을 취한다.<br />
+근데 구글처럼 원자시계 달고 요란법석을 떤 것 아니라서 미세한 시간 오차로 인해서 먼저 들어온 수정이 반영될 수도 있다는게 단점이다.</p>
+<p>동시 처리를 엄밀하게 처리하고 싶다면 낙관적 락을 조건절 Update 기반으로 직접 구현해야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="seobeoriseu-gujo">서버리스 구조</h2>
+<p>DynamoDB는 온디맨드 모드로 사용하면 초기 비용이 매우 낮고, 꽤 저렴하게 사용할 수 있다.<br />
+이런 비용 효율성은 어떻게 나오는 걸까?</p>
+<p>사실 이것도 Lambda 등과 비슷한 방식으로 리소스 활용도를 높이는 거라고 보면 된다.<br />
+그래서 하나의 물리 장비에 여러명의 데이터를 우겨넣는다. 당신이 방금 넣은 DynamoDB의 데이터는 다른 사용자의 것들과 섞여있을 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="ilgwandoen-haesing">일관된 해싱?</h2>
+<p>분산DB에서 가장 중요한 것 중 하나가 또 지속적으로 노드를 추가하고 데이터를 분배하는 것이다.</p>
+<p>DynamoDB의 초기 버전에서는 일관된 해싱 매커니즘을 사용해서 지속적으로 노드가 추가되는 상황에서도 최대한 고르게 데이터를 분배하고, 데이터의 이동을 최소화했었다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223457713545">https://blog.naver.com/sssang97/223457713545</a><br />
+하지만 엄밀하게 말해서, 서비스로서 완성된 AWS DynamoDB에서는 이러한 방식을 사용하지 않는다. 각각의 마이크로서비스를 기반으로 비교적 느슨하게 연결되어있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="seutoriji-nodeu">스토리지 노드</h2>
+<p>DynamoDB에서 가장 근간이 되는 밑바닥은 "스토리지 노드" 단위다.<br />
+이건 말이 노드지, 사실 하나의 클러스터다.</p>
+<p>여기에는 쓰기를 담당하는 master 노드 하나, 읽기를 담당하는 slave 노드가 둘이 들어있고, 각각의 노드를 고가용성을 위해 별도의 가용영역에 프로비저닝된다.</p>
+<p><img src="/images/img_ff137eb9647b1a2e.png" alt="" />
+합의 알고리즘은 Paxos를 사용하고, master 노드에 문제가 생긴하면 다른 노드를 master로 선출한다.<br />
+복제는 항상 비동기적이기 때문이 Slave는 낮은 일관성, 최종 일관성만을 제공한다.</p>
+<p>그리고 유저가 API를 사용해서 DynamoDB에 접근한다면, 내부 라우터를 거쳐서 스토리지 노드를 선택하고 DB 작업을 처리하게 되는 것이다.</p>
+<p><img src="/images/img_1b44ed34e8d7727d.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="gyeongjaengja-cassandradb">경쟁자: CassandraDB</h2>
+<p>CassandraDB는 애초에 DynamoDB 개발자가 만든 것이기도 하고, 전반적인 구조와 목표에 있어서 DynamoDB와 많은 부분을 공유한다. 같이 알아두면 좋을 것이다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223706344662">https://blog.naver.com/sssang97/223706344662</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBMapper.OptimisticLocking.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBMapper.OptimisticLocking.html</a><br />
+<a rel="external" href="https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html">https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html</a><br />
+<a rel="external" href="https://www.scylladb.com/learn/dynamodb/introduction-to-dynamodb/">https://www.scylladb.com/learn/dynamodb/introduction-to-dynamodb/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/transaction-apis.html#transaction-capacity-handling">https://docs.aws.amazon.com/ko_kr/amazondynamodb/latest/developerguide/transaction-apis.html#transaction-capacity-handling</a><br />
+<a rel="external" href="https://medium.com/rate-labs/%EC%95%84-%ED%95%B4%EB%B4%90-dynamodb-%EB%93%A4%EC%96%B4%EA%B0%84%EB%8B%A4-f8da282bc625">https://medium.com/rate-labs/%EC%95%84-%ED%95%B4%EB%B4%90-dynamodb-%EB%93%A4%EC%96%B4%EA%B0%84%EB%8B%A4-f8da282bc625</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.Partitions.html</a><br />
+<a rel="external" href="https://www.usenix.org/system/files/atc23-idziorek.pdf">https://www.usenix.org/system/files/atc23-idziorek.pdf</a><br />
+<a rel="external" href="https://medium.com/@syedshamail3/understanding-the-internal-architecture-of-amazon-dynamodb-e9dccb8be8de">https://medium.com/@syedshamail3/understanding-the-internal-architecture-of-amazon-dynamodb-e9dccb8be8de</a><br />
+<a rel="external" href="https://www.usenix.org/conference/atc22/presentation/elhemali">https://www.usenix.org/conference/atc22/presentation/elhemali</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223722750712/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] 1.84.0 업데이트 발표 (번역)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223718161063/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Nginx] 정적 이미지 조회 서버 띄우기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>

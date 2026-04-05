@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Github] Action: Self Hosted Runner 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/223719006086/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Github] Action: Self Hosted Runner 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/223719006086/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-04-05T12:44:42.832606639+00:00">
+    <meta property="article:published_time" content="2025-01-08T00:00:00+00:00">
+    <meta property="article:tag" content="Github">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/223719006086/">[Github] Action: Self Hosted Runner 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2025-01-08T00:00:00+00:00"><time datetime="2025-01-08T00:00:00+00:00">2025.01.08</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="333 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/github/">Github</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/223719006086" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Github Action은 훌륭하고 사용감 괜찮은 CI/CD용 서비스지만, 그냥 기본 제공 호스트만 써서는 한계가 있을 때가 많다.</p>
+<ol>
+<li>
+<p>프로비저닝 시간이 좀 걸리고</p>
+</li>
+<li>
+<p>서버 성능도 그렇게 좋은 편은 아니고</p>
+</li>
+<li>
+<p>요금도 많진 않지만 조금 나오는데다</p>
+</li>
+<li>
+<p>온프레미스 머신에 직접 접근해서 처리하는게 불편하기 때문이다.</p>
+</li>
+</ol>
+<br>
+<br>
+<p>그래서 추가적인 요구사항이 있다면 Github Action에서 사용하는 Self-Hosted Runner를 사용해서 빌드 환경을 확장할 수 있다.</p>
+<p>이렇게 설정할 경우에는 트리거와 Github 코드 복제까지만 Github에서 제공해주고, 각 머신에서 독립적으로 동작한다. 가상화도 없다. github action cache 같은 부가적인 기능들도 활용하는데 제한이 있다.</p>
+<p>그리고 가상화 없이 해당 머신에 직접 실행되는 것이라서 빠르긴 한데, 보안이나 빌드 리소스 cleanup에 대한 고려가 조금 필요할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="seoljeonghaebogi">설정해보기</h2>
+<p>각 레포의 Runner 페이지로 가면,</p>
+<p><img src="/images/img_afc9bba8e30621a0.png" alt="" /></p>
+<p><img src="/images/img_6a9e976bc610a0c5.png" alt="" />
+New Self Hosted Runner... 버튼 누르면 편리하게 가이드해주는 페이지가 있다.</p>
+<p>적당히 따라지면 된다. 고민할건 별로 없다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span># Create a folder</span></span>
+<span class="giallo-l"><span>$ mkdir actions</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;"> &amp;&amp;</span><span> cd actions</span><span style="color: #94E2D5;">-</span><span>runner</span></span>
+<span class="giallo-l"><span>Copied</span><span style="color: #94E2D5;">!</span><span># Download the latest runner</span><span style="color: #CBA6F7;"> package</span></span>
+<span class="giallo-l"><span>$ curl</span><span style="color: #94E2D5;"> -</span><span>o actions</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>x64</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2.321</span><span style="color: #94E2D5;">.</span><span>0</span><span style="color: #94E2D5;">.</span><span>tar</span><span style="color: #94E2D5;">.</span><span>gz</span><span style="color: #94E2D5;"> -</span><span>L https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/actions/runner/releases/download/v2.321.0/actions-runner-linux-x64-2.321.0.tar.gz</span></span>
+<span class="giallo-l"><span># Optional</span><span style="color: #9399B2;">:</span><span> Validate the hash</span></span>
+<span class="giallo-l"><span>$ echo</span><span style="color: #A6E3A1;"> &quot;ba46ba7ce3a4d7236b16fbe44419fb453bc08f866b24f04d549ec89f1722a29e  actions-runner-linux-x64-2.321.0.tar.gz&quot;</span><span style="color: #94E2D5;"> |</span><span> shasum</span><span style="color: #94E2D5;"> -</span><span>a</span><span style="color: #FAB387;"> 256</span><span style="color: #94E2D5;"> -</span><span>c</span></span>
+<span class="giallo-l"><span># Extract the installer</span></span>
+<span class="giallo-l"><span>$ tar xzf</span><span style="color: #94E2D5;"> ./</span><span>actions</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">-</span><span>linux</span><span style="color: #94E2D5;">-</span><span>x64</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2.321</span><span style="color: #94E2D5;">.</span><span>0</span><span style="color: #94E2D5;">.</span><span>tar</span><span style="color: #94E2D5;">.</span><span>gz</span></span></code></pre><pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #94E2D5;">./</span><span>config</span><span style="color: #94E2D5;">.</span><span>sh</span><span style="color: #94E2D5;"> --</span><span>url https</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//github.com/..레포지토리 --token 토큰</span></span></code></pre>
+<p><img src="/images/img_3a4db75ae2cb556e.png" alt="" /></p>
+<p><img src="/images/img_75f11c3375017ce9.png" alt="" />
+대화형으로 설정값을 몇개 물어보는데, label만 잘 주면 된다.<br />
+내 경우에는 이름은 고유하게 onpremise-crawler-1, 그룹 단위인 label에는 onpremise-crawler로 지었다.<br />
+레이블을 기반으로 여러개의 러너를 그룹화해서 관리할 수도 있다.</p>
+<p>그리고 실행하면 바로 뜬다.</p>
+<p><img src="/images/img_284886c37efd0196.png" alt="" /></p>
+<p>그러면 github의 러너 페이지에서도 뜨기 시작할 것이다.</p>
+<p><img src="/images/img_ae16d5b70d43fa36.png" alt="" />
+이러면 사용할 준비가 완료된 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="daemon-guseonghagi-linux">Daemon 구성하기 (Linux)</h2>
+<p>github action runner는 그냥 실행하기에는 충분하지만, 지속적으로 사용할 수 있는 데몬에 대한 구성은 사전 제공하지 않는 것 같다.</p>
+<p>머신이 재부팅되어도 알아서 잘 뜨고, 항상 살아있게 만들려면 systemd를 활용하는게 간편하다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223374364520">https://blog.naver.com/sssang97/223374364520</a></p>
+<p>설정파일 만들고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo vi</span><span style="color: #94E2D5;"> /</span><span>etc</span><span style="color: #94E2D5;">/</span><span>systemd</span><span style="color: #94E2D5;">/</span><span>system</span><span style="color: #94E2D5;">/</span><span>action</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">-</span><span>1</span><span style="color: #94E2D5;">.</span><span>service</span></span></code></pre>
+<p><img src="/images/img_1f74c6d7562efd0e.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[Unit]</span></span>
+<span class="giallo-l"><span>Description</span><span style="color: #94E2D5;">=</span><span>Github Action Runner</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[Service]</span></span>
+<span class="giallo-l"><span>Type</span><span style="color: #94E2D5;">=</span><span>simple</span></span>
+<span class="giallo-l"><span>Restart</span><span style="color: #94E2D5;">=</span><span>on</span><span style="color: #94E2D5;">-</span><span>failure</span></span>
+<span class="giallo-l"><span>RestartSec</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">1</span></span>
+<span class="giallo-l"><span>User</span><span style="color: #94E2D5;">=</span><span>user</span></span>
+<span class="giallo-l"><span>WorkingDirectory</span><span style="color: #94E2D5;">=/</span><span>home</span><span style="color: #94E2D5;">/</span><span>user</span><span style="color: #94E2D5;">/</span><span>actions</span><span style="color: #94E2D5;">-</span><span>runner</span></span>
+<span class="giallo-l"><span>ExecStart</span><span style="color: #94E2D5;">=/</span><span>home</span><span style="color: #94E2D5;">/</span><span>user</span><span style="color: #94E2D5;">/</span><span>actions</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">/</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[Install]</span></span>
+<span class="giallo-l"><span>WantedBy</span><span style="color: #94E2D5;">=</span><span>network</span><span style="color: #94E2D5;">-</span><span>online</span><span style="color: #94E2D5;">.</span><span>target</span></span></code></pre>
+<p>적당히 이렇게 넣어준다.<br />
+User가 현재 사용중인 유저 정보가 되어야 한다. root는 안된다.</p>
+<p>그리고 활성화하면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>sudo systemctl enable</span><span style="color: #94E2D5;"> --</span><span>now action</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">-</span><span>1</span><span style="color: #94E2D5;">.</span><span>service</span></span>
+<span class="giallo-l"><span>sudo systemctl status action</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">-</span><span>1</span><span style="color: #94E2D5;">.</span><span>service</span></span></code></pre>
+<p><img src="/images/img_59f3f684220fb43a.png" alt="" />
+잘 살아날 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="weokeupeulro-jeongyihagi">워크플로 정의하기</h2>
+<p>self hosted runner에서 돌게 하려면, 워크플로에 runs-on으로 조건을 적당히 걸면 된다.</p>
+<p><img src="/images/img_5a4b9eaf1881efeb.png" alt="" />
+레이블 기반으로 명시해서 저 레이블에 속하는 러너만 선택되도록 했다.</p>
+<p>그리고 워크플로를 어떤 방식으로든 트리거하면</p>
+<p><img src="/images/img_0db46230d29b8045.png" alt="" /></p>
+<p><img src="/images/img_0f414692fc06bb66.png" alt="" />
+러너가 받아서 잘 실행할 것이다.<br />
+이 워크플로는 중간에 뭐 터져서 실패하긴 했는데, 일단 돌긴 잘 돈 것이다.</p>
+<br>
+<p><img src="/images/img_728c0d5489e1b9ba.png" alt="" />
+그리고 러너가 받아서 실행한 베이스 코드는 앞서 지정했던 action-runner 베이스 경로의 work 경로에 차곡차곡 쌓인다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/223718161063/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Nginx] 정적 이미지 조회 서버 띄우기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/223717759431/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[Linux] 디스크 모델 정보 조회하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+</body>
+
+</html>
