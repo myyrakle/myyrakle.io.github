@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 테이블 파티션 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224389070427/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 테이블 파티션">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224389070427/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-08-24T15:08:50.683041+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224389070427/">[PostgreSQL] 테이블 파티션</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-08-24T15:08:50.683041+00:00"><time datetime="2026-08-24T15:08:50.683041+00:00">2026.08.24</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1217 words"><time datetime="PT7M">7 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224389070427" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PostgreSQL에서 테이블을 파티션 단위로 쪼개고 최적화하는 방법을 다룬다. 샤딩이라고도 한다.</p>
+<p>여기서 말하는 파티션이란, 하나의 테이블을 여러개의 물리적 테이블로 쪼개서 관리하는 것을 말한다. 파티션을 여러 노드에 분산하는 것은 다루지 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="patisyeonyi-gibon-nonri">파티션의 기본 논리</h2>
+<p>PostgreSQL의 파티션도 다른 DB의 파티션과 의미론이 다르지 않다.<br />
+파티션 키를 정해놓고, 해당 키를 기준으로 별도의 테이블 영역에 저장을 하는 것이다.</p>
+<p><img src="/images/img_f3a97378c391ae01.png" alt="" />
+여기서 보통 파티션 키는 시간 단위가 되는 경우가 많다.</p>
+<p>예를 들어, 파티션을 월 단위로 잡는다면, event_202601, event_202602, event_202603 같은 테이블이 만들어지면서 별도로 저장이 되는 셈이다.</p>
+<p>PostgreSQL이 제공해주는 영역은, 여러개의 파티션 테이블을 하나의 테이블인 것처럼 조회하고 INSERT/UPDATE/DELETE할 수 있게 해주는 것이다.<br />
+다만 파티션 자동생성까지 해주지는 않는다. 이런건 분산 DB들이 잘하고, Postgres의 전공은 아니다.</p>
+<br>
+<br>
+<br>
+<h2 id="wae-patisyeoninga">왜 파티션인가?</h2>
+<p>근데 테이블을 파티션으로 쪼개면 무슨 이점이 있는걸까?<br />
+우선 디스크 성능에 대한 이해부터 가져야 한다. 시퀀스 스캔은 인덱스 스캔보다 행 단위 성능이 훨씬 뛰어나다.</p>
+<p>예를 들어 만약 6월 데이터의 전체를 스캔해서 집계하는 쿼리가 있다면, 인덱스를 통해 6월 데이터만 접근하는 것보다 파티션된 테이블을 기준으로 6월 데이터를 풀스캔하는 것이 월등히 빠르다.<br />
+그래서 파티션 없이 인덱스만으로는 이러한 디스크 스캔 패턴을 최적화하는 것에는 한계가 있다.</p>
+<p>그렇다고 해서 무조건 파티션을 박는 것도 효율적인 것은 아니다.<br />
+어느 정도 조건이 있어야 한다.</p>
+<p>넓은 데이터 범위 규모에서(최소 수만-수십만)</p>
+<ol>
+<li>복합적이고 동적인 필터 조건이 존재하는 경우 (모든 조합의 인덱스를 거는 것이 사실상 불가능한 경우)</li>
+<li>대규모 집계를 돌리는 경우</li>
+<li>혹은 둘다 포함되는 경우</li>
+</ol>
+<p>정도로 생각해두면 될 것 같다.</p>
+<p>그리고 정말 대규모로 간다면, 파티션을 멀티 디스크나 멀티 노드로 분산하는 것도 고려하게 된다.<br />
+다만 멀티노드 파티션 분산은 PostgreSQL 코어에서 제공하지 않는 기능이므로, 여기에서는 다루지 않는다.</p>
+<br>
+<br>
+<br>
+<h2 id="patisyeonyi-jehansahanggwa-hangye">파티션의 제한사항과 한계</h2>
+<p>파티션도 단점이 많은 기능이다. 한계를 명확하게 알고서 써야한다.</p>
+<br>
+<br>
+<h4 id="a-kweori-jeyag">A. 쿼리 제약</h4>
+<p>파티션이 쪼개진다는 것은, 결과적으로는 전체 대상의 스캔 속도가 떨어진다는 말과 비슷하다.<br />
+그래서 전체 범위를 기반으로 한 쿼리는 파티션보다 비-파티션 테이블이 더 효율적일 수 있고, 파티션 컬럼에 대한 조건이 없다면 모든 파티션을 스캔하게 되기 때문에 굉장히 비효율적으로 동작하게 된다.</p>
+<p>그래서 파티션을 걸 때는 신중해야 한다. 모든 쿼리에 해당 파티션을 기준으로 한 필터 조건이 존재해야한다는 말과도 같기 때문이다.</p>
+<br>
+<br>
+<h4 id="b-unique-jeyag">B. Unique 제약</h4>
+<p>파티션, 개별 샤드들은 실제로 별도의 테이블이기 때문에 PK나 유니크의 의미론이 많이 달라진다.<br />
+무슨 수로 다른 테이블들 간에 공통되는 유니크를 정의해야한다는 말인가?</p>
+<p>그래서 유니크 조건을 가할 때는, 반드시 파티션 키 컬럼이 유니크 조건에 들어가야만 한다.</p>
+<p><img src="/images/img_2e7cc8244e8c25a6.png" alt="" /></p>
+<p><img src="/images/img_e9b9c15001ce13b9.png" alt="" />
+유일성 보장 수준이 떨어져서 신경써야할 부분이 더 생길 수도 있지만, 이건 어쩔 수 없다.</p>
+<br>
+<br>
+<h4 id="c-patisyeon-seontaeg-buha-patisyeon-pruning">C. 파티션 선택 부하 (파티션 pruning)</h4>
+<p>파티션을 잘 쓰면 최적화된 형태로 스캔을 깔끔하게 끝낼 수 있지만, 결국에 파티션을 선택해서 스캔하고 insert하는 것은 DB의 부담이다.<br />
+그래서 파티션이 많아지면 많아질수록 쿼리 Plan의 성능이 떨어질 수 있다. 쿼리 실행이 조금 빠르면 뭐하나? 결국 파티션을 선택하는 것도 실행 성능에 포함되는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="patisyeonyi-jongryu">파티션의 종류</h2>
+<p>PostgreSQL에는 Hash 파티션과 Range 파티션, List 파티션 3가지가 존재한다. 용도가 다르다.</p>
+<p>Hash는 일치 비교를 위한 파티션 조건으로 사용된다. 예를 들면, user_id 같은 개별 값들이 이에 속한다.<br />
+Range 파티션은 범위 값에 사용되는 파티션 조건이다. 날짜 등 시간값 기반의 파티셔닝 기능을 제공한다.</p>
+<p>List는 비교적 용처가 애매한 파티션 알고리즘이다. 값을 명시적으로 지정해서 넘기는 방식이다.</p>
+<br>
+<br>
+<br>
+<h2 id="range-patisyeon">Range 파티션</h2>
+<p>Range 파티션을 적용해보자.<br />
+이벤트를 기록하는 테이블을 하나 만들어보겠다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE public</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">events</span><span> (</span></span>
+<span class="giallo-l"><span>    id bigint</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    created_at timestamptz NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    data jsonb</span></span>
+<span class="giallo-l"><span>) PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> RANGE</span><span> (created_at)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_d1affe2d987b5725.png" alt="" />
+이런 식으로 날짜 값을 파티션 조건으로 넣어주면 된다.</p>
+<p>그 다음에는 파티션을 구체화해야 한다.<br />
+다시 말해서, 날짜 범위를 기반으로 개별 샤드들을 생성해주는 것이다. 여기에서 각 샤드의 값 범위를 지정해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE public</span><span style="color: #94E2D5;">.</span><span>events_202607</span></span>
+<span class="giallo-l"><span>PARTITION OF public</span><span style="color: #94E2D5;">.</span><span>events</span></span>
+<span class="giallo-l"><span>FOR VALUES</span><span style="color: #89B4FA;font-style: italic;"> FROM</span><span> (</span><span style="color: #A6E3A1;">&#39;2026-07-01 00:00:00+09&#39;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">           TO</span><span>   (</span><span style="color: #A6E3A1;">&#39;2026-08-01 00:00:00+09&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TABLE public</span><span style="color: #94E2D5;">.</span><span>events_202608</span></span>
+<span class="giallo-l"><span>PARTITION OF public</span><span style="color: #94E2D5;">.</span><span>events</span></span>
+<span class="giallo-l"><span>FOR VALUES</span><span style="color: #89B4FA;font-style: italic;"> FROM</span><span> (</span><span style="color: #A6E3A1;">&#39;2026-08-01 00:00:00+09&#39;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">           TO</span><span>   (</span><span style="color: #A6E3A1;">&#39;2026-09-01 00:00:00+09&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_415acf63283859ea.png" alt="" />
+이러면 이제 7월 샤드와 8월 샤드가 만들어지는 셈이다.<br />
+실제 데이터들은 Root 테이블이 아닌, 개별 샤드에 저장된다.</p>
+<p>값을 한번 넣어보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>insert into public</span><span style="color: #94E2D5;">.</span><span>events </span></span>
+<span class="giallo-l"><span>values </span></span>
+<span class="giallo-l"><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2026-07-05 00:00:00+09&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;text&quot;:&quot;foo1&quot;}&#39;</span><span>::jsonb)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2026-07-16 00:00:00+09&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;text&quot;:&quot;foo2&quot;}&#39;</span><span>::jsonb)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">3</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2026-08-21 00:00:00+09&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;text&quot;:&quot;foo3&quot;}&#39;</span><span>::jsonb)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">4</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2026-08-10 00:00:00+09&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;text&quot;:&quot;foo4&quot;}&#39;</span><span>::jsonb)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">5</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2026-07-22 00:00:00+09&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;text&quot;:&quot;foo5&quot;}&#39;</span><span>::jsonb)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">6</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2026-08-02 00:00:00+09&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;text&quot;:&quot;foo6&quot;}&#39;</span><span>::jsonb)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">7</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;2026-08-18 00:00:00+09&#39;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;{&quot;text&quot;:&quot;foo7&quot;}&#39;</span><span>::jsonb)</span></span></code></pre>
+<p><img src="/images/img_5cf717962a3bda26.png" alt="" /></p>
+<p>그러면 단일 테이블인 것처럼 조회할 수 있지만</p>
+<p><img src="/images/img_fea8f89f867158f4.png" alt="" /></p>
+<p>실제로는 2개의 테이블을 따로 풀스캔해서 조합해주는 구조가 된다.</p>
+<p><img src="/images/img_8c1308322f35a620.png" alt="" /></p>
+<p>파티션 키를 기반으로 필터를 걸면, 해당 파티션만 조회하게 된다.</p>
+<p><img src="/images/img_4f27f3973a797afa.png" alt="" />
+항상 이런 식으로 조건이 달려있어야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="hash-patisyeon">Hash 파티션</h2>
+<p>이번에는 해시 파티션을 다뤄보자.<br />
+이건 일반적인 선두 컬럼 필터링에 적합한 방법이다.</p>
+<p>유저 행동을 기록한다는 의미의 테이블을 하나 추가해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE public</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">actions</span><span> (</span></span>
+<span class="giallo-l"><span>    id bigint</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    user_id bigint</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    action text</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    created_at timestamptz NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    primary</span><span style="color: #89B4FA;font-style: italic;"> key</span><span>(id</span><span style="color: #9399B2;">,</span><span> user_id)</span></span>
+<span class="giallo-l"><span>) PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> HASH</span><span> (user_id)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_a9ea980c2f5916cb.png" alt="" />
+user_id를 해시 조건으로 넣었다.</p>
+<p>그럼 이번에도 Range와 마찬가지로 파티션 구체화를 해줘야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>create table public</span><span style="color: #94E2D5;">.</span><span>actions_odd partition</span><span style="color: #CBA6F7;"> of</span><span> public</span><span style="color: #94E2D5;">.</span><span>actions for values</span><span style="color: #CBA6F7;"> with</span><span>(modulus</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span> remainder</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>create table public</span><span style="color: #94E2D5;">.</span><span>actions_even partition</span><span style="color: #CBA6F7;"> of</span><span> public</span><span style="color: #94E2D5;">.</span><span>actions for values</span><span style="color: #CBA6F7;"> with</span><span>(modulus</span><span style="color: #FAB387;"> 2</span><span style="color: #9399B2;">,</span><span> remainder</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_640f1d8593746460.png" alt="" />
+여기서는 보통 나머지셈 연산 등을 사용해서 파티션 분배를 한다.<br />
+짝수와 홀수 파티션을 정의했다.</p>
+<p>그리고 넣으면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>insert into public</span><span style="color: #94E2D5;">.</span><span>actions</span></span>
+<span class="giallo-l"><span>values </span></span>
+<span class="giallo-l"><span>(</span><span style="color: #FAB387;">1</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 100</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;eat&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">2</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 101</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;eat&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">3</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 102</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;run&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">4</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 102</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;fight&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">5</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 100</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;fly&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">6</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 101</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;fly&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>())</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">,</span><span> (</span><span style="color: #FAB387;">7</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 102</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &#39;rust&#39;</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> now</span><span>())</span></span></code></pre>
+<p><img src="/images/img_3767cf2498094500.png" alt="" />
+잘 들어가고</p>
+<br>
+<p><img src="/images/img_baff075b5257d33e.png" alt="" />
+하나의 테이블처럼 조회도 잘 될 것이다.</p>
+<br>
+<p><img src="/images/img_0171d930fe4354d9.png" alt="" />
+하지만 이것도 마찬가지로 파티션 단위로 별도의 스캔이 발생한다.</p>
+<br>
+<p><img src="/images/img_06d01d8d4c162d12.png" alt="" />
+특정 파티션만 효율적으로 스캔하고 싶다면, 항상 파티션 컬럼을 조건으로 넣어서 조회해야 한다.</p>
+<br>
+<p><img src="/images/img_f12552e2dce455dd.png" alt="" />
+비교 연산이나 IN 연산 등에는 파티션 선택이 제대로 동작하지 않을 확률이 높다.</p>
+<p>그래서 항상 저 파티션 컬럼에 대한 동등 비교가 쿼리에 들어가야만 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="list-patisyeon">List 파티션</h2>
+<p>List 파티션은 한정된 값을 기반으로 분배하는 방식이다.<br />
+Hash 파티션이 여러개의 값을 버킷 단위로 적당히 고르게 분산한다면, 이건 예를 들어 "한국 유저"는 한국 파티션으로, "일본 유저"는 일본 파티션으로 넘기는 식으로 기능한다.</p>
+<p>해시보다는 유연성이 떨어지지만 부하가 적고 높은 처리량과 강한 테넌트 분리가 필요하다면 적합하다.</p>
+<p>사용법은 어렵지 않다.<br />
+다음은 국가 단위로 파티션되는 테이블을 만드는 쿼리다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE</span><span style="color: #89B4FA;font-style: italic;"> users</span><span> (</span></span>
+<span class="giallo-l"><span>    id bigint</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    country_code text NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    name text</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> LIST</span><span> (country_code)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_f4c54c697562cff1.png" alt="" /></p>
+<p>그러면 다음과 같이 값을 명시적으로 지정해서 파티션을 생성할 수 있다.</p>
+<p><img src="/images/img_a7cd7defd451a3b6.png" alt="" /></p>
+<p><img src="/images/img_c52d2bfbbd46d0b4.png" alt="" />
+이후의 사용법은 Hash 등과 동등하다.</p>
+<br>
+<br>
+<br>
+<h2 id="patisyeon-jogeon-default-patisyeon">파티션 조건: Default 파티션</h2>
+<p>파티션에서 번거로운 것은, 아무튼간에 파티션을 만들어줘야 한다는 것이다.<br />
+파티션 조건에 없는 값이 들어오면 그건 항상 실패를 던진다.</p>
+<p>이렇게 말이다.</p>
+<p><img src="/images/img_b44e790556c6d567.png" alt="" /></p>
+<p>그래서 때로는 DEFAULT 조건을 통해서 값을 쌓기도 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE public</span><span style="color: #94E2D5;">.</span><span>events_default PARTITION OF public</span><span style="color: #94E2D5;">.</span><span>events DEFAULT</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_3bed15e470754cae.png" alt="" />
+파티션 조건에 해당되지 않는 값이 있다면, 전부 저 DEFAULT 파티션으로 간다.</p>
+<p>그러면 이제 9월 파티션이 없어도 삽입이 되긴 된다.</p>
+<p><img src="/images/img_6ca0c5068ad48c33.png" alt="" /></p>
+<p>다만 여기에는 맹점이 있다. 파티션끼리는 값이 겹치는 것이 불가능하다는 것이다.<br />
+그래서 9월 데이터를 DEFAULT에 대충 쌓아놨다가, 나중에 9월 파티션을 만든다는 식의 게으른 방법은 단순하게는 통자히 않는다.</p>
+<p><img src="/images/img_5685927a427fa584.png" alt="" />
+이렇게 실패한다.</p>
+<p>그래서 DEFAULT를 버퍼처럼 쓰다가 옮기려면 좀 복잡한 수단이 필요하다.<br />
+직접 샤드 테이블을 생성한 뒤에 손으로 옮기고 수동 ATTACH를 해야하는데, 이것도 Lock을 걸고 비관적으로 처리를 해야해서 성능도 성능이고 실시간성에 큰 제약을 가한다.</p>
+<p>그래서 가능하면 샤드를 미리 다 만들어주는 편이 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="juyi-patisyeon-pogjuyi-wiheom">주의: 파티션 폭주의 위험</h2>
+<p>그런데 user가 10만명 있다고 해서, user_id 기반 샤드도 10만개를 두는 것은 효율적이지 못하다.<br />
+일반적으로는 10만개의 user가 있다면, 8, 16개 정도의 고정 샤드를 두고 적당히 분산하는 것을 추천한다.</p>
+<p>파티션이 많다고 해서 좋은 것이 아니고, 파티션이 많을수록 파티션을 고르는 prune 성능(planning 과정)이 박살날 수 있기 때문이다. 메모리도 좀 먹을 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="eungyong-boghab-patisyeon-user-id-date">응용: 복합 파티션 (user_id + date)</h2>
+<p>근데 단순하게 Hash, Range 저 2가지만으로는 부족할 수도 있다.</p>
+<p>예를 들어, (user_id, created) 복합 조건으로 파티션을 걸고 싶다면 어떻게 해야할까? 저 2개 컬럼을 concat하더라도 그건 사전순으로 처리될 것이기 때문에, 생각처럼 동작할 확률은 낮을 것이다.</p>
+<p>이런 상황에서는 파티션을 중첩해서 구성하는 것을 추천할만하다.<br />
+예를 들어, 이런 식이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>events</span></span>
+<span class="giallo-l"><span>├─ </span><span style="color: #FAB387;">2026</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">07</span></span>
+<span class="giallo-l"><span>│  ├─ hash</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>│  ├─ hash</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>│  └─ </span><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span>├─ </span><span style="color: #FAB387;">2026</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">08</span></span>
+<span class="giallo-l"><span>│  ├─ hash</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>│  ├─ hash</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>│  └─ </span><span style="color: #94E2D5;">...</span></span>
+<span class="giallo-l"><span>└─ </span><span style="color: #FAB387;">2026</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">09</span></span>
+<span class="giallo-l"><span>   ├─ hash</span><span style="color: #FAB387;"> 0</span></span>
+<span class="giallo-l"><span>   ├─ hash</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>   └─ </span><span style="color: #94E2D5;">...</span></span></code></pre>
+<p>날짜로 먼저 범위 prune을 한 다음에, user_id로 Hash Prune해서 테이블을 선택하는 것이다.</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE</span><span style="color: #89B4FA;font-style: italic;"> login_history</span><span> (</span></span>
+<span class="giallo-l"><span>	id bigint not</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    user_id bigint NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    created_at timestamptz NOT</span><span style="color: #CBA6F7;"> null</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> RANGE</span><span> (created_at)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TABLE login_history_2026_08</span></span>
+<span class="giallo-l"><span>PARTITION OF login_history</span></span>
+<span class="giallo-l"><span>FOR VALUES</span><span style="color: #89B4FA;font-style: italic;"> FROM</span><span> (</span><span style="color: #A6E3A1;">&#39;2026-08-01&#39;</span><span>)</span><span style="color: #89B4FA;font-style: italic;"> TO</span><span> (</span><span style="color: #A6E3A1;">&#39;2026-09-01&#39;</span><span>)</span></span>
+<span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> HASH</span><span> (user_id)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_ca094154f9def4e0.png" alt="" /></p>
+<p><img src="/images/img_0290f0cb887633a7.png" alt="" />
+그러면 이렇게 날짜 파티션을 만든 다음에</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE login_history_2026_08_h0</span></span>
+<span class="giallo-l"><span>PARTITION OF login_history_2026_08</span></span>
+<span class="giallo-l"><span>FOR VALUES</span><span style="color: #89B4FA;font-style: italic;"> WITH</span><span> (MODULUS</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span> REMAINDER</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TABLE login_history_2026_08_h1</span></span>
+<span class="giallo-l"><span>PARTITION OF login_history_2026_08</span></span>
+<span class="giallo-l"><span>FOR VALUES</span><span style="color: #89B4FA;font-style: italic;"> WITH</span><span> (MODULUS</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span> REMAINDER</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TABLE login_history_2026_08_h2</span></span>
+<span class="giallo-l"><span>PARTITION OF login_history_2026_08</span></span>
+<span class="giallo-l"><span>FOR VALUES</span><span style="color: #89B4FA;font-style: italic;"> WITH</span><span> (MODULUS</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span> REMAINDER</span><span style="color: #FAB387;"> 2</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TABLE login_history_2026_08_h3</span></span>
+<span class="giallo-l"><span>PARTITION OF login_history_2026_08</span></span>
+<span class="giallo-l"><span>FOR VALUES</span><span style="color: #89B4FA;font-style: italic;"> WITH</span><span> (MODULUS</span><span style="color: #FAB387;"> 4</span><span style="color: #9399B2;">,</span><span> REMAINDER</span><span style="color: #FAB387;"> 3</span><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_ddd07727146943ea.png" alt="" />
+유저 파티션-해시 링을 적당히 만들어서 쓰면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="patisyeon-jadong-saengseong-pg-partman">파티션 자동 생성: pg_partman</h2>
+<p>이건 날짜 기반 파티션을 자동으로 만들어주는 오피셜급 확장이다.<br />
+설치하고</p>
+<p><img src="/images/img_2fd2ede2efe20c84.png" alt="" /></p>
+<p>다음과 같이 파티션 테이블에 함수를 날려주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE public</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">events</span><span> (</span></span>
+<span class="giallo-l"><span>    id bigint</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    created_at timestamptz NOT NULL</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    data jsonb</span></span>
+<span class="giallo-l"><span>) PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> RANGE</span><span> (created_at)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>SELECT</span><span style="color: #89B4FA;font-style: italic;"> create_partition</span><span>(</span></span>
+<span class="giallo-l"><span>    p_parent_table :</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &#39;public.events&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    p_control      :</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &#39;created_at&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    p_interval     :</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;"> &#39;1 month&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    p_premake      :</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;"> 7</span><span style="color: #94E2D5;"> --</span><span> 7월어치를 미리 만들기</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_33823cc2b7435228.png" alt="" />
+그러면</p>
+<br>
+<p><img src="/images/img_0ceb6a3a410bc9c3.png" alt="" />
+파티션을 이렇게 잔뜩 만들어준다.</p>
+<p>그 이후에는 전용 함수를 사용해서 파티션 생성을 트리거하면 된다.<br />
+현재 시간에 맞춰서 미리미리 만들어줄 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CALL</span><span style="color: #89B4FA;font-style: italic;"> run_maintenance_proc</span><span>()</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_ecd9582aa66ca26f.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.postgresql.org/docs/current/ddl-partitioning.html">https://www.postgresql.org/docs/current/ddl-partitioning.html</a><br />
+<a rel="external" href="https://needjarvis.tistory.com/574">https://needjarvis.tistory.com/574</a><br />
+<a rel="external" href="https://www.digitalocean.com/community/tutorials/understanding-database-sharding">https://www.digitalocean.com/community/tutorials/understanding-database-sharding</a><br />
+<a rel="external" href="https://github.com/pgpartman/pg_partman">https://github.com/pgpartman/pg_partman</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AmazonRDS/latest/UserGuide/PostgreSQL_Partitions.html">https://docs.aws.amazon.com/ko_kr/AmazonRDS/latest/UserGuide/PostgreSQL_Partitions.html</a><br />
+<a rel="external" href="https://github.com/pgpartman/pg_partman/blob/master-old/doc/pg_partman.md#maintenance-functions">https://github.com/pgpartman/pg_partman/blob/master-old/doc/pg_partman.md#maintenance-functions</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224392424722/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>엔비디아, 허깅페이스 인수.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224387041294/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Otel의 시원찮은 동향.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

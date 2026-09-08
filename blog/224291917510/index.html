@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostGIS] 좌표계 기본개념 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224291917510/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostGIS] 좌표계 기본개념">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224291917510/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-05-20T17:53:33.350723+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224291917510/">[PostGIS] 좌표계 기본개념</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-05-20T17:53:33.350723+00:00"><time datetime="2026-05-20T17:53:33.350723+00:00">2026.05.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="776 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224291917510" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>PostGIS를 기반으로 좌표계 기반 작업을 할 일이 있다면, 좌표 단위와 개념에 대해서도 얼마간 이해를 해야 한다.<br />
+기본적인 부분들만 추려서 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="jwapyogyeyi-jongryu">좌표계의 종류</h2>
+<p>좌표계는 크게 2가지로 구분된다.<br />
+실제 지리적-물리적 공간을 표현하는 지리 좌표 참조 시스템(Geographic Coordinate Reference System, GCS),<br />
+그리고 평면 공간에서 직선거리를 계산하기 위해 만들어진 투영 좌표 참조 시스템(Projected Coordinate Reference System, PCS)이 그것이다.</p>
+<br>
+<h4 id="gcs">GCS</h4>
+<p>GCS는 지구가 구체라는 것을 고려해서 만들어진 단위라서, 실제 물리적 통신과도 잘 호환된다.<br />
+GPS 기반의 좌표 처리에도 항상 GCS를 사용한다.<br />
+다만 이게 평면 좌표가 아니다보니, 단순한 거리나 공간을 계산하는데는 그다지 잘 맞지 않는다는 단점이 있다. 안되는건 아닌데, 각도값을 뽑아낸 다음에 그걸 또 지구 곡률을 고려해서 계산하는 과정을 거쳐야 한다.<br />
+같은 각도라도 위도에 따라서 실제 거리가 달라지고 그러기 때문에, 생각보다 까다롭다.</p>
+<br>
+<h4 id="pcs">PCS</h4>
+<p>반면 PCS는 지구가 평평하다는 가정 아래에서 만들어진 단순화된 좌표 체계다.<br />
+그래서 거리를 미터 단위로 뽑거나 할때는 그 어떤 방식보다 효율적이다.<br />
+단점은 어떤 식으로든 손실과 부정확성이 발생한다는 것이다.</p>
+<p>결론적으로 말하자면, GIS 시스템을 사용할때는 이 중 하나만 사용하거나 하지는 않는다.<br />
+보통 위치 저장 자체는 GCS로 한 다음에, 시각화나 거리/면적 계산이 필요할 때는 PCS로 변환한다거나 하는 하이브리드 접근법을 많이 사용한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gcs-wgs84-epsg-4326">GCS - WGS84 (EPSG:4326)</h2>
+<p>가장 널리 쓰이는 GCS의 표준형 좌표체계다.<br />
+(127.0276, 37.4979)와 같은 위도:경도 기반의 좌표다. GPS를 비롯한 많은 지리 기반 시스템들이 이걸 기본값으로 사용한다.</p>
+<p>특정 위치를 저장할 때는 보통 이걸 기본값으로 사용하는 경우가 많다.</p>
+<p>PostGIS에서는 다음과 같이 4326을 인자로 넘겨서 해당 좌표 포맷임을 명시할 수 있다.</p>
+<p><img src="/images/img_58ac76d351d26665.png" alt="" />
+타입도 geometry(Point, 4326) 같은 식으로 표현된다.</p>
+<br>
+<br>
+<br>
+<h2 id="pcs-epsg-3857">PCS - EPSG:3857</h2>
+<p>이건 가장 널리 쓰이는 PCS의 좌표체계다.<br />
+쉽게 말해서, 그냥 세계지도를 평평한 종이에 그려놓고 미터 단위로 x/y 좌표를 관리하는 시스템이라고 보면 된다.</p>
+<p>그래서 종이지도처럼 왜곡이 심하다는게 단점이고, 평면 UI에서의 계산이나 렌더링이 쉽고 빠르다는 것이 최대 장점이다.<br />
+구글맵같은 웹지도 구현체들은 PCS를 많이 사용한다.</p>
+<p>PostGIS에서의 표현법은 EPSG:4326와 그닥 다르진 않다.<br />
+그냥 x/y 축에 미터가 들어가고, SRID에 다른 숫자가 들어갈 뿐이다.</p>
+<p><img src="/images/img_23f2de860289edf3.png" alt="" />
+다른 체계들도 엇비슷하다.</p>
+<br>
+<br>
+<br>
+<h2 id="hondon">혼돈</h2>
+<p>위에서 대표적인 좌표체계 2가지를 예로 들었지만, 사실.. 이거 말고도 많다.</p>
+<p>국가마다 환경마다 전부 다 다르다. 국제표준을 쓸 때도 있지만, 아닐 때도 있다.<br />
+인간들이 심심해서 그런건 아니고, 본인 국가에 한해서만 더 정확하게 만들거나, 본인 국가를 중심 축으로 삼아서 GPS 표준이 바뀌어도 유지되게 하거나 하는 목적들이 있다.</p>
+<p>대표적으로 한국에서는 EPSG:5179(PCS), EPSG:5181(PCS)라는 독자 체계를 사용한다.<br />
+EPSG:5181는 레거시 공공데이터고, EPSG:5179는 공간 분석에서 사용한다.<br />
+EPSG:5179는 EPSG:3857과 거의 동일한데, 한국 내에서는 정확도가 훨씬 높다는 것이 유일한 차이다.<br />
+EPSG:5181도 비슷한데, 한국의 수도권 지역에서만 정확도가 높아서 버려졌다.</p>
+<p>미국에서는 NAD83(GCS)와 UTM(PCS)라는걸 쓴다.<br />
+NAD83는 미국 정부 GIS 시스템에서만 쓴다. GCS고 위/경도 기반 시스템인데, 미국에 한해서는 거리계산 등이 더 정확한 편이다. 그리고 미국을 중심축으로 고정해놔서 바뀌지 않는다.<br />
+UTM은 실제 국가마다 Zone(일종의 파티션)을 나눠서 Zone 내부에서 계산을 하도록 하는데, 그래서 표준 PCS인 EPSG:3857보다 정확도가 훨씬 높은 편이다. 그 대신 Cross-Zone 연산에는 취약하다.</p>
+<p>유럽에서는 ETRS89(GCS)라는걸 쓴다. 미국의 NAD83라고 보면 된다. 유럽이 중심축이다.</p>
+<p>중국에서는 CGCS2000(GCS)라는걸 표준 GIS로 쓴다.<br />
+이것도 미국의 NAD83라고 보면 된다. 중국이 중심축이다.</p>
+<p>그나마 다행인 것은, PostGIS 같은 GIS 시스템이 이에 대한 상호 변환을 어느 정도 지원해준다는 것이다.<br />
+그 역할을 하는 것이 ST_Transform라는 함수다.</p>
+<p><img src="/images/img_3ccde51890003d51.png" alt="" />
+PCS =&gt; GCS 변환</p>
+<br>
+<br>
+<br>
+<h2 id="postgiseseoyi-gibon-jwapyo-taib">PostGIS에서의 기본 좌표 타입</h2>
+<p>PostGIS는 일단 거의 모든 체계를 아우르는 것을 목표로 하기 때문에, 기본 타입이나 연산들이 제너럴하게 만들어져있다.<br />
+모든 단일 좌표는 (x,y) 좌표와 SRID 값으로 이루어진 복합 값이다.<br />
+x/y에 단위에 맞는 숫자를 적절히 넣으면 그만이고, SRID는 EPSG:4326에서의 4326 같은 표준 번호다.</p>
+<p>예를 들면, 표준 EPSG:4326의 개별 좌표 값은 geometry(Point, 4326) 타입과 geography(4326) 타입으로 표현될 수 있다.<br />
+geometry의 리터럴 생성은 다음과 같이 할 수 있다.</p>
+<p><img src="/images/img_58ac76d351d26665.png" alt="" /></p>
+<p>그리고 geometry =&gt; geography으로 손쉽게 변환할 수도 있다.</p>
+<p><img src="/images/img_572db7e276f217c9.png" alt="" />
+이 둘은 뭐가 다를까?</p>
+<p>쉽게 말해서 geometry는 가벼운 연산을 지원하는 타입이고, geography는 무거운 변형 연산을 제공하는 타입이다.</p>
+<br>
+<h4 id="geometry">geometry</h4>
+<p>EPSG:4326를 예로 들어보자.<br />
+geometry은 변환을 하지 않고 유클리드 거리로 바로 계산값을 뽑아내는 연산을 지원한다. GCS끼리 연산을 한다면 그냥 각도가 나온다.</p>
+<p><img src="/images/img_e5ddcaa80777e774.png" alt="" />
+이건 간단한 만큼 빠르고, 리소스 소모도 적고, 지원되는 함수 자체가 많다는 장점이 있다. 그래서 보통은 이걸 기본 타입으로 선택하는 것을 권장한다.</p>
+<br>
+<h4 id="geography">geography</h4>
+<p>geography는 좀 더 특수한 동작을 포괄하는 GCS 전용 타입이다. geography 간의 연산은 자동으로 지구 곡률을 고려한다. 그러니까 GCS 좌표끼리 거리 연산 등을 할 때 곡률을 고려해서 처리를 해준다는 것이다.<br />
+그래서 geography로 변환해서 거리 계산을 하면 이렇게 미터값이 나온다.</p>
+<p><img src="/images/img_d9a582982326a990.png" alt="" />
+그대신 처리 속도가 느리고 사용에 제한이 많은 편이다. 인덱스도 태우기 어렵다.<br />
+보통 필요할 때만 geometry를 geography로 변환해서 연산하는 것이 권장되는 전략이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://postgis.net/workshops/postgis-intro/geography.html">https://postgis.net/workshops/postgis-intro/geography.html</a><br />
+<a rel="external" href="https://en.wikipedia.org/wiki/Geographic_coordinate_system">https://en.wikipedia.org/wiki/Geographic_coordinate_system</a><br />
+<a rel="external" href="https://www.esri.com/arcgis-blog/products/arcgis-pro/mapping/gcs_vs_pcs">https://www.esri.com/arcgis-blog/products/arcgis-pro/mapping/gcs_vs_pcs</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224294411134/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 주소 타입: Inet, cidr<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224290557071/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 커넥션과 운영<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

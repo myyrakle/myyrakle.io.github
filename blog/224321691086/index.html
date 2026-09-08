@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Rust] Rust로 cuda PTX 말아보기 (nvptx64-nvidia-cuda) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224321691086/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Rust] Rust로 cuda PTX 말아보기 (nvptx64-nvidia-cuda)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224321691086/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-06-20T03:40:59.060334+00:00">
+    <meta property="article:tag" content="Rust">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224321691086/">[Rust] Rust로 cuda PTX 말아보기 (nvptx64-nvidia-cuda)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-06-20T03:40:59.060334+00:00"><time datetime="2026-06-20T03:40:59.060334+00:00">2026.06.20</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="282 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/rust/">Rust</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224321691086" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Rust가 얼마 전부터 nvptx64-nvidia-cuda 타겟을 공식적으로 지원하기 시작했다.<br />
+nvidia 환경에서 cuda 호출을 위한 PTX(중간 언어)를 생성하기 위한 용도의 타겟이다.</p>
+<p>WASM 타겟이 wasm 바이너리를 빌드하고, 떠넘기는 것처럼, 이것도 PTX라는 nvidia 전용 중간 포맷만 빌드하는 것까지만 책임진다.</p>
+<p>현재는 실험적 단계라서 2티어 지원이며, nightly에서만 사용 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="ptx-bildeuyong-tulcein-seolci">PTX 빌드용 툴체인 설치</h2>
+<p>먼저 PTX를 말기 위한 툴체인을 몇개 깔아준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>rustup toolchain add nightly</span></span>
+<span class="giallo-l"><span>rustup component add rust</span><span style="color: #94E2D5;">-</span><span>src</span><span style="color: #94E2D5;"> --</span><span>toolchain nightly</span></span>
+<span class="giallo-l"><span>rustup component add llvm</span><span style="color: #94E2D5;">-</span><span>tools</span><span style="color: #94E2D5;"> --</span><span>toolchain nightly</span></span>
+<span class="giallo-l"><span>rustup component add llvm</span><span style="color: #94E2D5;">-</span><span>bitcode</span><span style="color: #94E2D5;">-</span><span>linker</span><span style="color: #94E2D5;"> --</span><span>toolchain nightly</span></span></code></pre>
+<p><img src="/images/img_b9f73bea6c1df0ad.png" alt="" />
+오류 없이 잘 깔리면 됐다.</p>
+<br>
+<br>
+<br>
+<h2 id="ptx-bildeuhagi">PTX 빌드하기</h2>
+<p>그럼 이벤에는 PTX를 하나 만들어보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #94E2D5;"> --</span><span>lib just_test</span></span>
+<span class="giallo-l"><span>cd just_test</span></span></code></pre>
+<p>프로젝트 따로 만들고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>vim Cargo</span><span style="color: #94E2D5;">.</span><span>toml</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[lib]</span></span>
+<span class="giallo-l"><span>crate</span><span style="color: #94E2D5;">-</span><span>type</span><span style="color: #94E2D5;"> =</span><span> [</span><span style="color: #A6E3A1;">&quot;cdylib&quot;</span><span>]</span></span></code></pre>
+<p><img src="/images/img_e79c5fe4acf120ee.png" alt="" />
+동적 라이브러리 설정을 활성화한다.</p>
+<p>그리고 다음과 같이 cuda 제어 함수를 작성하면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #F5C2E7;font-style: italic;">#![no_std]</span></span>
+<span class="giallo-l"><span>#</span><span style="color: #94E2D5;">!</span><span>[</span><span style="color: #89B4FA;font-style: italic;">feature</span><span>(abi_ptx)]</span></span>
+<span class="giallo-l"><span>#</span><span style="color: #94E2D5;">!</span><span>[</span><span style="color: #89B4FA;font-style: italic;">feature</span><span>(stdarch_nvptx)]</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>use core</span><span style="color: #9399B2;">:</span><span>:arch</span><span style="color: #9399B2;">:</span><span>:nvptx</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[</span><span style="color: #89B4FA;font-style: italic;">unsafe</span><span>(no_mangle)]</span></span>
+<span class="giallo-l"><span>pub unsafe extern</span><span style="color: #A6E3A1;"> &quot;ptx-kernel&quot;</span><span> fn</span><span style="color: #89B4FA;font-style: italic;"> add_kernel</span><span>(</span></span>
+<span class="giallo-l"><span>    a: </span><span style="color: #94E2D5;">*</span><span>const f32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    b: </span><span style="color: #94E2D5;">*</span><span>const f32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    c: </span><span style="color: #94E2D5;">*</span><span>mut f32</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    n: usize</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    let</span><span> idx</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> _block_idx_x</span><span>()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span> * </span><span style="color: #F9E2AF;font-style: italic;">_block_dim_x</span><span style="color: #9399B2;">()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> usize</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        +</span><span style="color: #89B4FA;font-style: italic;"> _thread_idx_x</span><span>()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> usize</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    if</span><span> idx</span><span style="color: #94E2D5;"> &lt;</span><span> n</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        unsafe</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">            *</span><span>c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add</span><span>(idx)</span><span style="color: #94E2D5;"> = *</span><span>a</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add</span><span>(idx)</span><span style="color: #94E2D5;"> + *</span><span>b</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">add</span><span>(idx)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>#[panic_handler]</span></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> panic</span><span>(_: </span><span style="color: #94E2D5;">&amp;</span><span>core::panic::PanicInfo)</span><span style="color: #94E2D5;"> -&gt; !</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    loop </span><span style="color: #9399B2;">{}</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p><img src="/images/img_890f56a20341112b.png" alt="" />
+실수의 배열을 GPU를 써서 더하는 간단한 코드다.<br />
+이렇게 짜면 실제로 GPU 코어를 사용해서 병렬 연산을 돌리게 된다.</p>
+<p>그리고 cuda 타겟을 사용해서 빌드한다.<br />
+(-Ctarget-cpu는 최적화용 선택 옵션)</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>RUSTFLAGS</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;-Ctarget-cpu=sm_75&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>cargo</span><span style="color: #94E2D5;"> +</span><span>nightly rustc \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>target nvptx64</span><span style="color: #94E2D5;">-</span><span>nvidia</span><span style="color: #94E2D5;">-</span><span>cuda \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>Zbuild</span><span style="color: #94E2D5;">-</span><span>std</span><span style="color: #94E2D5;">=</span><span>core \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>release \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>crate</span><span style="color: #94E2D5;">-</span><span>type</span><span style="color: #94E2D5;">=</span><span>cdylib</span></span></code></pre>
+<p><img src="/images/img_4201d7c08ceab614.png" alt="" /></p>
+<p><img src="/images/img_6c59a02b09782bc1.png" alt="" /></p>
+<p><img src="/images/img_ffb6568a436d2e78.png" alt="" />
+그럼 ptx라는 결과물이 떨어질 것이다.</p>
+<p>이건 언어나 GPU 모델 관계없이 실행할 수 있는 중립적인 중간 표현이다. Rust와 별개로 다 사용할 수 있는 엔비디아 표준 규격인 셈이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ptx-silhaenghagi-cust">PTX 실행하기 (cust)</h2>
+<p>Rust에서 방금 만든 ptx를 실행해보자.</p>
+<p>이건 cuda target과는 관련이 없고, cust라는 cuda용 crate을 통해서 돌려볼 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>cargo</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> cuda_host </span></span>
+<span class="giallo-l"><span>cd cuda_host</span></span>
+<span class="giallo-l"><span>cargo add cust</span></span></code></pre>
+<p><img src="/images/img_8973c8f81ce47095.png" alt="" />
+종속성 추가하고</p>
+<br>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>use cust</span><span style="color: #9399B2;">:</span><span>:prelude</span><span style="color: #9399B2;">:</span><span>:</span><span style="color: #94E2D5;">*</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>use cust</span><span style="color: #9399B2;">:</span><span>:error</span><span style="color: #9399B2;">:</span><span>:CudaResult</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> PTX</span><span style="color: #94E2D5;">: &amp;</span><span style="color: #F9E2AF;font-style: italic;">str</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> include_str</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;../test.ptx&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>fn</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #94E2D5;"> -&gt;</span><span> CudaResult</span><span style="color: #94E2D5;">&lt;</span><span>()</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>    let _ctx</span><span style="color: #94E2D5;"> =</span><span> cust::</span><span style="color: #89B4FA;font-style: italic;">quick_init</span><span>()</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let</span><span style="color: #CBA6F7;font-style: italic;"> module</span><span style="color: #94E2D5;"> =</span><span> Module</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_ptx</span><span>(PTX</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> &amp;</span><span>[])</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"><span>    let stream</span><span style="color: #94E2D5;"> =</span><span> Stream</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #CBA6F7;font-weight: bold;">new</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">StreamFlags</span><span style="color: #94E2D5;">::</span><span style="color: #F9E2AF;font-style: italic;">NON_BLOCKING</span><span style="color: #9399B2;">,</span><span style="color: #EBA0AC;font-style: italic;"> None</span><span style="color: #9399B2;">)</span><span>?;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let a</span><span style="color: #94E2D5;"> =</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[1</span><span style="color: #94E2D5;">.</span><span>0f32</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 2.0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 3.0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 4.0</span><span>];</span></span>
+<span class="giallo-l"><span>    let b</span><span style="color: #94E2D5;"> =</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[10</span><span style="color: #94E2D5;">.</span><span>0f32</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 20.0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 30.0</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 40.0</span><span>];</span></span>
+<span class="giallo-l"><span>    let mut c</span><span style="color: #94E2D5;"> =</span><span> vec</span><span style="color: #94E2D5;">!</span><span>[0</span><span style="color: #94E2D5;">.</span><span>0f32; a</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>()];</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let d_a</span><span style="color: #94E2D5;"> =</span><span> DeviceBuffer::</span><span style="color: #89B4FA;font-style: italic;">from_slice</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>a)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"><span>    let d_b</span><span style="color: #94E2D5;"> =</span><span> DeviceBuffer</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_slice</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>b)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"><span>    let d_c</span><span style="color: #94E2D5;"> =</span><span> DeviceBuffer</span><span style="color: #94E2D5;">:</span><span>:</span><span style="color: #89B4FA;font-style: italic;">from_slice</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>c)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let func</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-style: italic;"> module</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">get_function</span><span>(</span><span style="color: #A6E3A1;">&quot;add_kernel&quot;</span><span>)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    let n</span><span style="color: #94E2D5;"> =</span><span> a</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">len</span><span>();</span></span>
+<span class="giallo-l"><span>    let block_size</span><span style="color: #94E2D5;"> =</span><span> 256u32;</span></span>
+<span class="giallo-l"><span>    let grid_size</span><span style="color: #94E2D5;"> =</span><span> ((n</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> u32</span><span>)</span><span style="color: #94E2D5;"> +</span><span> block_size</span><span style="color: #94E2D5;"> -</span><span style="color: #FAB387;"> 1</span><span>)</span><span style="color: #94E2D5;"> /</span><span> block_size;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    unsafe</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        launch!(</span></span>
+<span class="giallo-l"><span>            func&lt;&lt;&lt;grid_size</span><span style="color: #9399B2;">,</span><span> block_size</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">,</span><span> stream&gt;&gt;&gt;(</span></span>
+<span class="giallo-l"><span>                d_a.as_device_ptr()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                d_b.as_device_ptr()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                d_c.as_device_ptr()</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>                n</span></span>
+<span class="giallo-l"><span>            )</span></span>
+<span class="giallo-l"><span>        )?;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    stream</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">synchronize</span><span>()</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"><span>    d_c</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">copy_to</span><span>(</span><span style="color: #94E2D5;">&amp;</span><span>mut c)</span><span style="color: #94E2D5;">?</span><span>;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    println</span><span style="color: #94E2D5;">!</span><span>(</span><span style="color: #A6E3A1;">&quot;{:?}&quot;</span><span style="color: #9399B2;">,</span><span> c);</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    Ok</span><span>(())</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>방금 만든 PTX를 로드해서 실수 배열을 넘기는 간단한 코드다.<br />
+이걸 실행하는 시점에서는 당연히 nvidia GPU과 있어야한다.</p>
+<p>그리고 돌려보면</p>
+<p><img src="/images/img_e129f666615db1d3.png" alt="" /></p>
+<p><img src="/images/img_3aca753d2e36776a.png" alt="" />
+잘 돌아갈 것이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://rust-gpu.github.io/rust-cuda/">https://rust-gpu.github.io/rust-cuda/</a><br />
+<a rel="external" href="https://doc.rust-lang.org/beta/rustc/platform-support/nvptx64-nvidia-cuda.html">https://doc.rust-lang.org/beta/rustc/platform-support/nvptx64-nvidia-cuda.html</a><br />
+<a rel="external" href="https://developer.nvidia.com/blog/understanding-ptx-the-assembly-language-of-cuda-gpu-computing/">https://developer.nvidia.com/blog/understanding-ptx-the-assembly-language-of-cuda-gpu-computing/</a><br />
+<a rel="external" href="https://docs.rs/cust/latest/cust/">https://docs.rs/cust/latest/cust/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224322843672/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>pake: 뚱뚱한 웹뷰 앱을 경량화해주는 도구.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224321145854/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] tsvector와 Full Text Search<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Redis로 API 캐싱하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/222489322908/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Redis로 API 캐싱하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/222489322908/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2021-08-30T00:00:00+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/222489322908/">[AWS] Redis로 API 캐싱하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2021-08-30T00:00:00+00:00"><time datetime="2021-08-30T00:00:00+00:00">2021.08.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="273 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/222489322908" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>이전 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222462346909">https://blog.naver.com/sssang97/222462346909</a></p>
+<p>Redis는 여러가지 용도로 사용할 수 있지만, 가장 뛰어난 사용례 중 하나는 캐싱이다.<br />
+자주 사용되는 결과값을 미리 저장해놓고 꺼내쓰기만 하는 것이다.</p>
+<p>내 경우에는 사이트의 메인페이지에서 사용되는 일부 API들이 꽤 무거운 편이었다.<br />
+메인페이지니까 당연히 엄청 자주 사용되는데, 자주 바뀌는 것도 아니면서 괜히 성능만 잔뜩먹다 한계치에 도달하는 경우가 좀 있었다.</p>
+<p>그래서 이걸 1시간 주기로 캐싱해서 결과값을 렌더링하기로 결정했다.</p>
+<br>
+<br>
+<h2 id="redis-saengseong">Redis 생성</h2>
+<p>관리비용을 최대한 줄이고 싶다면 AWS의 Elasticache로 레디스를 올리는게 좋다.</p>
+<p>AWS에 올릴 경우는 다음 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/222462346909">https://blog.naver.com/sssang97/222462346909</a></p>
+<p>하고싶다면 직접 아무데다 올려서 써도 되긴 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="rediseuyong-peurogsi-hamsu-saengseong">레디스용 프록시 함수 생성</h2>
+<p>이건 Elasticache로 redis를 사용할 때만 필요한 방법이다.<br />
+Elasticache는 무조건 같은 VPC에서만 사용할 수 있기 때문에, 유연한 사용을 원한다면 같은 VPC의 중간다리를 만들어서 사용하는 것이 편리하다.</p>
+<p>이게 필수는 아니고, 그냥 사용하려는 서버에서 바로 호출해도 된다. VPC만 어떻게든 동일하게 맞출 수 있다면 사용에는 문제가 없다.</p>
+<p>함수를 만들고, Elasticache와 동일한 VPC를 설정에 적용해준다.</p>
+<p><img src="/images/img_70435309e320b197.png" alt="" /></p>
+<p>그리고 람다에서 VPC를 통해 접근할 수 있도록 AWSLambdaVPCAccessExecutionRole 역할을 람다의 권한에 추가해준다.</p>
+<p><img src="/images/img_98df48f64e3cd6c2.png" alt="" /></p>
+<p>그리고 소스는 대강 아래와 같은 식으로 구성하면 될 것이다.<br />
+이벤트값에 키와 값이 다 있다면 삽입으로 간주하고 삽입, 키만 있다면 조회를 해오도록 해뒀다.</p>
+<p><img src="/images/img_d5ac787953329289.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> redis</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&#39;redis&#39;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span style="color: #9399B2;"> {</span><span> promisify</span><span style="color: #9399B2;"> }</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> require</span><span>(</span><span style="color: #A6E3A1;">&quot;util&quot;</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> port</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 6379</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> host</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;...apn2.cache.amazonaws.com&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">const</span><span> expireTime</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 60</span><span style="color: #94E2D5;"> *</span><span style="color: #FAB387;"> 60</span><span style="color: #9399B2;">;</span><span style="color: #9399B2;font-style: italic;"> //만료시간</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;font-style: italic;">exports</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handler</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">event</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        statusCode</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 200</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        body</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    };</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">log</span><span>(</span><span style="color: #A6E3A1;">`event: </span><span style="color: #9399B2;">${</span><span style="color: #FAB387;">JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span style="color: #A6E3A1;">(</span><span>event</span><span style="color: #A6E3A1;">)</span><span style="color: #9399B2;">}</span><span style="color: #A6E3A1;">`</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        const</span><span> client</span><span style="color: #94E2D5;"> =</span><span> redis</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">createClient</span><span>(port</span><span style="color: #9399B2;">,</span><span> host)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        const</span><span> getAsync</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> promisify</span><span>(client</span><span style="color: #94E2D5;">.</span><span>get)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(client)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        const</span><span> setexAsync</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> promisify</span><span>(client</span><span style="color: #94E2D5;">.</span><span>setex)</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">bind</span><span>(client)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">        if</span><span>(event</span><span style="color: #94E2D5;">.</span><span>value)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            await</span><span style="color: #89B4FA;font-style: italic;"> setexAsync</span><span>(event</span><span style="color: #94E2D5;">.</span><span>key</span><span style="color: #9399B2;">,</span><span> expireTime</span><span style="color: #9399B2;">,</span><span> event</span><span style="color: #94E2D5;">.</span><span>value)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span style="color: #CBA6F7;"> else</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">            const</span><span> data</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span style="color: #89B4FA;font-style: italic;"> getAsync</span><span>(event</span><span style="color: #94E2D5;">.</span><span>key)</span></span>
+<span class="giallo-l"><span>            response</span><span style="color: #94E2D5;">.</span><span>body</span><span style="color: #94E2D5;"> =</span><span> data</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span style="color: #CBA6F7;"> catch</span><span>(error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>        console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(error)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    return</span><span> response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">};</span></span></code></pre>
+<p>만료시간은 취향껏 조정하면 되고, 레디스의 자동 만료 기능이 필요없다면 setex 대신에 set을 사용하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="seobeoe-kaesing-jeogyong">서버에 캐싱 적용</h2>
+<p>그럼 위에서 만든것으로 캐시를 붙여보자.<br />
+여기서의 예제는 Nestjs이나, 다른 언어를 사용하더라도 크게 다르지 않을 것이다.</p>
+<p>다음과 같이 방금의 람다 호출 함수를 정돈해두고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span> aws</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &#39;aws-sdk&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">let</span><span> lambda</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> null</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">try</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  aws</span><span style="color: #94E2D5;">.</span><span>config</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">update</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>    region</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;ap-northeast-2&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    accessKeyId</span><span style="color: #94E2D5;">: ...</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    secretAccessKey</span><span style="color: #94E2D5;">: ...</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>  lambda</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span> aws</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Lambda</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span style="color: #CBA6F7;"> catch</span><span> (error)</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  console</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">error</span><span>(error)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">export async function</span><span style="color: #89B4FA;font-style: italic;"> redisProxy</span><span style="color: #9399B2;">(</span><span style="color: #EBA0AC;font-style: italic;">payload</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span><span style="font-style: italic;"> key</span><span style="color: #94E2D5;">:</span><span style="color: #CBA6F7;"> string</span><span style="color: #9399B2;">;</span><span style="font-style: italic;"> value</span><span style="color: #94E2D5;">?:</span><span style="color: #CBA6F7;"> string</span><span style="color: #9399B2;"> }) {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> response</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span> lambda</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    ?.</span><span style="color: #89B4FA;font-style: italic;">invoke</span><span>(</span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>      FunctionName</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &#39;redis-proxy-function&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      Payload</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(payload)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    ?.</span><span style="color: #89B4FA;font-style: italic;">promise</span><span>()</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  const</span><span> responsePayload</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">parse</span><span>(response</span><span style="color: #94E2D5;">?.</span><span>Payload)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  return</span><span> responsePayload</span><span style="color: #94E2D5;">?.</span><span>body</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>캐싱용 인터셉터를 정의한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>  CallHandler</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  ExecutionContext</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  HttpException</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  HttpStatus</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  Injectable</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  NestInterceptor</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  UnauthorizedException</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &#39;@nestjs/common&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span><span> Request</span><span style="color: #9399B2;">,</span><span> Response</span><span style="color: #9399B2;"> }</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &#39;express&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span><span> Observable</span><span style="color: #9399B2;"> }</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &#39;rxjs&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span><span> tap</span><span style="color: #9399B2;"> }</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &#39;rxjs/operators&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">import</span><span style="color: #9399B2;"> {</span><span> redisProxy</span><span style="color: #9399B2;"> }</span><span style="color: #CBA6F7;"> from</span><span style="color: #A6E3A1;"> &#39;../functions/redis-proxy&#39;</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #FAB387;">@</span><span style="color: #89B4FA;font-style: italic;">Injectable</span><span style="color: #FAB387;">()</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">export class</span><span style="color: #F9E2AF;font-style: italic;"> RedisCacheInterceptor</span><span style="color: #CBA6F7;"> implements</span><span style="color: #F9E2AF;font-style: italic;"> NestInterceptor</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">  async</span><span style="color: #89B4FA;font-style: italic;"> intercept</span><span style="color: #9399B2;">(</span></span>
+<span class="giallo-l"><span style="color: #EBA0AC;font-style: italic;">    context</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> ExecutionContext</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #EBA0AC;font-style: italic;">    next</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> CallHandler</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  )</span><span style="color: #94E2D5;">:</span><span style="color: #F9E2AF;font-style: italic;"> Promise</span><span style="color: #89DCEB;">&lt;</span><span style="color: #F9E2AF;font-style: italic;">Observable</span><span style="color: #89DCEB;">&lt;</span><span style="color: #CBA6F7;">any</span><span style="color: #89DCEB;">&gt;&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> request</span><span style="color: #94E2D5;"> =</span><span> context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">switchToHttp</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">getRequest</span><span>()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> Request</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> response</span><span style="color: #94E2D5;"> =</span><span> context</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">switchToHttp</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">getResponse</span><span>()</span><span style="color: #CBA6F7;"> as</span><span style="color: #F9E2AF;font-style: italic;"> Response</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> url</span><span style="color: #94E2D5;"> =</span><span> request</span><span style="color: #94E2D5;">?.</span><span>url</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">    const</span><span> cachedResponse</span><span style="color: #94E2D5;"> =</span><span style="color: #CBA6F7;"> await</span><span style="color: #89B4FA;font-style: italic;"> redisProxy</span><span>(</span><span style="color: #9399B2;">{</span><span> key</span><span style="color: #94E2D5;">:</span><span> url</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #94E2D5;">&lt;</span><span style="color: #89B4FA;">br</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    if (cachedResponse) </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>      response</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">json</span><span>(</span><span style="color: #FAB387;">JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">parse</span><span>(cachedResponse));</span></span>
+<span class="giallo-l"><span>      return</span><span style="color: #CBA6F7;font-weight: bold;"> new</span><span style="color: #89B4FA;font-style: italic;"> Observable</span><span>();</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span><span> else </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span>      return next</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">handle</span><span>()</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">pipe</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        tap</span><span>(</span><span style="color: #CBA6F7;">async</span><span style="color: #9399B2;"> (</span><span style="color: #EBA0AC;font-style: italic;">data</span><span style="color: #9399B2;">)</span><span style="color: #CBA6F7;"> =&gt;</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">          await</span><span style="color: #89B4FA;font-style: italic;"> redisProxy</span><span>(</span><span style="color: #9399B2;">{</span><span> key</span><span style="color: #94E2D5;">:</span><span> url</span><span style="color: #9399B2;">,</span><span> value</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> JSON</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">stringify</span><span>(data)</span><span style="color: #9399B2;"> }</span><span>)</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">        }</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>      );</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>  }</span></span>
+<span class="giallo-l"><span>}</span></span></code></pre>
+<p>url을 키, 리스폰스를 값으로 해서 url에 저장된 캐시값이 있다면 그걸 곧장 반환.<br />
+없다면 정상실행을 시키고 리스폰스를 캐시에 저장한다.</p>
+<p>이러고 이 인터셉터를 캐싱시키고싶은 핸들러에 달아주면 된다.</p>
+<p><img src="/images/img_279c8b2c2e473b80.png" alt="" /></p>
+<p>그렇다.</p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/222495914797/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] Serverless Express 템플릿<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/222470527097/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Sentry로 에러 로깅 자동화하기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

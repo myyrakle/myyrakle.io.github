@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] Engine: Buffer (Legacy) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224338633857/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] Engine: Buffer (Legacy)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224338633857/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-07-06T15:44:13.847097+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224338633857/">[Clickhouse] Engine: Buffer (Legacy)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-07-06T15:44:13.847097+00:00"><time datetime="2026-07-06T15:44:13.847097+00:00">2026.07.06</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="265 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224338633857" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Buffer는 보조적인 용도를 위해 존재하는 인메모리 테이블 엔진이다.<br />
+특히 쓰기 처리량을 높이기 위해서, 쓰기 데이터를 버퍼링했다가 한번에 붓는 용도로 쓴다.</p>
+<p><img src="/images/img_7b415c3f1cbf8f39.png" alt="" />
+만약 이런 식으로 원본 테이블이 있다고 하면</p>
+<p>다음과 같이 원본에 대한 버퍼 테이블을 정의할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE 버퍼테이블명 AS 원본테이블명</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span style="color: #89B4FA;font-style: italic;"> Buffer</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    currentDatabase</span><span>()</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;"> --</span><span> 대상 DB</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &#39;테이블명&#39;</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">          --</span><span> 대상 테이블</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">    16</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">                --</span><span> num_layers</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">    5</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 60</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">             --</span><span> min_time</span><span style="color: #9399B2;">,</span><span> max_time</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">    10000</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 1000000</span><span style="color: #9399B2;">,</span><span style="color: #94E2D5;">    --</span><span> min_rows</span><span style="color: #9399B2;">,</span><span> max_rows</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">    1048576</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 104857600</span><span style="color: #94E2D5;"> --</span><span> min_bytes</span><span style="color: #9399B2;">,</span><span> max_bytes</span></span>
+<span class="giallo-l"><span>)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_8e2881d373bf9139.png" alt="" />
+덕지덕지 붙은 옵션들이 자동 flush 조건을 정의하는 부분들이다.<br />
+min은 최소한 저만큼은 되어야 flush한다는 것이고, max는 최종 임계점이다. max에 도달하면 반드시 원본 테이블에 쓰기를 넘긴다.<br />
+버퍼에 쌓인 바이트 크기, 버퍼에 쌓인 시간, 행 개수 단위로 flush 규칙을 정의할 수 있다.</p>
+<p>그리고 buffer에 insert하면</p>
+<p><img src="/images/img_834a821b54d503e3.png" alt="" /></p>
+<p><img src="/images/img_265beb56114e95e0.png" alt="" />
+처음에는 버퍼에만 보이다가</p>
+<br>
+<p><img src="/images/img_10dd646ae7a5395e.png" alt="" />
+기준을 충족하면 원본 테이블에도 부어질 것이다.</p>
+<p>참고로, buffer는 양방향 통신처럼 동작한다.<br />
+events에 있는 데이터는 buffer에서도 조회가 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="bufferyi-hangye">Buffer의 한계</h2>
+<p>그냥 얼핏 보면 좋아보일 수도 있는데, 단점이 많다.</p>
+<p>일단 Buffer -&gt; MergeTree로의 Insert는 exactly once가 보장되지 않는다, 동일 행이 여러번 Insert가 될 수 있다는 것이다.</p>
+<p>그리고 당연하지만 유실 위험이 있다. 인메모리라서 서버가 셧다운되면 증발하는 것이다.</p>
+<p>위와 같은 단점들을 감수함에도, 쓰기 성능이 극적이지는 않다. 특히 한 행씩 Insert하는 것은 Buffer를 쓰더라도 효율적이지 않ㄴ다.</p>
+<br>
+<br>
+<br>
+<h2 id="buffer-vs-async-insert">Buffer vs async Insert</h2>
+<p>게다가 Buffer는 현 시점에는 그다지 권장되지 않는 기능이다. clickhouse 커뮤니티에서는 Buffer를 레거시로 간주하고, async insert 기능을 좋은 대안으로서 권장한다.<br />
+둘 다 clickhouse가 인메모리로 버퍼링을 하다가 모아서 테이블에 write를 날린다는 대전제는 같다. 실제로도 async insert가 buffer를 대체하기 위해 나온 기능이기도 하다.</p>
+<p>async insert는 buffer보다 많은 보장 수준을 제공하고, batch insert 최적화도 잘 해준다.<br />
+wait_for_async_insert 같은 옵션이 있어서 쓰기에 대한 보장을 가져가는 것도 가능하다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223973565751">https://blog.naver.com/sssang97/223973565751</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/engines/table-engines/special/buffer">https://clickhouse.com/docs/engines/table-engines/special/buffer</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224340916512/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>ClickStack: Clickhouse 기반 APM<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224336854201/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Clickhouse와 관측성(Observability) 현황.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>goose: DB 마이그레이션 버전관리 도구 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224270404543/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="goose: DB 마이그레이션 버전관리 도구">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224270404543/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-04-30T05:10:36.640367+00:00">
+    <meta property="article:tag" content="Go">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224270404543/">goose: DB 마이그레이션 버전관리 도구</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-04-30T05:10:36.640367+00:00"><time datetime="2026-04-30T05:10:36.640367+00:00">2026.04.30</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="335 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/go/">Go</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224270404543" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>마이그레이션을 버전 단위로 관리하고 돌리게 해주는 간단한 도구다.<br />
+Go로 만들어졌고, 딱 마이그레이션 책임만 담당한다. ORM이 아니다.</p>
+<p>언어와 별개로 CLI만 설치해서 쓸 수도 있고, Go 코드 내에서 라이브러리로서 사용할 수도 있다.</p>
+<p>사용법만 대강 정리한다.</p>
+<p>현재 지원되는 목록은 이 정도다.</p>
+<p><img src="/images/img_29f76434c2d4d29b.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="cli-seolci">CLI 설치</h2>
+<p>go를 통해 설치할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>go install github</span><span style="color: #94E2D5;">.</span><span>com</span><span style="color: #94E2D5;">/</span><span>pressly</span><span style="color: #94E2D5;">/</span><span>goose</span><span style="color: #94E2D5;">/</span><span>v3</span><span style="color: #94E2D5;">/</span><span>cmd</span><span style="color: #94E2D5;">/</span><span>goose@latest</span></span></code></pre>
+<p><img src="/images/img_4e6882ab6b9a1830.png" alt="" /></p>
+<p><img src="/images/img_c986e58248a4af05.png" alt="" />
+설치하면 즉시 가져다가 쓸 수 있어야 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="cogihwa">초기화</h2>
+<p>이건 마이그레이션 버전 관리나 롤백을 위해서 자체적으로 데이터 관리를 또 한다.<br />
+근데 기본 세팅을 하려면 마이그레이션 파일이 하나라도 있어야 한다. CLI를 써서 깡통 마이그레이션을 하나 추가하자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>goose</span><span style="color: #94E2D5;"> -</span><span>dir migrations create init sql</span></span></code></pre>
+<p><img src="/images/img_7b507a56eee52d87.png" alt="" /></p>
+<p><img src="/images/img_fa967b1c8fbcf559.png" alt="" />
+이러면 이제 저 폴더에 SQL 파일이 쌓일 것이다.<br />
+이렇게 폴더 하나 잡고, 저기에만 계속 마이그레이션 스크립트를 append only로 추가하게 될 것이다.</p>
+<p>이 상태에서 status나 아무 명령을 하나 날리면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>goose</span><span style="color: #94E2D5;"> -</span><span>dir migrations postgres</span><span style="color: #A6E3A1;"> &quot;host=localhost port=5432 user=testuser password=q1w2e3r4 dbname=testdb sslmode=disable&quot;</span><span> status</span></span></code></pre>
+<p><img src="/images/img_2fcc24deead8dab0.png" alt="" /></p>
+<p><img src="/images/img_a246f65fcc9046e4.png" alt="" />
+마이그레이션을 돌리면서 이렇게 기본 테이블을 하나 추가해준다. 저기에 마이그레이션 히스토리가 기록된다.</p>
+<p>up 명령을 써서 한번 돌려보면</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>goose</span><span style="color: #94E2D5;"> -</span><span>dir migrations postgres</span><span style="color: #A6E3A1;"> &quot;host=localhost port=5432 user=testuser password=q1w2e3r4 dbname=testdb sslmode=disable&quot;</span><span> up</span></span></code></pre>
+<p><img src="/images/img_2551c3a9cd6118f8.png" alt="" /></p>
+<p><img src="/images/img_3bcc024c890e1a74.png" alt="" />
+돌면서 기록을 쌓을 것이다. 버전 ID가 일시 기반으로 만드는 파일명의 접두사다.</p>
+<br>
+<br>
+<br>
+<h2 id="maigeureisyeon-dolrigi">마이그레이션 돌리기</h2>
+<p>테이블 하나 추가하는걸 마이그레이션으로 추가해보자.<br />
+CLI로 껍데기를 만든 다음에</p>
+<p><img src="/images/img_bd19316a932927b6.png" alt="" /></p>
+<p><img src="/images/img_26a261ad67823807.png" alt="" /></p>
+<p>저기다가 알아서 잘 채워넣으면 된다.</p>
+<p><img src="/images/img_fc1abbf32ac8f0aa.png" alt="" />
+down 절에 있는게 롤백할때 사용할 값이다.</p>
+<p>저대로 up을 돌리면</p>
+<p><img src="/images/img_1adfce4b8ee9c3bf.png" alt="" /></p>
+<p><img src="/images/img_acadbe7d831bc4cd.png" alt="" />
+테이블을 추가하고, 히스토리에도 쌓여있을 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="maigeureisyeon-rolbaeg">마이그레이션 롤백</h2>
+<p>이런 마이그레이션 툴을 쓸 때 얻는 이점 중 하나는, 롤백이 용이하다는 것이다.</p>
+<p>로그 테이블 마이그레이션을 하나 추가하고</p>
+<p><img src="/images/img_a6e33cd22dd3b64f.png" alt="" /></p>
+<p><img src="/images/img_e3833d3e67927bb3.png" alt="" /></p>
+<p><img src="/images/img_38f3ff3b7e16a0ae.png" alt="" /></p>
+<p>만약 저걸 롤백하고 싶다고 하면, down 명령을 쓰면 된다.<br />
+그럼 역순으로, 최신 마이그레이션부터 하나씩 롤백을 돌려준다.</p>
+<p><img src="/images/img_fa1375b2fafa1504.png" alt="" /></p>
+<p><img src="/images/img_f3427b4e945d79ce.png" alt="" />
+버전에서도 사라진다.<br />
+그 마이그레이션을 돌리기 이전처럼 돌아가는 것이다.</p>
+<p>down-to를 쓰면 특정 버전 시점으로 돌아가게 하는 것도 가능하다.</p>
+<br>
+<p>그리고 기타 명령어</p>
+<p><img src="/images/img_14f22ae5db0d5f7d.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="goeseo-sayonghagi">Go에서 사용하기</h2>
+<p>CLI로만 쓸 수도 있지만, Go를 쓴다면 프로그래머블하게 쓸 수도 있다.<br />
+사용법은 뭐, 크게 다르지 않다. 커넥션만 잘 설정해주고 up 같은 함수만 날려주면 된다.</p>
+<p>다음은 간단한 예제 코드다.</p>
+<p><img src="/images/img_845fafa0229ddb66.png" alt="" /></p>
+<p><img src="/images/img_62ff2547862c766a.png" alt="" /></p>
+<p>예제코드 전체</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">package</span><span> main</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">import</span><span> (</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;database/sql&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;fmt&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;log&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;os&quot;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/joho/godotenv&quot;</span></span>
+<span class="giallo-l"><span>	_</span><span style="color: #A6E3A1;"> &quot;github.com/lib/pq&quot;</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">	&quot;github.com/pressly/goose/v3&quot;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>func</span><span style="color: #89B4FA;font-style: italic;"> main</span><span>()</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> godotenv</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Load</span><span>()</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatal</span><span>(</span><span style="color: #A6E3A1;">&quot;failed to load .env:&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	dsn</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Sprintf</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">		&quot;host=%s port=%s user=%s password=%s dbname=%s sslmode=disable&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		os</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Getenv</span><span>(</span><span style="color: #A6E3A1;">&quot;POSTGRES_HOST&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		os</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Getenv</span><span>(</span><span style="color: #A6E3A1;">&quot;POSTGRES_PORT&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		os</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Getenv</span><span>(</span><span style="color: #A6E3A1;">&quot;POSTGRES_USERNAME&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		os</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Getenv</span><span>(</span><span style="color: #A6E3A1;">&quot;POSTGRES_PASSWORD&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>		os</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Getenv</span><span>(</span><span style="color: #A6E3A1;">&quot;POSTGRES_DB&quot;</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>	)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	db</span><span style="color: #9399B2;">,</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> sql</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Open</span><span>(</span><span style="color: #A6E3A1;">&quot;postgres&quot;</span><span style="color: #9399B2;">,</span><span> dsn)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatal</span><span>(</span><span style="color: #A6E3A1;">&quot;failed to open db:&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"><span>	defer db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Close</span><span>()</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> db</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Ping</span><span>()</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatal</span><span>(</span><span style="color: #A6E3A1;">&quot;failed to ping db:&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	goose</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">SetDialect</span><span>(</span><span style="color: #A6E3A1;">&quot;postgres&quot;</span><span>)</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 현재 마이그레이션 상태 출력</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> goose</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Status</span><span>(db</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;migrations&quot;</span><span>)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatal</span><span>(</span><span style="color: #A6E3A1;">&quot;goose status:&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span style="color: #9399B2;font-style: italic;">	// 마이그레이션 실행 (최신 버전으로 업그레이드)</span></span>
+<span class="giallo-l"><span style="color: #CBA6F7;">	if</span><span> err</span><span style="color: #9399B2;"> :</span><span style="color: #94E2D5;">=</span><span> goose</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Up</span><span>(db</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;migrations&quot;</span><span>)</span><span style="color: #9399B2;">;</span><span> err</span><span style="color: #94E2D5;"> !=</span><span> nil</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span>		log</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Fatal</span><span>(</span><span style="color: #A6E3A1;">&quot;goose up:&quot;</span><span style="color: #9399B2;">,</span><span> err)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">	}</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>	fmt</span><span style="color: #94E2D5;">.</span><span style="color: #89B4FA;font-style: italic;">Println</span><span>(</span><span style="color: #A6E3A1;">&quot;migration complete&quot;</span><span>)</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/pressly/goose">https://github.com/pressly/goose</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224272720652/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>k3k 출시 (쿠버 위에 쿠버).link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224269832387/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>zed 1.0 출시.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

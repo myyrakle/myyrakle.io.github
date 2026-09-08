@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 커넥션과 운영 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224290557071/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 커넥션과 운영">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224290557071/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-05-19T11:12:48.664745+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224290557071/">[PostgreSQL] 커넥션과 운영</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-05-19T11:12:48.664745+00:00"><time datetime="2026-05-19T11:12:48.664745+00:00">2026.05.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="388 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224290557071" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_7e6e8649030e555a.jpeg" alt="" />
+다른 DB들도 마찬가지지만, PostgreSQL에서 가장 중요한 운영 리스크 중 하나가 커넥션의 관리다.</p>
+<p>DB를 안정적으로 운영하기 위해서는 커넥션 개수를 적절한 선에서 유지하도록 신경쓸 필요가 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="keonegsyeongwa-sesyeon-teuraenjaegsyeon">커넥션과 세션, 트랜잭션</h2>
+<p>PostgreSQL에서 커넥션과 - 세션 - 트랜잭션은 사실상의 동의어라고 보면 된다.<br />
+DB Client는 하나의 커넥션마다 최대 1개의 트랜잭션을 생성해서 사용할 수 있으며, DB Server는 MVCC에 기반한 멀티세션 처리를 잘 제공한다.</p>
+<p>PostgreSQL은 하나의 세션을 병렬로 실행하고 스케줄링하기 위해서 OS Process를 사용한다. 따라서 세션이 많아질수록 OS 프로세스 스케줄링으로 인한 성능 부하가 발생할 수 있다.</p>
+<p>당연히 DB라고 해서 CPU 코어 개수 이상의 일을 동시에 할 수는 없으니, 코어 개수 이상의 세션이 열린다면 OS 프로세스 스케줄링에 의해서 점진적 처리가 된다<br />
+그리고 세션이 많아질수록 프로세스 또한 비례해 증가하므로, 세션이 많아지는 것은 그다지 좋지 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="cpu-seupeggwa-keonegsyeon-buha">CPU 스펙과 커넥션 부하</h2>
+<p>이런저런 이유들로 인해 커넥션의 개수는 DB에 유의미한 부하를 가한다.<br />
+그러면 커넥션의 개수를 몇개 정도로 유지하는 것이 좋을까?</p>
+<p>사실 딱 정답이라고 할 수는 없지만, 보수적인 관점에서는 물리 코어당 2-4개 정도의 세션을 안정적인 상한선으로 잡곤 한다. 그래서 cpu 코어가 4개면 8-16개 정도를 유지하는 것이 권장된다. (active session 기준)</p>
+<p><img src="/images/img_650fbd048385aa31.png" alt="" />
+이런건 사실 좋진 않다.</p>
+<p>쿼리로 세션 현황을 보려면 다음과 같은 쿼리를 날려보면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT state</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> count</span><span>(</span><span style="color: #94E2D5;">*</span><span>)</span></span>
+<span class="giallo-l"><span>FROM pg_stat_activity</span></span>
+<span class="giallo-l"><span>GROUP BY</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_63e95ba2b8acbdad.png" alt="" />
+이 active와 idle in tranascation 개수가 중요하다. 저게 적을수록 좋은 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="keonegsyeon-gwanri-tib">커넥션 관리 팁</h2>
+<p>커넥션을 효과적으로 운영하는게 필요한 항목들을 몇가지 정리해본다.</p>
+<br>
+<h4 id="keonegsyeon-gaesu-jehan">커넥션 개수 제한</h4>
+<p>가장 중요한 것 중 하나는, 서버마다의 커넥션 개수 제한을 명확하게 지정하는 것이다.<br />
+대부분의 DB Client 라이브러리들을 커넥션을 필요한만큼 생성하는데, 그 MAX Connection 한도를 지정하는 옵션이 있다. 이걸 감당 가능한 선에서 조절하는 것이 중요하다.</p>
+<br>
+<h4 id="seobeoriseu-gyeonggye">서버리스 경계</h4>
+<p>24시간 고정된 사이즈에 개수로 떠있는 고전적인 서버 인프라라면 개수 제한만으로 충분하지만, 변칙적인 인프라 환경이라면 커넥션이 의도치 않게 튈 수 있다.<br />
+요청마다 독립된 프로세스를 띄우는 PHP 같은 경우에도 커넥션을 무제한으로 소모할 수 있다는 문제가 있고, 무제한으로 확장되며 커넥션을 독자적으로 소모하는 AWS Lambda 같은 인프라 리소스도 요주의 경계 대상이다.<br />
+이런걸 쓸때는 RDS Proxy나 pgBouncer 같은 중간 Pool 계층을 두거나, 메인 API 서버로 query 처리를 대행하는 식으로 우회하는 것을 권장한다.</p>
+<br>
+<h4 id="teuraenjaegsyeon-jjalbge-jabgi">트랜잭션 짧게 잡기</h4>
+<p>트랜잭션은 가급적이면 최소한도로, 짧게 잡는 것이 좋다. DB Client들은 기존 커넥션을 적절히 재사용하는 pool 로직들이 들어있으므로, 짧게 잡고 끝내면 커넥션을 재사용하면서 동시 세션을 적게 가져갈 수 있다.<br />
+트랜잭션을 열어놓고 길게 잡을수록 동시 세션-커넥션이 급증하게 될 확률이 높다.<br />
+pg 통계의 idle in tranascation 비율이 높다면, 트랜잭션을 길게 잡고 있다는 증거다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://wiki.postgresql.org/wiki/Number_Of_Database_Connections">https://wiki.postgresql.org/wiki/Number_Of_Database_Connections</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224291917510/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostGIS] 좌표계 기본개념<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224290170058/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 인덱스: Gist<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

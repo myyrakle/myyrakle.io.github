@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] 디스크 사용량 추적 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224353439136/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] 디스크 사용량 추적">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224353439136/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-07-21T08:54:58.545512+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224353439136/">[Clickhouse] 디스크 사용량 추적</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-07-21T08:54:58.545512+00:00"><time datetime="2026-07-21T08:54:58.545512+00:00">2026.07.21</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="227 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224353439136" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>디스크 사용량을 모니터링하고 쫓아가는 방법을 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="jeonce-diseukeu-sayongryang-hwagin">전체 디스크 사용량 확인</h2>
+<p>가장 간단하게 디스크 사용량을 확인하는 방법은 disk 테이블을 읽는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>    name AS disk</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    path</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    type</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(total_space) AS total</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(total_space</span><span style="color: #94E2D5;"> -</span><span> free_space) AS used</span></span>
+<span class="giallo-l"><span>FROM system</span><span style="color: #94E2D5;">.</span><span>disks</span></span></code></pre>
+<p><img src="/images/img_2566fbf6e841aec8.png" alt="" />
+이러면 호스트 전체 디스크의 크기는 900GB고, 사용중인 용량이 115GB라는 말이 된다.</p>
+<p>근데 여기에는 허수가 좀 크게 들어있다.<br />
+이 disk 정보는 clickhouse가 쓰는 영역만 계산하는게 아니라, 해당 파일시스템의 총 사용량을 계산하는 것이기 때문이다. 그래서 루트 파일시스템(/)을 쓴다면, 그 사용량이 그대로 전이된다.</p>
+<p>가장 정확한 사용량을 재는 방법은 parts를 읽는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(</span><span style="color: #89B4FA;font-style: italic;">sum</span><span>(bytes_on_disk)) AS size</span></span>
+<span class="giallo-l"><span>FROM system</span><span style="color: #94E2D5;">.</span><span>parts</span></span></code></pre>
+<p><img src="/images/img_08e7d42e28ef6159.png" alt="" />
+이게 진짜 clickhouse의 사용량이다.</p>
+<br>
+<br>
+<br>
+<h2 id="inactive-parts">inactive parts</h2>
+<p>다른 DB들이 그렇듯이, clickhouse도 미사용영역에 대한 dead parts가 항상 남아있다.<br />
+이건 merge되고 남은 옛 잔여물일 수도 있고 삭제된 옛 데이터일 수도 있다.</p>
+<p>시간이 지나면 정리되긴 하지만, 경우에 따라서는 크게 튈 수 있어서 세부 조정이 필요할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>    active</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(</span><span style="color: #89B4FA;font-style: italic;">sum</span><span>(bytes_on_disk)) AS size</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    count</span><span>() AS parts</span></span>
+<span class="giallo-l"><span>FROM system</span><span style="color: #94E2D5;">.</span><span>parts</span></span>
+<span class="giallo-l"><span>GROUP BY active</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_28c66231fb66fac2.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="dbbyeol-keugi-johoe">DB별 크기 조회</h2>
+<p>DB별 크기 조회 쿼리다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>    database</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    sum</span><span>(bytes_on_disk) AS bytes</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(bytes) AS size</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    sum</span><span>(rows) AS rows</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    uniqExact</span><span>(table) AS table_count</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    count</span><span>() AS active_part_count</span></span>
+<span class="giallo-l"><span>FROM system</span><span style="color: #94E2D5;">.</span><span>parts</span></span>
+<span class="giallo-l"><span>WHERE active</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>GROUP BY database</span></span>
+<span class="giallo-l"><span>ORDER BY bytes DESC</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_7f8ebb7c66e69351.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="teibeulbyeol-keugi-johoe">테이블별 크기 조회</h2>
+<p>테이블별로 크기를 조회하는 쿼리다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>    database</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    table</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    disk_name</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    sum</span><span>(bytes_on_disk) AS bytes_on_disk</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(bytes_on_disk) AS size_on_disk</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(</span><span style="color: #89B4FA;font-style: italic;">sum</span><span>(data_compressed_bytes))</span></span>
+<span class="giallo-l"><span>        AS compressed_data</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    formatReadableSize</span><span>(</span><span style="color: #89B4FA;font-style: italic;">sum</span><span>(data_uncompressed_bytes))</span></span>
+<span class="giallo-l"><span>        AS uncompressed_data</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    round</span><span>(</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">        sum</span><span>(data_uncompressed_bytes)</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        /</span><span style="color: #89B4FA;font-style: italic;"> nullIf</span><span>(</span><span style="color: #89B4FA;font-style: italic;">sum</span><span>(data_compressed_bytes)</span><span style="color: #9399B2;">,</span><span style="color: #FAB387;"> 0</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #FAB387;">        2</span></span>
+<span class="giallo-l"><span>    ) AS compression_ratio</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    sum</span><span>(rows) AS rows</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    count</span><span>() AS active_parts</span></span>
+<span class="giallo-l"><span>FROM system</span><span style="color: #94E2D5;">.</span><span>parts</span></span>
+<span class="giallo-l"><span>WHERE active</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>GROUP BY</span></span>
+<span class="giallo-l"><span>    database</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    table</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    disk_name</span></span>
+<span class="giallo-l"><span>ORDER BY bytes_on_disk DESC</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_ca3f1d7f04ade411.png" alt="" />
+테이블과 실제 디스크 사용량, 미압축시의 원본 데이터도 볼 수 있다.<br />
+압축이 상당히 잘되더라.</p>
+<br>
+<br>
+<br>
+<h2 id="siseutem-rogeu">시스템 로그</h2>
+<p>DB를 장기간 운영하다보면 system 테이블이 수상할 정도로 부풀 수 있다.<br />
+clickhouse은 로그를 굉장히 열심히 쌓는 편인데, 그걸 알아서 치우질 않기 때문이다.<br />
+이건 알아서 잘 정리해줘야 한다.</p>
+<p>정리 방법은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224173373332">https://blog.naver.com/sssang97/224173373332</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/operations/system-tables/disks">https://clickhouse.com/docs/operations/system-tables/disks</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224353717919/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[LLM] mlx로 모델 올려서 사용해보기 (MacOS)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224353303389/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>HyperDX: Client Session (RUM)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

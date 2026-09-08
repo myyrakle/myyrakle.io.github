@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Sagemaker AI: 모델 서빙 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224310963283/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Sagemaker AI: 모델 서빙">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224310963283/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-06-09T11:31:29.282501+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224310963283/">[AWS] Sagemaker AI: 모델 서빙</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-06-09T11:31:29.282501+00:00"><time datetime="2026-06-09T11:31:29.282501+00:00">2026.06.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="871 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224310963283" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_41fbc8ad4d3eb07a.jpg" alt="" />
+Sagemaker는 AWS에서 제공하는 AI 모델 개발/서빙용 플랫폼이다.<br />
+단일 서비스처럼 소개하긴 하는데, 온갖 다양한 별도 기능들이 하나로 뭉쳐진 혼종이다. 안쓰는 기능이 더 많다.</p>
+<p>여기서는 AI 모델을 배포하기에 유용한 Realtime Endpoint(Realtime Inference)를 위주로 소개해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="gujo">구조</h2>
+<p>기본적으로 ECS처럼 컨테이너 기반의 방법론을 따른다.<br />
+모델 서버를 컨테이너로 말아서 ECR에 올려놓고 Sagemaker에 모델로서 등록을 하면, 설정하기에 따라서 Sagemaker가 모델서버를 자동으로 프로비저닝해서 쓸 수 있게 해주는 것이다.</p>
+<p><img src="/images/img_db95f2e36787fd5a.png" alt="" />
+이런 식이다.<br />
+아마 내부 인프라는 EC2를 사용할 것이다. 포장만 잘 해서 파는 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="ijeom">이점</h2>
+<p>다음과 같은 이점들이 있다.</p>
+<p>로그 자동 관리 (cloudwatch)<br />
+메트릭 자동 관리<br />
+무중단 배포 기본 지원<br />
+엔드포인트 자동 지원<br />
+간편한 스케일링 기능<br />
+스파이크 대응을 위한 비동기 추론 기능<br />
+초대형 추론을 위한 Batch 기능 지원</p>
+<br>
+<br>
+<br>
+<h2 id="jehansahang-mic-hangye">제한사항 및 한계</h2>
+<p>컨테이너로 말기 때문에 기술 자유도는 제법 있는 편이긴 한데, 그래도 몇가지 프로토콜/드라이버 수준 제한사항은 있다.</p>
+<ol>
+<li>모델 구성은 cuda 12.* 버전에 호환되어야 한다.</li>
+<li>서버는 8080 포트로 열려야 한다.</li>
+<li>정해진 형태로 API를 개방해야 한다.</li>
+<li>(서버리스의 경우) 모델이 먹는 메모리의 HARD LIMIT은 6GB다.</li>
+<li>(동기형 프로비저닝의 경우) 모델 인스턴스를 0개로 줄일 수 없다.</li>
+</ol>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>당연하지만, 마냥 싸진 않다.<br />
+<a rel="external" href="https://aws.amazon.com/ko/sagemaker/ai/pricing/">https://aws.amazon.com/ko/sagemaker/ai/pricing/</a></p>
+<p>가장 직관적인 프로비저닝의 경우에는 EC2 처럼 타입별 요금을 뜯는다.</p>
+<p><img src="/images/img_9f077b7fb2fab15d.png" alt="" /></p>
+<p><img src="/images/img_6078ce99019c2e61.png" alt="" />
+CPU만 있는건 싸고, GPU 달린건 당연히 비싸다.<br />
+동일스펙의 EC2 대비 대략 1.5배쯤 비싼 편이다.</p>
+<br>
+<p><img src="/images/img_9f179caf82c181a3.png" alt="" />
+서버리스의 경우 실행된 시간 기반으로 뜯고, 트래픽으로 뜯는다.</p>
+<p>그리고 이 용도로 AI Saving Plan이 따로 있다. 이건 프로비저닝에 대해서만 지원되며, 1년 선결제 기준 30% 정도가 절감된다.<br />
+<a rel="external" href="https://aws.amazon.com/ko/savingsplans/ml-pricing/">https://aws.amazon.com/ko/savingsplans/ml-pricing/</a></p>
+<br>
+<br>
+<br>
+<h2 id="docker-imiji-malgi">Docker 이미지 말기</h2>
+<p>먼저 서버 규격에 맞춰서 코드를 좀 추가해야 한다.<br />
+다음 2가지 API가 필수적이다.</p>
+<p><img src="/images/img_cd7fa35c816cc91b.png" alt="" />
+ping이 헬스체크용이고, invacation이 추론 API다.</p>
+<p>이미지를 말때도 메타데이터를 넣지 않도록 약간 옵션을 줘야 한다.<br />
+안그러면 모델 등록할때 뻑난다. provenance와 sbom를 꺼서 올리자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>docker buildx build</span><span style="color: #94E2D5;"> --</span><span>platform linux</span><span style="color: #94E2D5;">/</span><span>amd64 \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>provenance</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">false</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>sbom</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">false</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>f Dockerfile</span><span style="color: #94E2D5;">.</span><span>sagemaker</span><span style="color: #94E2D5;">-</span><span>cpu \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>t</span><span style="color: #A6E3A1;"> &quot;$AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPO:$TAG&quot;</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>push</span><span style="color: #94E2D5;"> .</span></span></code></pre>
+<p><img src="/images/img_ac02af3a46936f6b.png" alt="" />
+그리고 ECR에 잘 올리기만 하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="model-saengseong">모델 생성</h2>
+<p>이제 AWS로 가서 모델을 등록해보자.</p>
+<p><img src="/images/img_8f09c3498aefa95a.png" alt="" />
+Deployable Models 탭으로 이동한다.</p>
+<br>
+<p><img src="/images/img_41a8c6d53965df2f.png" alt="" /></p>
+<p><img src="/images/img_ce8b49b729f9f629.png" alt="" />
+그리고 방금 올린 ECR 경로를 적당히 넣어주면 된다.</p>
+<br>
+<p><img src="/images/img_c1ee75b996186880.png" alt="" />
+네트워크 옵션은 선택이다.<br />
+만약 허깅페이스 같은 데서 다운받거나 이미지를 다운받거나 하면 저 격리를 꺼야한다.<br />
+보안이 중요하다면 켜는게 좋다.</p>
+<br>
+<p><img src="/images/img_77917a058adaf076.png" alt="" />
+그래서 이렇게 등록이 되면 벽돌 하나는 완성한 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="endeupointeu-config-saengseong">엔드포인트 Config 생성</h2>
+<p>그 다음에는 구성을 만들어야 한다. 어떤 인스턴스 타입으로 띄울지 등을 선택한다.</p>
+<p><img src="/images/img_f9a32cbef3dcb6f8.png" alt="" /></p>
+<p>이게 좀 헷갈리는게 있는데, 변형에 모델을 골라서 넣으면 지맘대로 인스턴스 타입을 고정해서 넣어버린다.</p>
+<p><img src="/images/img_37c6dde5650c216d.png" alt="" /></p>
+<p>저기 오른편에 숨어있는 편집 버튼을 눌러야 타입을 고를 수 있다.</p>
+<p><img src="/images/img_8b6a1f4d7c25dbbd.png" alt="" /></p>
+<br>
+<br>
+<br>
+<br>
+<h2 id="peurobijeoning-endeupointeu-mandeulgi">프로비저닝 엔드포인트 만들기</h2>
+<p>그럼 이제 방금 만든 구성을 통해서 실제 엔드포인트를 만들면 된다.<br />
+이게 찐막이다.</p>
+<p><img src="/images/img_d280a3a90638421a.png" alt="" /></p>
+<p><img src="/images/img_35eda8aae24f21c4.png" alt="" />
+골라서 생성하면, 생성 시간이 약간 걸린다.</p>
+<br>
+<p><img src="/images/img_34f2f548c65cd0ca.png" alt="" />
+그러면 저기 URL이 생기는데</p>
+<br>
+<p><img src="/images/img_7db7c7bb80f07fd7.png" alt="" />
+가라로 만든거라서 저걸 직접 쓰진 못한다. URL 자체가 별로 유니크해보이진 않잖나.</p>
+<p>가장 편리한 방법은 sdk나 api를 쓰는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>aws sagemaker</span><span style="color: #94E2D5;">-</span><span>runtime invoke</span><span style="color: #94E2D5;">-</span><span>endpoint \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>region ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>endpoint</span><span style="color: #94E2D5;">-</span><span>name 엔드포인트명 \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>content</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;">type</span><span style="color: #F9E2AF;font-style: italic;"> application/json \</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">  --cli-binary-format raw-in-base64-out \</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">  --body &#39;{&quot;text&quot;:&quot;The battery life is terrible&quot;,&quot;aspect&quot;:&quot;battery&quot;</span><span>}</span><span style="color: #A6E3A1;">&#39;</span><span style="color: #F5C2E7;"> \</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  output.json</span></span></code></pre>
+<p><img src="/images/img_fb397c151dfdcca6.png" alt="" />
+이런 느낌으로 날리면 응답이 구성한대로 json으로 잘 날라올 것이다.</p>
+<br>
+<br>
+<br>
+<h2 id="gwanceugseong">관측성</h2>
+<p>관리형 서비스이기 때문에, 기본적인 메트릭은 알아서 쌓고 제공해준다.<br />
+CPU/메모리 정보 등은 기본 페이지에서 제공하며</p>
+<p><img src="/images/img_6c60a8a6ca3b4f53.png" alt="" /></p>
+<p>로그도 Cloudwatch를 통해 제공한다.</p>
+<p><img src="/images/img_afa6437488a62404.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="otoseukeilring">오토스케일링</h2>
+<p>서버를 줄이고 늘리는 것도 꽤 간편하다.</p>
+<p><img src="/images/img_dc6015fcb182b3b2.png" alt="" /></p>
+<p><img src="/images/img_e104b3433f1412c6.png" alt="" />
+여기서 그냥 바꿔도 되고</p>
+<br>
+<p><img src="/images/img_11d7c7c7409686b8.png" alt="" />
+오토스케일링을 구성해서 스케일링을 자동화할 수도 있다.</p>
+<br>
+<p><img src="/images/img_f50a4b211d55f371.png" alt="" />
+다만. 기본 엔드포인트 구성에서는 0개로 자동 축소는 지원되지 않는다. 이건 Async 엔드포인트에서만 가능하다.</p>
+<br>
+<br>
+<br>
+<h2 id="async-endeupointeu">Async 엔드포인트</h2>
+<p>ASync 엔드포인트는 스파이크 패턴에 최적화된 한 변형이다.<br />
+엔드포인트 구성 수준에서 설정할 수 있다.</p>
+<p><img src="/images/img_d0cfec8e602bff99.png" alt="" />
+이렇게 적당히 설정하고, 엔드포인트를 새로 생성한다.<br />
+엔드포인트는 구성을 다운타임 없이 교체할 수 있지만, Async &lt;&gt; Sync 교체는 불가능하다. 새로 만들어야 한다.</p>
+<p>Async 추론은 사용 방법이 좀 다르다.</p>
+<p><img src="/images/img_fc72aa044c017f36.png" alt="" /></p>
+<p><img src="/images/img_04394ba942749052.png" alt="" />
+요청 json을 버킷에 올린 다음에</p>
+<p>그 경로를 넣어서 쏴야 한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>aws sagemaker</span><span style="color: #94E2D5;">-</span><span>runtime invoke</span><span style="color: #94E2D5;">-</span><span>endpoint</span><span style="color: #94E2D5;">-</span><span>async \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>region ap</span><span style="color: #94E2D5;">-</span><span>northeast</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">2</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>endpoint</span><span style="color: #94E2D5;">-</span><span>name 엔드포인트\</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>content</span><span style="color: #94E2D5;">-</span><span style="color: #CBA6F7;">type</span><span style="color: #F9E2AF;font-style: italic;"> application/json \</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">  --input-location 파일경로</span></span></code></pre>
+<p><img src="/images/img_56abed9207f56924.png" alt="" />
+그럼 이렇게 응답이 오는데, InferenceID는 쓸모가 없다. 완료 알림이 필요하다면 SNS/SQS를 설정해서 대기하는 것이 일반적이다.<br />
+아무튼 그게 없다면 실제 성공 경로에 파일이 떨어질 때까지 기다리면 된다.</p>
+<p>그러면 이렇게 파일이 떨어질 것이다.</p>
+<p><img src="/images/img_7d525131bebeb6a1.png" alt="" /></p>
+<p><img src="/images/img_4f0c835c2c1abe09.png" alt="" />
+까보면 응답값이 나온다.</p>
+<p>그리고 Async Endpoint의 경우에는 사용이 없을때 인스턴스가 0으로 다운되는, zero scale이 가능하다. (단, t 시리즈는 안됨)</p>
+<p><img src="/images/img_5ebf57d7355f2e3f.png" alt="" /></p>
+<p><img src="/images/img_79690a5ccbb1d57f.png" alt="" />
+이렇게 맞춰놓으면</p>
+<br>
+<p><img src="/images/img_1021492f6dbc38d0.png" alt="" />
+안쓸때 0개로 내려간다. 이게 좀 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="seobeoriseu-endeupointeu">서버리스 엔드포인트</h2>
+<p>또 매우 가벼운 사용사례라면 괜찮은 옵션 중 하나가 이거다.<br />
+Lambda 처럼 완전히 온디맨드라서 프로비저닝할 필요가 없고, 컴퓨팅 시간당 과금을 한다.<br />
+메모리 정도만 미리 명시해두면 알아서 내부에서 확장한다.</p>
+<p><img src="/images/img_9af08e37ae98556e.png" alt="" /></p>
+<p><img src="/images/img_42ca4500d046d721.png" alt="" />
+이렇게 대충 만들면 된다.</p>
+<br>
+<p><img src="/images/img_0dd8303f3ab0b913.png" alt="" />
+이게 콜드스타트가 좀 길다. 600MB 짜리 모델을 1GB 메모리에 올렸더니 콜드스타트가 40-50초 정도 걸리더라.</p>
+<p>그리고 1GB짜리 최소스펙으로 해서는 성능이 좀 많이 딸리는 편이다.<br />
+Lambda처럼 메모리에 비례해서 CPU를 할당하기 때문이다.</p>
+<p><img src="/images/img_521dcfa155a93fac.png" alt="" />
+1GB로 했을때</p>
+<br>
+<p><img src="/images/img_1564a1049d55d692.png" alt="" />
+2GB로 했을떄</p>
+<p>근데 이게 현실적으로 좀 많이 비싸기 때문에, 한달에 한번 정도 진짜 조금씩 호출하는 간헐적인 케이스가 아니라면 추천하지 않는다.<br />
+무슨 모델이 CPU에서도 한자릿수 밀리초 수준으로 빠른게 아니면 스파이크 트래픽에도 잘 맞지 않는다. CPU에서도 초 단위로 느린데 호출이 빈번하면 비용이 폭발한다.<br />
+내가 봤을때는 실패한 서비스의 한 형태다.</p>
+<p>대부분의 경우 현실적인 추천안은 Async Endpoint다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/sagemaker/latest/APIReference/API_runtime_InvokeEndpoint.html">https://docs.aws.amazon.com/ko_kr/sagemaker/latest/APIReference/API_runtime_InvokeEndpoint.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224315189762/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[ML] 모델 성능 깎기<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224308647221/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>Python JIT 개발 반쯤 중단.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

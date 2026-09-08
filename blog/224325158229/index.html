@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Concurrency] thread local storage (TLS) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224325158229/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Concurrency] thread local storage (TLS)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224325158229/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-06-23T16:15:44.902449+00:00">
+    <meta property="article:tag" content="동시성">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224325158229/">[Concurrency] thread local storage (TLS)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-06-23T16:15:44.902449+00:00"><time datetime="2026-06-23T16:15:44.902449+00:00">2026.06.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="483 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/dongsiseong/">동시성</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224325158229" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>thread local storage는 스레드마다 독립적인 전역변수를 할당하는 사용 패턴을 말한다.<br />
+thread local이라고 부르기도 하고, TLS라고도 부른다. 더 유명한 축약어가 있어서 헷갈리긴 한다만.</p>
+<p>아무튼 동시성 기능을 제공하는 주요 언어들에는 거의 다 있다.<br />
+C/C++, Rust, Java, C#, Python 등에서 기본적으로 제공되고, Go가 특이하게 예외적으로 없다.</p>
+<p>사실 이게 문법적으로 지원되지 않아도, 비슷한 의미론은 어떻게든 구현할 수 있다.<br />
+어쨌든 스레드의 생명주기 전체에서 살아있고 접근이 되면 되는 것이기 때문이다. 스레드 스코드 최상위에 두고 참조할 수 있게 전달만 하면 비슷하게 동작을 한다.</p>
+<br>
+<br>
+<br>
+<h2 id="c-c-eseo">C/C++에서</h2>
+<p>C++11에서는 컴파일러 수준에서 thread_local라는 전용 키워드를 제공한다.<br />
+이걸 붙인 채로 전역변수로 선언하고, 참조해서 사용하면 자동으로 스레드마다 복제가 된다.</p>
+<p><img src="/images/img_a9dfea426fd91c9a.png" alt="" /></p>
+<p>C도 C11, C23에서는 _Thread_local라는 동등한 키워드를 추가했다.</p>
+<p><img src="/images/img_ffcdf72c4cf51c90.png" alt="" />
+그 이전 버전의 클래식 C에서는 컴파일러별 비표준 확장을 통해서만 사용할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="rusteseo">Rust에서</h2>
+<p>Rust도 기본 라이브러리 수준에서 스레드 로컬을 지원한다.</p>
+<p><img src="/images/img_435d1d4098dc7ee4.png" alt="" /></p>
+<p><img src="/images/img_ffc4bbe7cb08f3d0.png" alt="" />
+이러고 사용하면 알아서 스레드마다 복제가 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="naebu-guhyeon">내부 구현</h2>
+<p>이게 그냥 전역변수처럼 적당히 변수 선언하고 끝내는 식으로 생각하기 쉽지만, 실제 내부 구현은 다층적인 편이다.<br />
+사실, thread local은 단순히 컴파일러의 문법적 설탕이 아니다. OS, CPU 수준 지원을 모두 활용해서 만들어지는 것이다.</p>
+<p>먼저 CPU에서 제공하는 적절한 인터페이스가 있다.<br />
+x86의 경우에는 fs라는 게 있는데, TLS를 위해서 만들어진 것은 아니지만 가장 사용하기 적절하고 실제로도 거의 ABI 수준에서 약속이 되어있다.<br />
+TLS에 대한 접근은 컴파일러에 의해 다음과 같이 변환된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>mov rax</span><span style="color: #9399B2;">,</span><span> fs</span><span style="color: #9399B2;">:</span><span>[offset]</span></span></code></pre>
+<p>fs라는 전용 공간에서 값을 접근하는 것이다.</p>
+<p>그리고 OS에서는 이를 이용해서 OS 스레드별 TLS 매핑을 관리한다.<br />
+thread local 변수를 선언하면 내부적으로 TLS Block이란 것을 만든다. 이걸로 OS Thread =&gt; fs 매핑을 제어하는 것이다.</p>
+<p><img src="/images/img_e4985f6b21c6a060.png" alt="" />
+그래야 컨텍스트 스위칭이 발생할때마다 fs 값을 적절히 교체할 수 있기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="eonje-sseoyahana">언제 써야하나?</h2>
+<p>사실 thread local을 사용할만한 상황이 그렇게 자주 나오진 않는다.<br />
+일반적인 응용프로그램에서는 적당히 로컬변수만으로 처리할 수 있다. 스레드별로 살아있는 전역 값이 필요하다면 공유 객체를 잘 설계해서 넘기면 되는 것이다.</p>
+<p>성능적으로는 좀 애매하다. 전역 Mutex 객체와 비교하면 thread local가 빠르긴 한데... 단순 지역변수를 만들고 넘기는 것과 비교하면 비슷하거나 약간 느릴 수도 있다.</p>
+<p>다만 C의 경우에는 문법적 표현력의 한계 때문에 thread local이 유용한 경우가 많다. 클로저 캡쳐도 없고, 상위 스코프의 객체를 선언하고 넘겨서 공유하는 것이 매우 지리하고 불편하기 때문이다.</p>
+<p>그리고 이게 스레드별 상태를 고정적으로 할당하고 사용하는 것이기 때문에, 실제 스레드가 동적으로 교체될 수 있는 그린 스레드(혹은 가상 스레드) 개념과는 잘 맞지 않을 수 있다. 게다가 숨겨진 전역 상태가 암시적으로 공유되니, 전역변수와 비슷한 이유에서 코드 품질이 떨어질 수 있다.<br />
+이게 Go가 TLS를 배제한 이유이기도 하다. 마찬가지로 Java에서도 Virtual Thread가 도입된 이후로는 도입을 경계하는 분위기가 생긴 것 같더라.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://6it.dev/blog/infographics-operation-costs-in-cpu-clock-cycles-take-2-80736">https://6it.dev/blog/infographics-operation-costs-in-cpu-clock-cycles-take-2-80736</a><br />
+<a rel="external" href="https://doc.rust-lang.org/std/macro.thread_local.html">https://doc.rust-lang.org/std/macro.thread_local.html</a><br />
+<a rel="external" href="https://learn.microsoft.com/ko-kr/windows/win32/procthread/thread-local-storage">https://learn.microsoft.com/ko-kr/windows/win32/procthread/thread-local-storage</a><br />
+<a rel="external" href="https://maskray.me/blog/2021-02-14-all-about-thread-local-storage">https://maskray.me/blog/2021-02-14-all-about-thread-local-storage</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224327821502/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>Clickhouse의 10년.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224323941397/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] PL&#x2F;Rust<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

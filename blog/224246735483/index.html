@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[k8s] node 셧다운하기 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224246735483/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[k8s] node 셧다운하기">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224246735483/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-04-09T08:37:16.361445+00:00">
+    <meta property="article:tag" content="Kubernetes">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224246735483/">[k8s] node 셧다운하기</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-04-09T08:37:16.361445+00:00"><time datetime="2026-04-09T08:37:16.361445+00:00">2026.04.09</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="236 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/kubernetes/">Kubernetes</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224246735483" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>쿠버든 뭘 쓰든 간에 결국 컴퓨터는 물리 장비고, 운영을 하다 보면 여러가지 이유로 재부팅이나 패치를 포함한 여러가지 유지보수 작업이 필요하게 된다.<br />
+그러려면 유지보수할 node에 실행되고 있던 Pod들을 적절히 다른 곳으로 재배치해야할 필요가 있다. 그 방법에 대해 간단히 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="singyu-seukejulring-jungdan-cordon">신규 스케줄링 중단: cordon</h2>
+<p>일단 가장 먼저 해야할 것은 해당 노드에 신규 Pod가 추가되지 않게 하는 것이다.<br />
+가장 간단한 방법은 cordon이란 명령을 쓰는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl cordon</span><span style="color: #94E2D5;"> &lt;</span><span>노드명</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p>이 명령은 내부적으로 node.kubernetes.io/unschedulable:NoSchedule라는 taint를 붙여서 taint 기반의 스케줄링 가드를 걸어버린다. 사실 taint 명령으로 직접 붙이는 것과 차이는 없고, 그냥 숏컷이다.</p>
+<p>신규 등록을 중단했으니, 이제 기존 Pod를 내리면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="seobeo-jungdan-drain">서버 중단: drain</h2>
+<p>drain 명령을 쓰면, 특정 node의 기존 Pod들을 다른 Pod로 재스케줄링되게 할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl drain</span><span style="color: #94E2D5;"> &lt;</span><span>노드명</span><span style="color: #94E2D5;">&gt; --</span><span>ignore</span><span style="color: #94E2D5;">-</span><span>daemonsets</span><span style="color: #94E2D5;"> --delete-</span><span>emptydir</span><span style="color: #94E2D5;">-</span><span>data</span></span></code></pre>
+<p>보통 이런 패턴으로 사용한다.<br />
+이러면 해당 노드에서 실행되던 Pod들이, 사용 가능한 다른 Pod들로 하나씩 이사를 갈 것이다.</p>
+<p>drain이 완료되었다면, 실행되고 있는 유의미한 Pod가 없다는 말이니, 이 때 적절히 유지보수 작업을 하면 된다.<br />
+재부팅을 하든, 하드웨어 교체를 하든 간에 말이다.</p>
+<br>
+<br>
+<br>
+<h2 id="after-seukejulring-boggu">after: 스케줄링 복구</h2>
+<p>유지보수가 끝났다면, node에 붙어있는 taint를 떼줘야 한다.<br />
+가장 간단한 방법은 uncordon 명령을 쓰는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl uncordon</span><span style="color: #94E2D5;"> &lt;</span><span>노드명</span><span style="color: #94E2D5;">&gt;</span></span></code></pre>
+<p>근데 이건 신규 등록을 가능하게 할 뿐이지, 기존 Pod들을 강제로 다시 끌고올 강제력은 없다.<br />
+또 그걸 자동으로 한번에 재배치를 유도할 방법도 없다. 그러려면 기존 Pod를 죽이거나 해야한다.</p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://kubernetes.io/docs/reference/kubectl/generated/kubectl_cordon/">https://kubernetes.io/docs/reference/kubectl/generated/kubectl_cordon/</a><br />
+<a rel="external" href="https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/">https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224246765911/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[AWS] DocumentDB: reindex를 통한 인덱스 GC<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224246733319/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[ArgoCD] ignoreDifferences를 통한 덮어쓰기 방지<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

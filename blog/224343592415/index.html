@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[OpenTelemetry] AWS ECS 로그 수집 구성 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224343592415/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[OpenTelemetry] AWS ECS 로그 수집 구성">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224343592415/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-07-11T11:04:18.955221+00:00">
+    <meta property="article:tag" content="Monitoring">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224343592415/">[OpenTelemetry] AWS ECS 로그 수집 구성</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-07-11T11:04:18.955221+00:00"><time datetime="2026-07-11T11:04:18.955221+00:00">2026.07.11</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="345 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/monitoring/">Monitoring</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224343592415" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>관련 포스트<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224267416141">https://blog.naver.com/sssang97/224267416141</a><br />
+OpenTelemetry 기반의 수집기에 AWS ECS 로그를 붙이는 방법을 정리한다.<br />
+내 경우에는 Clickstack에 붓는 용도로 썼는데, 대상 시스템이 otel 호환만 되면 큰 차이는 없을 것이다.</p>
+<p>조금 번잡스러울 수 있다.<br />
+서비스명과 env 같은 커스텀라벨을 주입하기 위해서는 collector를 좀 개조해야하기 때문이다.</p>
+<p><img src="/images/img_f13b469e6cef2d6b.png" alt="" />
+그래서 그림으로 그리면 이런 흐름이 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="mein-keonteineo-guseong">메인 컨테이너 구성</h2>
+<p>메인 컨테이너에는 로그 구성을 Firelens로 대체하고 다음과 같은 옵션을 넣어줘야 한다.</p>
+<p><img src="/images/img_397ca316db18dc40.png" alt="" /></p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #A6E3A1;">  &quot;containerDefinitions&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;api-server&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;image&quot;</span><span style="color: #94E2D5;">: ...</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;logConfiguration&quot;</span><span>: </span><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           &quot;logDriver&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;awsfirelens&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">           &quot;options&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">               &quot;Host&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;127.0.0.1&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">               &quot;Name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;forward&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">               &quot;Port&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;8006&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">           }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">       },</span></span></code></pre>
+<p>otel collector로 넘겨주게 하기 위해서 forward 옵션을 넣어줘야 한다.<br />
+이렇게 하지 않으면 firelens로 곧장 넘어간다.</p>
+<p>그리고 로그가 유실되지 않도록 dependsOn도 적절히 넣어준다.</p>
+<p><img src="/images/img_a08a8ae5c6716abd.png" alt="" />
+필수까진 아니지만 확실하게 수집하려면 이렇게 하는게 좋다.<br />
+안 그러면 메인 컨테이너가 먼저 떠버려서 초기 로그가 증발하는 불상사가 일어난다.</p>
+<br>
+<br>
+<br>
+<h2 id="firelens-keonteineo-guseong">Firelens 컨테이너 구성</h2>
+<p>이건 이제 로그를 퍼오는 중개자 역할이다.</p>
+<p><img src="/images/img_00f64c2419f1b667.png" alt="" />
+적당히 기본 이미지 갖다붙이고,</p>
+<p>실행 순서를 보정하기 위해 상태확인을 정의한다.</p>
+<p><img src="/images/img_177eb21b3159ea1b.png" alt="" /></p>
+<p>그리고 otel collector가 실행된 이후에 firelens가 실행되도록 순서를 보정한다.</p>
+<p><img src="/images/img_8185f43e2ed63828.png" alt="" /></p>
+<p>다음은 컨테이너 정의에 대한 JSON 전문이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;name&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;log_router&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;image&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;amazon/aws-for-fluent-bit:stable&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cpu&quot;</span><span>: </span><span style="color: #FAB387;">0</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;portMappings&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;essential&quot;</span><span>: </span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;environment&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;mountPoints&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;volumesFrom&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;dependsOn&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;containerName&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;otel_collector&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;condition&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;HEALTHY&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>  ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;user&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;0&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;logConfiguration&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    ...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;healthCheck&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;command&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;CMD-SHELL&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;bash -c &#39;exec 3&lt;&gt;/dev/tcp/127.0.0.1/24224&#39;&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;timeout&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;retries&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;startPeriod&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;systemControls&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;firelensConfiguration&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;type&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;fluentbit&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;options&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;enable-ecs-log-metadata&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;true&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  }</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이 컨테이너는 트러블슈팅을 위해 cloudwatch log를 활성화하는걸 추천한다.</p>
+<br>
+<br>
+<br>
+<h2 id="otel-collector-keonteineo-guseong">otel collector 컨테이너 구성</h2>
+<p>마지막은 otel collector다. 이게 최종적으로 otel 엔드포인트에 로그를 전송하는 역할을 할 것이다.<br />
+이건 좀 커스텀을 해야할 수 있어서 직접 말아쓰는 것이 좋다.</p>
+<p>베이스 코드는 github에 있다.<br />
+<a rel="external" href="https://github.com/myyrakle/infrastructures/tree/master/Dockerfiles/aws-ecs-otel-collector">https://github.com/myyrakle/infrastructures/tree/master/Dockerfiles/aws-ecs-otel-collector</a><br />
+직접 말아서 써도 되고, 내가 올려둔걸 그대로 써도 된다. "myyrakle/otel-collector:latest" 이거다.</p>
+<p>아무튼 적절히 ECR에 올려서 붙이면 된다.</p>
+<p><img src="/images/img_2580a6b12c250b22.png" alt="" /></p>
+<p>그리고 여기에 엔드포인트 정보와 env/service 태그, 키를 넣으면 된다.</p>
+<p><img src="/images/img_44655a618ba6e7e2.png" alt="" /></p>
+<p>상태확인도 필요하다.</p>
+<p><img src="/images/img_df121bb639372e78.png" alt="" /></p>
+<p>아래는 JSON 전문이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #9399B2;">{</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;name&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;otel_collector&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;image&quot;</span><span>: </span><span style="color: #A6E3A1;">&quot;....dkr.ecr.ap-northeast-2.amazonaws.com/otel-collector:latest&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;cpu&quot;</span><span>: </span><span style="color: #FAB387;">0</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;portMappings&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;essential&quot;</span><span>: </span><span style="color: #FAB387;">true</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;environment&quot;</span><span>: [</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;OTEL_SERVICE_NAME&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;서비스명&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;DEPLOY_ENV&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;ENV명&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;OTEL_INGESTION_KEY&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;키&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    },</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;name&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;OTEL_EXPORTER_OTLP_ENDPOINT&quot;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">      &quot;value&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #A6E3A1;"> &quot;https://clickhouse-... 엔드포인트&quot;</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">    }</span></span>
+<span class="giallo-l"><span>  ]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;mountPoints&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;volumesFrom&quot;</span><span>: []</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;logConfiguration&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    ...</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;healthCheck&quot;</span><span>:</span><span style="color: #9399B2;"> {</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;command&quot;</span><span style="color: #94E2D5;">:</span><span> [</span><span style="color: #A6E3A1;">&quot;CMD&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;/busybox&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;wget&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;-qO-&quot;</span><span style="color: #9399B2;">,</span><span style="color: #A6E3A1;"> &quot;http://127.0.0.1:13133/&quot;</span><span>]</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;interval&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;timeout&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 5</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;retries&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 3</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    &quot;startPeriod&quot;</span><span style="color: #94E2D5;">:</span><span style="color: #FAB387;"> 10</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">  },</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">  &quot;systemControls&quot;</span><span>: []</span></span>
+<span class="giallo-l"><span style="color: #9399B2;">}</span></span></code></pre>
+<p>이 컨테이너도 트러블슈팅을 위해 cloudwatch log를 활성화하는걸 추천한다.</p>
+<p>그렇게 해서 작업구성 정의하고 실행해서</p>
+<p><img src="/images/img_208d51e85c10ffb7.png" alt="" />
+컨테이너 다 이상 없이 잘 뜨고</p>
+<br>
+<p><img src="/images/img_226728848b6ad2d5.png" alt="" />
+clickhouse에 otel log 잘 찍히고</p>
+<br>
+<p><img src="/images/img_041bbee03460db3e.png" alt="" />
+최종적으로 대시보드에서도 잘 보이면 끝이다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.fluentbit.io/manual/data-pipeline/outputs/opentelemetry">https://docs.fluentbit.io/manual/data-pipeline/outputs/opentelemetry</a><br />
+<a rel="external" href="https://hub.docker.com/r/otel/opentelemetry-collector-contrib/tags?page=3">https://hub.docker.com/r/otel/opentelemetry-collector-contrib/tags?page=3</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224343639426/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>애플이 OpenAI를 고소.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224340916512/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>ClickStack: Clickhouse 기반 APM<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

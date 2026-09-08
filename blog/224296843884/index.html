@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] DynamoDB: Effective Dynamo | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224296843884/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] DynamoDB: Effective Dynamo">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224296843884/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-05-26T05:47:55.415814+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224296843884/">[AWS] DynamoDB: Effective Dynamo</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-05-26T05:47:55.415814+00:00"><time datetime="2026-05-26T05:47:55.415814+00:00">2026.05.26</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="887 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224296843884" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>DynamoDB를 성능/비용 효율적으로 설계하고 사용하는 방법을 간단히 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="ondimaendeu-vs-peurobijeoning">온디맨드 VS 프로비저닝</h2>
+<p>DynamoDB의 가장 큰 장점은, 온디맨드가 실제 사용량을 기반으로만 비용이 청구된다는 것이다. 사용량에 맞춰서 자동으로 확장되며, 사용하지 않거나 무료 사용량 이내에서만 쓴다면 비용이 거의 $0로 나온다.<br />
+이상적인 서버리스 시스템의 대표적인 예라고 할 수 있다.</p>
+<p>사용량이 일정하다면 프로비저닝이 나을 수도 있지만, 온디맨드 모드가 SPIKE 트래픽 등을 처리하기엔 더 용이하다.<br />
+그래서 나는 온디맨드를 좀 더 권장한다. 온디맨드를 써보다가 사용량이 일정한 것 같다면 그때 프로비저닝으로 전환해도 된다. 프로비저닝이 이상적인 경우에는 최대 6-7배 정도 저렴할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="ceoriryang-jehan">처리량 제한</h2>
+<p>DynamoDB는 거의 무제한으로 처리량을 확장할 수 있지만, 진짜 무제한은 아니다. 제한사항들이 좀 있어서 이걸 좀 감안하고 사용해야 한다.</p>
+<p>프로비저닝 모드라면 원하는 만큼 처리량을 지정할 수 있고, 온디맨드를 사용한다면 4000 WCU부터 시작해서 요청한다면 원하는 만큼 무제한으로 처리량 제한을 늘리는 것이 가능하다.<br />
+하지만 파티션 단위로는 늘릴 수 없는 제한이 있다. (3000 RCU, 1000 WCU) &lt;- 중요하다.</p>
+<br>
+<br>
+<br>
+<h2 id="haldangryang-neulrigi">할당량 늘리기</h2>
+<p>DynamoDB는 계정 수준에서 최대 처리량에 제한이 걸려있다.<br />
+늘려달라고 요청하면 늘려주니까, 부하가 많을 것 같다면 잔뜩 올려놓는게 좋다.</p>
+<p><img src="/images/img_2bf817a476e37dc8.png" alt="" />
+요청하면 늘려준다.</p>
+<br>
+<br>
+<br>
+<h2 id="patisyeon-gujowa-has-patisyeon">파티션 구조와 핫 파티션</h2>
+<p>DynamoDB는 기본적으로, CassandraDB와 비슷한 내부 구조를 갖고 있다고 보면 된다.<br />
+"파티션 키"와 "정렬 키"로 구성되는데, "파티션 키"를 기준으로 어떤 파티션에 분산해서 저장할지를 결정한다.</p>
+<p><img src="/images/img_bbe9e20baddeb268.png" alt="" /></p>
+<p>DynamoDB 자체는 읽기/쓰기 처리량을 무제한으로 확장할 수 있지만, 파티션 단위로는 제한이 있다.<br />
+파티션 별 초당 3000 RCU, 1000 WCU 정도로 HARD LIMIT이 걸려있고, 만약 특정 파티션에만 작업이 몰린다면 스토틀링이 걸리게 된다.<br />
+그래서 고부하 시스템에서는 단일 파티션에 과한 작업이 몰리지 않도록 분산하는 것이 중요해진다.</p>
+<br>
+<br>
+<br>
+<h2 id="sseugi-coejeoghwa-patisyeon-syadeu">쓰기 최적화: 파티션 샤드</h2>
+<p>부하를 분산시키고 처리량을 진짜 무제한으로 늘려야 한다면, 파티션 키를 A#1, A#2 같은 식으로 마개조해서 고르게 분산시키는 꼼수가 필요해진다.</p>
+<p><img src="/images/img_3dbc2c38be4085f4.jpg" alt="" />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/tech/alipeople-modernization-1/">https://aws.amazon.com/ko/blogs/tech/alipeople-modernization-1/</a><br />
+이걸 파티션 샤딩이라고 부른다. 샤드 키를 기준으로 파티션 키를 동적으로 만들고 집어넣는 것이다.</p>
+<p>이러면 다시 샤드 단위로 파티션이 분산되기 때문에, 핫 파티션 현상을 완화할 수 있다.<br />
+다만 이러면 읽을때 처리가 굉장히 불편해진다는 단점이 있다...</p>
+<br>
+<br>
+<br>
+<h2 id="bulk-write-batchwriteitem-api">Bulk Write: BatchWriteItem API</h2>
+<p>당연하지만, 쓰기를 하나씩 하는것보단 묶어서 하는 것이 빠르다.<br />
+DynamoDB도 배치 쓰기 API를 제공하며, 이걸 쓰면 좀 더 빠르게 대량 쓰기를 처리할 수 있다.</p>
+<p>근데 유의해야할 점은, 이걸 쓴다고 해서 처리량을 늘릴 수 있는 것은 아니라는 것이다. 10개를 Batch로 동시에 쓰는 것과, 1개를 10번씩 날리는 것은 동일한 WCU를 소모한다.<br />
+더 빠르게 넣기 때문에 WCU를 소모해서 더 빠르게 스토를링이 걸릴 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="warm-throughput-seoljeong">warm throughput 설정</h2>
+<p>다이나모에는 웜 스루풋이라는 것이 있다.<br />
+다이나모를 SPIKE 트래픽을 감당하기 위해서 자동으로 스케일아웃을 하지만, 딜레이가 있다보니 경우에 따라서는 스로틀링이 걸릴 수도 있다.</p>
+<p>웜 스루풋은 그걸 위한 세부 조정 옵션이다.<br />
+미래의 스파이크 트래픽을 예상해서 "이 정도 갑자기 확 쓸 수 있을 것 같다"고 알려주는 것이다.</p>
+<p><img src="/images/img_b8f08bb1205b4ec0.png" alt="" />
+기본값은 이렇게 되어있는데, 실제로 트래픽이 늘어난다면 자동으로 증가한다.<br />
+그리고 한번 올라간 값은 내려가지 않는다.</p>
+<p>하지만 직접 값을 올려놓을 수도 있는데, 그러면 나중에 SPIKE 트래픽이 들어와도 스케일링 딜레이를 적게 가져가면서 처리를 할 수 있다. 그 대신 추가 비용이 발생한다.<br />
+다만 이게 진짜 스케일링을 물리적으로 하는건 아니고, 미리 준비만 하는 느낌이다.</p>
+<p><img src="/images/img_4b56633a8c2c44e0.png" alt="" />
+그리고 비용적으로 그렇게 부담이 되진 않는다. 늘린다고 해서 비용이 계속 누적되는건 아니고, 일회성 비용이다.<br />
+수동으로 증가시킨 유닛당 USD 0.00013 정도를 뜯고 끝난다.</p>
+<br>
+<br>
+<br>
+<h2 id="bogjabhan-ilggi">복잡한 읽기</h2>
+<p>복잡한 필터링 기능이나 집계 등이 필요해진다면, 사실 그건 DynamoDB에 맞지 않는 접근법이다. 다이나모는 파티션 단위로만 접근해서 조회하는 것에 최적화되어있다. 그 영역을 벗어난다면, 성능적으로도, 비용적으로도 별로 좋지는 않다.</p>
+<p>다행히 DynamoDB는 다른 시스템과의 통합이 꽤 잘 설계되어있어서, DynamoDB를 데이터 소스로 삼고 실제 복잡한 조회는 다른 시스템으로 부어서 돌리는 사용 패턴이 꽤 괜찮을 수 있다.</p>
+<p>대형 데이터셋에 대한 집계가 필요하다면 Athena와의 조합이 상당히 좋다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224294652868">https://blog.naver.com/sssang97/224294652868</a></p>
+<br>
+<br>
+<br>
+<h2 id="biyong-coejeoghwa">비용 최적화</h2>
+<p>DynamoDB는 비용을 줄일 수 있는 수단을 몇가지 제공한다.</p>
+<br>
+<br>
+<h4 id="saving-plan">Saving Plan</h4>
+<p>가장 간단한 비용 절감안은 Saving Plan For Database가 있다.<br />
+미리 원하는 만큼 달러를 선결제해두면, 거기서 차감하면서 할인을 해주는 형태다.<br />
+온디맨드의 경우에는 18% 정도 깎아준다.</p>
+<p><img src="/images/img_ac3e9b82dfa90ff8.png" alt="" />
+<a rel="external" href="https://aws.amazon.com/ko/savingsplans/database-pricing/">https://aws.amazon.com/ko/savingsplans/database-pricing/</a></p>
+<br>
+<br>
+<h4 id="table-class-ia-infrequent-access-class">Table Class - IA(Infrequent Access) Class</h4>
+<p>DynamoDB는 S3처럼 스토리지 계층이 나뉘어있다.</p>
+<p>이렇게 테이블 생성 단계에서 선택할 수 있다.</p>
+<p><img src="/images/img_b2850caf987c52cc.png" alt="" />
+IA라는 스토리지를 선택하면, 스토리지 비용이 좀 더 저렴한 대신 읽기/쓰기 비용이 비싸진다.<br />
+그래서 데이터 양이 많지만 읽기/쓰기가 많지 않은 백업형 데이터에 더 적절하다.</p>
+<p>IA를 쓰면 저장비용이 기존 대비 2.5배쯤 저렴해진다.</p>
+<p><img src="/images/img_8f11894f5e57462a.png" alt="" /></p>
+<p>대신 읽기/쓰기 비용은 1.2배쯤 비싸다.</p>
+<p><img src="/images/img_4ad51491e091aced.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h4 id="ttl">TTL</h4>
+<p>다이나모는 TTL 기반의 삭제 기능을 기본적으로 제공한다.<br />
+영속성이 필요한 데이터가 아니라면 이걸 사용해서 스토리지를 절약하는 것도 좋은 접근법이다.<br />
+게다가 무료 기능이라서 부담없이 쓰기 좋다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223346539870">https://blog.naver.com/sssang97/223346539870</a></p>
+<br>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/capacity-mode.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/capacity-mode.html</a><br />
+<a rel="external" href="https://stackoverflow.com/questions/53843829/what-tps-can-dynamodb-handle">https://stackoverflow.com/questions/53843829/what-tps-can-dynamodb-handle</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/tech/alipeople-modernization-1/">https://aws.amazon.com/ko/blogs/tech/alipeople-modernization-1/</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/tech/sec-cloud-amazon-dynamodb-cost-optimization-journey/">https://aws.amazon.com/ko/blogs/tech/sec-cloud-amazon-dynamodb-cost-optimization-journey/</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/on-demand-capacity-mode.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/on-demand-capacity-mode.html</a><br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/warm-throughput.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/warm-throughput.html</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/tech/how-to-optimize-amazon-dynamodb-costs/">https://aws.amazon.com/ko/blogs/tech/how-to-optimize-amazon-dynamodb-costs/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224298531339/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>go-swagger-ui v0.2.0 배포<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224296319322/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] Athena: 캐싱 전략<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

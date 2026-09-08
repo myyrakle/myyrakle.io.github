@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] S3 비용 튜닝: 통계 갱신 누수 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224380687432/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] S3 비용 튜닝: 통계 갱신 누수">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224380687432/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-08-16T15:25:11.588382+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224380687432/">[Clickhouse] S3 비용 튜닝: 통계 갱신 누수</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-08-16T15:25:11.588382+00:00"><time datetime="2026-08-16T15:25:11.588382+00:00">2026.08.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="268 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224380687432" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Clickhouse를 쓸 경우에는 S3 등을 백업 스토리지로서 활용하는 복합적인 전략을 많이 사용하게 된다.</p>
+<p>근데 당연히 외부 서비스를 쓰는만큼, 부가적인 비용 발생 가능성도 생긴다. 로컬 스토리지와는 다르게 비용이 쓰는만큼 더 청구되는데, Clickhouse 자체의 백그라운드 처리로 인해서 비용이 튈 가능성은 항상 실재하는 것이다.</p>
+<p>그래서 그냥 넣었다가는 이런 식으로 비용이 의도치 않게 튈 수 있다.</p>
+<p><img src="/images/img_2c71a2a0887d2776.png" alt="" />
+보면 GetObject 비용이 $10나 튄 것을 볼 수 있다.<br />
+실제로 많이 읽어서 그렇다면 이해할 수 있는데, 문제는 1개월 이전 범위를 조회한 적도 거의 없고, 저장공간 자체도 매우 작았다는 것이다.</p>
+<br>
+<p><img src="/images/img_a132e8301fdc709b.png" alt="" />
+500MB밖에 안됐다. 명백히 비정상적인 현상이다.</p>
+<br>
+<br>
+<br>
+<h2 id="yojuyi-beomin-tonggye-kaesi">요주의 범인: 통계 캐시</h2>
+<p>Clickhouse는 통계 캐시라는 것을 관리한다.<br />
+이게 뭐냐면, 스캔 효율성을 높이기 위해 part 단위에서 키값의 분포나 비율 등을 미리 적재해놓고 그걸 통해 쿼리를 최적화하는 것이다.</p>
+<p>쿼리 성능에 꽤 유의미한 영향을 미치는 것이라서 쿼리 시점에 갱신을 하기도 하고, 아무것도 안해도 백그라운드로 갱신을 하기도 한다.<br />
+그리고 이 중 후자, 백그라운드 갱신은 테이블의 refresh_statistics_interval라는 옵션을 통해 관리되며, 기본값이 300초다.</p>
+<p>문제는 이게 로컬 디스크에서는 주기적으로 발생해도 딱히 비용 부담이 없지만, 외부 스토리지는 그렇지 않다는 것이다. 스토리지 사용량이 늘어날수록 Idle 비용이 선형적으로 증가하게 된다.</p>
+<p>가장 좋은 방법은 백그라운드 통계 갱신을 아예 끄는 것이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_logs                 MODIFY SETTING refresh_statistics_interval</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_traces               MODIFY SETTING refresh_statistics_interval</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_metrics_sum          MODIFY SETTING refresh_statistics_interval</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_metrics_gauge        MODIFY SETTING refresh_statistics_interval</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_metrics_histogram    MODIFY SETTING refresh_statistics_interval</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_logs_kv_rollup_15m   MODIFY SETTING refresh_statistics_interval</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_traces_kv_rollup_15m MODIFY SETTING refresh_statistics_interval</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 0</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_b59485e7da6059bf.png" alt="" />
+이렇게 하면 멋대로 디스크를 읽는 것을 최대한 줄일 수 있다.</p>
+<p>그리고 이렇게 한다고 해서 통계 갱신이 사라지는 것은 아니다. 단지 쿼리를 날리는 시점에서 "없다면 갱신하는" 조건으로 처리가 되는 것이다. cold start가 조금 더 생길 수는 있지만, 대체로는 감수할만한 정도일 것이다.</p>
+<br>
+<p><img src="/images/img_98d31771d2f7e171.png" alt="" />
+그리고 실제로 적용했을때, 의도한대로 비용이 안정화되는 것을 확인했다.<br />
+체감 성능에도 큰 차이는 없었다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/ko/reference/settings/merge-tree-settings/refresh">https://clickhouse.com/docs/ko/reference/settings/merge-tree-settings/refresh</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224382602643/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Rust] Arc의 다운캐스팅.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224380162689/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>유니코드와 유령문자(한자).link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

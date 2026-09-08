@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Clickhouse] 저장공간 최적화 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224354901337/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Clickhouse] 저장공간 최적화">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224354901337/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-07-22T15:31:17.214691+00:00">
+    <meta property="article:tag" content="Clickhouse">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224354901337/">[Clickhouse] 저장공간 최적화</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-07-22T15:31:17.214691+00:00"><time datetime="2026-07-22T15:31:17.214691+00:00">2026.07.22</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="1200 words"><time datetime="PT6M">6 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/clickhouse/">Clickhouse</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224354901337" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>clickhouse는 스캔 효율성과 저장공간 절약에 목을 메는 DB다.<br />
+그래서 절약을 위한 데이터 저장 방식 옵션을 이것저것 지원하고, 선택에 따라서 실제 저장 효율이 크게 차이가 날 수도 있다.</p>
+<p>여기서는 어떤 옵션들이 있는지를 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="diseukeu-sayongryang-cujeog">디스크 사용량 추적</h2>
+<p>디스크 최적화를 하려면, 당연히 어떤 녀석들이 디스크를 많이 먹는지부터 알아야 한다.<br />
+자세한 내용은 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224353439136">https://blog.naver.com/sssang97/224353439136</a></p>
+<br>
+<br>
+<br>
+<h2 id="stricthan-taib-seontaeg">Strict한 타입 선택</h2>
+<p>String 같은 동적 타입은 건드릴 것이 없지만, 정수나 실수 같은 고정폭 크기의 타입들은 딱 필요한 만큼만 정밀도를 설정해서 사용하는 것이 좋다.<br />
+예를 들면, 가능하면 Uint64보다는 Int32를 선호하는 것이 효율적이며, DateTime64보다 DateTime이 효율적이다. 그리고 날짜만 포함한다면 DateTime보다 Date를 선호하는 것이 좋다.</p>
+<br>
+<br>
+<br>
+<h2 id="nullable-coesohwahagi">Nullable 최소화하기</h2>
+<p>일반적인 DB들은 null을 쓰든 not null을 쓰든 실성능 차이가 극적이지 않지만, clickhouse는 null을 쓰는 것이 저장공간과 실성능 모두에 부정적인 영향을 준다.<br />
+null이 들어가면 메인 값 블럭과 별개로 null map이라는 영역을 또 따로 관리해야하기 때문이다.</p>
+<p>그래서 가급적이면 zero value 기반으로 null에 대한 의미를 부여하는 것이 좋고, Nullable 자체를 직접적으로 사용하는 것은 추천하지 않는다.</p>
+<p>실제로 nullable 여부로 얼마나 크기 차이가 벌어지는지 확인해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE default</span><span style="color: #94E2D5;">.</span><span>test_logs</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `Timestamp`</span><span style="color: #89B4FA;font-style: italic;"> DateTime64</span><span>(</span><span style="color: #FAB387;">9</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `TraceId`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `SeverityText`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `ServiceName`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `Body`</span><span> String</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> toDate</span><span>(Timestamp)</span></span>
+<span class="giallo-l"><span>ORDER</span><span style="color: #89B4FA;font-style: italic;"> BY</span><span> (</span></span>
+<span class="giallo-l"><span>	ServiceName</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> Timestamp)</span></span>
+<span class="giallo-l"><span>SETTINGS index_granularity</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 8192</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> ttl_only_drop_parts</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> enable_block_number_column</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> enable_block_offset_column</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>CREATE TABLE default</span><span style="color: #94E2D5;">.</span><span>test_logs_nullable</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `Timestamp`</span><span style="color: #89B4FA;font-style: italic;"> DateTime64</span><span>(</span><span style="color: #FAB387;">9</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `TraceId`</span><span style="color: #89B4FA;font-style: italic;"> Nullable</span><span>(String)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `SeverityText`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `ServiceName`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `Body`</span><span style="color: #89B4FA;font-style: italic;"> Nullable</span><span>(String)</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> toDate</span><span>(Timestamp)</span></span>
+<span class="giallo-l"><span>ORDER</span><span style="color: #89B4FA;font-style: italic;"> BY</span><span> (</span></span>
+<span class="giallo-l"><span>	ServiceName</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> Timestamp)</span></span>
+<span class="giallo-l"><span>SETTINGS index_granularity</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 8192</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> ttl_only_drop_parts</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> enable_block_number_column</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> enable_block_offset_column</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_ca9e6677214b754d.png" alt="" />
+동일 데이터셋을 타입만 다르게 넣어봤다.</p>
+<br>
+<p><img src="/images/img_4e8dbda4efcdf8ff.png" alt="" /></p>
+<p><img src="/images/img_b9841cc7f7ab964f.png" alt="" />
+그럼 이 정도로 전후차이가 난다. 막 몇배 차이가 나고 그런건 아니지만, Body가 195MB에서 214MB로 확실하게 늘긴 늘었다.<br />
+기겁할 정도의 차이는 아니지만, 기본 데이터셋이 크다면 꽤 치명적일 수도 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="lowcardinality-hwalyong">LowCardinality 활용</h2>
+<p>가장 중요한 옵션 중 하나다. 이게 clickhouse에서는 Enum보다 훨씬 유연하고 효율적이다.<br />
+카디널리티가 작은 값, 그러니까 값의 종류가 좁은 컬럼에 대해 최적화를 때려주는 마법같은 타입이다.</p>
+<p>특히 문자열 타입에 효과적이다.<br />
+예를 들어, 다음과 같은 로그 테이블이 있다고 해보자.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE default</span><span style="color: #94E2D5;">.</span><span>test_logs</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `Timestamp`</span><span style="color: #89B4FA;font-style: italic;"> DateTime64</span><span>(</span><span style="color: #FAB387;">9</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `TraceId`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `SeverityText`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `ServiceName`</span><span> String</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #A6E3A1;">    `Body`</span><span> String</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> toDate</span><span>(Timestamp)</span></span>
+<span class="giallo-l"><span>ORDER</span><span style="color: #89B4FA;font-style: italic;"> BY</span><span> (</span></span>
+<span class="giallo-l"><span>	ServiceName</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> Timestamp)</span></span>
+<span class="giallo-l"><span>SETTINGS index_granularity</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 8192</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> ttl_only_drop_parts</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> enable_block_number_column</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span> enable_block_offset_column</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>사실 여기서 ServiceName과 ServerityText 같은 값은 사실상의 enum에 가까운 값이다.</p>
+<p><img src="/images/img_975ce04b36d8ef3d.png" alt="" />
+ServerityText는 해봤자 info, warn, error 같은 값만 들어오고, ServiceName은 아무리 많아도 100개가 안될 것이다.</p>
+<p>그렇기 때문에 모든 값을 문자열 그대로 순진하게 저장하는 것은 저장공간의 낭비가 될 수 있다.<br />
+가장 효과적인 것은 저 문자열 엔트리를 별도의 매핑테이블로 정의하고 숫자값만을 넣는 것이겠지만, 전반적인 사용성이 크게 떨어지기 때문에 그렇게는 잘 하지 않는다.<br />
+방금 말한 이 최적화를 DB 내에서 알아서 처리해주는 것이 LowCardinality라는 기능이다.</p>
+<p>LowCardinality 타입을 사용하면, 문자열을 넣어도 내부적으로 매핑테이블을 정의하고, 실제로는 UInt8, UInt16, UInt32, UInt64 중 하나로 키값을 저장한다.</p>
+<p><img src="/images/img_8ea121a4c10095a4.png" alt="" /></p>
+<p>그렇게 해서 부어보면</p>
+<p><img src="/images/img_eeec180d8711fc10.png" alt="" /></p>
+<p><img src="/images/img_13cdffdbc939c637.png" alt="" />
+ServerityText는 4.68MB =&gt; 1.37MB<br />
+ServiceName은 215KB =&gt; 20KB로 크게 줄어든 것을 볼 수 있다.</p>
+<p>할 수 있으면 적용하는게 좋다.</p>
+<p>다만, 당연히 카디널리티가 높은 값에 대해서는 효율적이지 않다.<br />
+카디널리티가 수만개를 넘어서면 효율성이 급감하니, 잘 검토하고 적용하는 것을 권한다.</p>
+<br>
+<br>
+<br>
+<h2 id="mergetree-jeongryeolki-seontaeg">MergeTree: 정렬키 선택</h2>
+<p>정렬키를 선택하는 것도 꽤 큰 요인이 된다.<br />
+정렬 키의 선두컬럼에는 일반적으로 카디널리티가 지나치게 높지 않고, 동일하거나 유사한 값을 가진 행을 서로 가깝게 모을 수 있는 컬럼을 배치하는 것이 유리하다.</p>
+<p>같은 정렬키 그룹에 속한 값일수록 나머지 컬럼의 값도 비슷한 패턴의 값이 모여있을 확률이 높고, 자연히 압축률도 높아지기 때문이다. (후술할 Delta 압축 논리 포함)</p>
+<p>아무튼 핵심은, 성능을 중요시한다면 UUID 같은 카디널리티가 높은 값은 단일 정렬키로 쓰거나, 복합 정렬키의 선두로 써서는 안된다는 것이다. 복합 정렬키의 후순위 컬럼이라면 그건 크게 상관이 없다.</p>
+<p>그래서 이런 식으로 Order By에 UUID 같은 카디널리티가 매우 높고 랜덤성이 높은 값을 넣는 것은 압축률을 저해한다.</p>
+<p><img src="/images/img_70ff0050c7c74c06.png" alt="" /></p>
+<p>잘 설계된 정렬키는 이런 모양이다.</p>
+<p><img src="/images/img_1ec85cf0cfe2f96c.png" alt="" />
+동일 서비스를 기반으로 묶이기 때문에, 비슷한 데이터 분포가 발생할 확률이 높은 것이다.</p>
+<p>그래서 동일한 값에 정렬키만 다르게 삽입해도, 디스크 사용 패턴이 크게 달라지는 것을 볼 수 있다.</p>
+<p><img src="/images/img_0aaf9a6055a4501f.png" alt="" /></p>
+<p><img src="/images/img_14645da4e07e4326.png" alt="" />
+TraceId 컬럼 자체의 크기는 줄어들었지만, Body 같은 대형 컬럼의 저장공간이 그보다 훨씬 늘어났다.</p>
+<br>
+<br>
+<br>
+<h2 id="patisyeon-danwi-seolgye">파티션 단위 설계</h2>
+<p>스토리지가 예쁘게 쌓이려면 결국 MERGE가 빡빡하게 잘 돌면서 압축이 돌아가야 한다.<br />
+근데 이 압축에 제동을 걸 수 있는 것이 파티션이다.<br />
+파티션이 시간이나 분 단위처럼 너무 잘게 쪼개져있다면, 파티션 내에서만 MERGE가 실행되기 때문에 압축 성능에 한계가 있을 수 있다.</p>
+<p>그래서 이런 자잘한 파티션 구성은 상황에 따라서 비효율적일 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> toStartOfHour</span><span>(Timestamp)</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="ttl-hwalyonghagi">TTL 활용하기</h2>
+<p>clickhouse는 매우 다양한 형태로 TTL 옵션을 제공한다.</p>
+<p>이런 식으로 행 단위 TTL을 걸 수도 있고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ALTER TABLE default</span><span style="color: #94E2D5;">.</span><span>otel_logs</span></span>
+<span class="giallo-l"><span>MODIFY TTL</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 30</span><span> DAY DELETE</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>심지어 컬럼 단위로 TTL을 걸어서 컬럼만 날려버릴 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE logs</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span>    Timestamp</span><span style="color: #89B4FA;font-style: italic;"> DateTime64</span><span>(</span><span style="color: #FAB387;">9</span><span>)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    ServiceName</span><span style="color: #89B4FA;font-style: italic;"> LowCardinality</span><span>(String)</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    Body String</span></span>
+<span class="giallo-l"><span>        TTL</span><span style="color: #89B4FA;font-style: italic;"> toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 7</span><span> DAY</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>    LogAttributes</span><span style="color: #89B4FA;font-style: italic;"> Map</span><span>(String</span><span style="color: #9399B2;">,</span><span> String)</span></span>
+<span class="giallo-l"><span>        TTL</span><span style="color: #89B4FA;font-style: italic;"> toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 14</span><span> DAY</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>ORDER</span><span style="color: #89B4FA;font-style: italic;"> BY</span><span> (ServiceName</span><span style="color: #9399B2;">,</span><span> Timestamp)</span></span>
+<span class="giallo-l"><span>TTL</span><span style="color: #89B4FA;font-style: italic;"> toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 30</span><span> DAY</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>혹은, TTL을 걸되, 삭제가 아니라 강하게 "재압축"을 하도록 할 수도 있다.<br />
+심지어 계층형으로도 가능하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE logs</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span>    Timestamp</span><span style="color: #89B4FA;font-style: italic;"> DateTime64</span><span>(</span><span style="color: #FAB387;">9</span><span>)</span><span style="color: #89B4FA;font-style: italic;"> CODEC</span><span>(Delta</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> ZSTD</span><span>(</span><span style="color: #FAB387;">1</span><span>))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    Body String</span><span style="color: #89B4FA;font-style: italic;"> CODEC</span><span>(</span><span style="color: #89B4FA;font-style: italic;">ZSTD</span><span>(</span><span style="color: #FAB387;">1</span><span>))</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>ORDER BY Timestamp</span></span>
+<span class="giallo-l"><span>TTL</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 7</span><span> DAY</span></span>
+<span class="giallo-l"><span>        RECOMPRESS</span><span style="color: #89B4FA;font-style: italic;"> CODEC</span><span>(</span><span style="color: #89B4FA;font-style: italic;">ZSTD</span><span>(</span><span style="color: #FAB387;">3</span><span>))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 30</span><span> DAY</span></span>
+<span class="giallo-l"><span>        RECOMPRESS</span><span style="color: #89B4FA;font-style: italic;"> CODEC</span><span>(</span><span style="color: #89B4FA;font-style: italic;">ZSTD</span><span>(</span><span style="color: #FAB387;">6</span><span>))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 90</span><span> DAY</span></span>
+<span class="giallo-l"><span>        DELETE</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>이러면 7일 지나면 3단계 압축, 30일이 지나면 6단계 압축을 하고, 90일이 지나면 삭제를 한다.</p>
+<p>TTL로 볼륨 이동(S3 백업)을 처리할 수도 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE logs</span></span>
+<span class="giallo-l"><span>(</span></span>
+<span class="giallo-l"><span>    Timestamp</span><span style="color: #89B4FA;font-style: italic;"> DateTime64</span><span>(</span><span style="color: #FAB387;">9</span><span>)</span><span style="color: #89B4FA;font-style: italic;"> CODEC</span><span>(Delta</span><span style="color: #9399B2;">,</span><span style="color: #89B4FA;font-style: italic;"> ZSTD</span><span>(</span><span style="color: #FAB387;">1</span><span>))</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    Body String</span><span style="color: #89B4FA;font-style: italic;"> CODEC</span><span>(</span><span style="color: #89B4FA;font-style: italic;">ZSTD</span><span>(</span><span style="color: #FAB387;">1</span><span>))</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ENGINE</span><span style="color: #94E2D5;"> =</span><span> MergeTree</span></span>
+<span class="giallo-l"><span>ORDER BY Timestamp</span></span>
+<span class="giallo-l"><span>TTL</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 7</span><span> DAY TO VOLUME</span><span style="color: #A6E3A1;"> &#39;s3&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    toDateTime</span><span>(Timestamp)</span><span style="color: #94E2D5;"> +</span><span> INTERVAL</span><span style="color: #FAB387;"> 90</span><span> DAY DELETE</span></span>
+<span class="giallo-l"><span>SETTINGS storage_policy</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;hot_and_cold&#39;</span><span style="color: #9399B2;">;</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="abcug-kodeg-abcug-algorijeum">압축 코덱 - 압축 알고리즘</h2>
+<p>clickhouse는 다양한 압축 알고리즘을 지원하며, 심지어 컬럼마다 다른 압축 코덱을 적용할 수도 있다.<br />
+이걸 잘 활용하면 정말 컴팩트하게 데이터를 담아낼 수 있다.</p>
+<p>다음은 otel_logs의 현란한 기본값이다.</p>
+<p><img src="/images/img_218f378a071c04c0.png" alt="" /></p>
+<br>
+<br>
+<h4 id="kodeg-lz4-vs-zstd">코덱 LZ4 vs ZSTD</h4>
+<p>데이터 분포 패턴을 예측할 수 없는 일반적인 데이터들은 LZ4나 ZSTD 중 하나를 선택해서 저장할 수 있다.<br />
+따로 설정하지 않는다면 LZ4가 기본값으로 들어간다.</p>
+<p>뭐가 다른걸까? 둘 중에 명백한 우열이 있지는 않다.<br />
+LZ4는 저장공간보다는 실행속도에 중점을 둔 코덱이고, ZSTD는 실행속도보다는 저장공간에 더 중점을 둔 코덱이다.  ZSTD는 LZ4에 비하면 30% 정도 더 압축률이 높은 대신, 실행속도는 3-5배 느리다.<br />
+그래서 일반적인 경우에는 LZ4가 융통성있고 실용적인 선택지가 된다.</p>
+<p>한 테이블에 ZSTD와 LZ4를 섞는 것도 좋은 방법이다.<br />
+실제로 쿼리에서 자주 참조되는 컬럼은 LZ4로 압축하고, 가끔씩만 참조되는 컬럼은 ZSTD로 넣는 식이다.</p>
+<p>한번 비교해보자.</p>
+<p><img src="/images/img_0c293ae5ac810ee0.png" alt="" />
+그냥 넣으면 가장 큰 Body 기준 190MB 정도를 먹지만</p>
+<br>
+<p><img src="/images/img_3d6f3231cd2518d8.png" alt="" />
+ZSTD로 바꾸기만 해도 127MB로 확 줄어든다.<br />
+약간 느려지긴 하지만 저장공간이 더 중요하다면 감안할만한 수준이다.</p>
+<br>
+<br>
+<h4 id="zstdwa-abcugryul">ZSTD와 압축률</h4>
+<p>ZSTD는 압축 정도를 지정할 수 있는 코덱이다.<br />
+기본값은 1(가장 낮음)이고, 22까지 설정할 수 있다.</p>
+<p><img src="/images/img_34e0ae438cc74eb6.png" alt="" /></p>
+<p>근데 22는 이론적인 상한이고, 말도 안되게 느리기 때문에 최댓값을 쓰는 것은 사실상 불가능하다. 보통 공간이 정말 중요하면 5-11 정도에서 왔다갔다 하는 편이 합리적이다.</p>
+<p>레벨 1과 레벨 11을 비교해보면, 대강 이렇다.</p>
+<p><img src="/images/img_3d6f3231cd2518d8.png" alt="" /></p>
+<p><img src="/images/img_9ef7b5fe3107244a.png" alt="" />
+사실 큰 차이는 안난다.<br />
+근데 Level 11이 Level 1보다 5배는 더 느리다. 잘 생각하고 사용하길 바란다.</p>
+<br>
+<br>
+<h4 id="delta-abcug">Delta 압축</h4>
+<p>Delta 코덱은 물리적으로 인접한 숫자 값 사이의 차이가 작거나 반복될 때 효과적인 코덱이다. 원본 값을 그대로 저장하는 대신, 앞선 값과 현재 값의 차이를 계산해 저장한다. 그래서 촘촘하게 분포되어있는 값을 효율적으로 압축할 수 있다.</p>
+<p>1,2,3,4,5 처럼 촘촘한 간격으로 분포하거나, 1,1,1,2,3,3 처럼 같은 값이 많아도 좋다.<br />
+심지어 1,2,3,4,1000,1002,10003 처럼 중간에 이격이 있어도 좋다. 다만 값이 널뛰기하듯 분포되지만 않으면 된다. 중요한 것은 전체적인 인접성 분포다.</p>
+<p>가장 대표적인 사용사례는 "시간"이나, incremantal integer다.<br />
+데이터의 생성 시간(created_at) 같은 값들은 매우 높은 확률로 몇분-몇초 간격으로 값이 분포되며, 증분 정수는 1,2,3,4 같은 촘촘한 증가가 보장된다.</p>
+<p>사용법은 이렇다.</p>
+<p><img src="/images/img_0ac42439aaa22701.png" alt="" />
+Delta 자체는 압축 의미론을 갖고 있는게 아니라서, 별도의 압축 코덱을 함께 지정해야 한다. 이건 전처리 코덱이다.</p>
+<p>먹여보면 차이가 얼마나 날까?</p>
+<p><img src="/images/img_adf556655785dbf0.png" alt="" /></p>
+<p><img src="/images/img_98ba99f217977a77.png" alt="" />
+꽤 크게 차이가 벌어지는 것을 볼 수 있다.<br />
+17MB =&gt; 11MB로 약 30-40% 정도의 압축 효과가 발생했다.</p>
+<p>할 수 있으면 하는게 좋다.</p>
+<p>참고로, Timestamp처럼 값의 변화폭이 일정하지 않을 때는 Delta가 좋지만, 변화량이 일정하다면 DoubleDelta가 더 효율적인 저장 구조를 가진다.</p>
+<br>
+<p>이외에도 마이너한 알고리즘들이 몇가지 더 있지만, 다 다루진 않는다.<br />
+별도 문서를 참조하길 바란다.<br />
+<a rel="external" href="https://clickhouse.com/docs/ko/sql-reference/statements/create/table#column_compression_codec">https://clickhouse.com/docs/ko/sql-reference/statements/create/table#column_compression_codec</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://clickhouse.com/docs/sql-reference/data-types/lowcardinality">https://clickhouse.com/docs/sql-reference/data-types/lowcardinality</a><br />
+<a rel="external" href="https://clickhouse.com/docs/best-practices/select-data-types">https://clickhouse.com/docs/best-practices/select-data-types</a><br />
+<a rel="external" href="https://clickhouse.com/docs/ko/data-compression/compression-in-clickhouse">https://clickhouse.com/docs/ko/data-compression/compression-in-clickhouse</a><br />
+<a rel="external" href="https://clickhouse.com/resources/engineering/database-compression">https://clickhouse.com/resources/engineering/database-compression</a><br />
+<a rel="external" href="https://clickhouse.com/docs/ko/data-compression/compression-modes">https://clickhouse.com/docs/ko/data-compression/compression-modes</a><br />
+<a rel="external" href="https://clickhouse.com/docs/ko/sql-reference/statements/create/table#column_compression_codec">https://clickhouse.com/docs/ko/sql-reference/statements/create/table#column_compression_codec</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224356328210/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>HyperDX: PostgreSQL 대시보드 깎기 (AWS RDS)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224353717919/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[LLM] mlx로 모델 올려서 사용해보기 (MacOS)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

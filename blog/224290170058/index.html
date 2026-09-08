@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[PostgreSQL] 인덱스: Gist | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224290170058/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[PostgreSQL] 인덱스: Gist">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224290170058/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-05-19T04:53:31.939054+00:00">
+    <meta property="article:tag" content="PostgreSQL">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224290170058/">[PostgreSQL] 인덱스: Gist</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-05-19T04:53:31.939054+00:00"><time datetime="2026-05-19T04:53:31.939054+00:00">2026.05.19</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="439 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/postgresql/">PostgreSQL</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224290170058" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Gist는 PostgreSQL의 주요 인덱스 타입 중 하나다.</p>
+<p>이건 기본 primitive 타입시스템의 인덱스로는 잘 쓰이지 않고, 추가 확장 플러그인에서 일부 특수한 형태의 쿼리에 대해서 지원이 되는 편이다. 특히 공간 좌표에서의 거리나 인접성 검사 등에 응용된다.</p>
+<p>Gist가 사용되는 대표적인 확장으로는 PostGIS가 있다.<br />
+그리고 기본 타입 중에서 Gist가 지원되는 것으로는 Range, Point 정도가 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-weonri">기본 원리</h2>
+<p>Gist는 Generalized Search Tree의 축약이다.<br />
+내부 구현상으로는 일반화된 B-Tree지만 R-Tree의 개념에 가깝다.</p>
+<p><img src="/images/img_12114b19be7936e3.png" alt="" />
+<a rel="external" href="https://postgrespro.com/blog/pgsql/4175817">https://postgrespro.com/blog/pgsql/4175817</a></p>
+<p>조금 헷갈릴 수 있는데, Gist는 BTree와 다르게 기본 타입들에 대한 operator 구현체가 없다. PostgreSQL은 인터페이스만을 제공하고 실제 타입별 동작이나 의미론은 각 서드파티 플러그인의 operator class가 구현한다.</p>
+<p>아무튼 기본 원리는 이것도 Tree이긴 하고, 물리 구현상으로 B-Tree와 크게 다르진 않다.<br />
+다만 값들끼리의 유사도를 직접 커스텀할 수 있다는 것이 다를 뿐이다. 다시 말해서, "서울"이라는 값과 "인천"이라는 값이 "도쿄"보다 가까운지를 플러그인 구현자 입장에서 직접 정의할 수 있다는 것이다.</p>
+<p>그리고 B-Tree와의 가장 큰 차이점은 값끼리 "겹칠 수 있다."는 것이다.<br />
+그래서 트리 탐색에 들어갈 때도 결정적으로 동작하지 않는다. BTree는 서브트리를 탈때 딱 하나씩 선택해서 들어가지만, Gist는 여러개의 서브트리를 타고 들어갈 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gistyi-ijeomgwa-hangye">Gist의 이점과 한계</h2>
+<p>Gist는 특유의 구조 탓에 잠재적인 성능 병목 지점이 존재한다. 탐색 과정에서 subtree를 너무 많이 타고 들어가면 fanout이 폭증할 수 있기 때문이다.<br />
+그래서 탐색 중에 관계없는 subtree를 많이 버릴 수 있는지(pruning)가 실제 속도를 좌우하는데, 일반적인 공간 좌표 데이터들은 이러한 데이터 패턴에 잘 맞는다. "서울"과 "부산"처럼 공간이 꽤 명확하게 분리되고, 막 엄청나게 겹칠 일도 적기 때문이다.</p>
+<p>근데 이게 차원 수가 낮은 데이터에는 효율적으로 잘 동작하지만, 차원 수가 높아지는 경우에는 적합하지 않다.<br />
+특히 "벡터" 처럼 차원수가 수천 단위로 깊어지고 개별 값과의 겹침 정도가 사방팔방으로 퍼지는 경우에는 subtree pruning이 매우 드물게 일어나므로 문제가 많다.<br />
+그래서 pgvector 같은 경우에는 Gist를 쓰지 않고 HNSW 같은 커스텀 구현체를 사용한다.</p>
+<br>
+<br>
+<br>
+<h2 id="gistyi-sayongbeob">Gist의 사용법</h2>
+<p>인덱스를 만드는 것 자체는 그다지 복잡하거나 어려울 것은 없다. gist가 지원되는 타입의 컬럼에 gist 옵션만 넘겨서 만들면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE INDEX 인덱스명 ON 테이블명 USING</span><span style="color: #89B4FA;font-style: italic;"> gist</span><span> (컬럼)</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>Gist가 지원되는 타입 중에 가장 테스트가 간단한 것은 Range 타입이다. 별도 포스트를 참조한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/224134278317">https://blog.naver.com/sssang97/224134278317</a></p>
+<p>아무튼 Gist 인덱싱을 태우기 위해서는 적절한 연산자를 사용해야만 한다.<br />
+주로 사용되는 연산 패턴은 다음과 같다.</p>
+<ol>
+<li>겹침(overlap)</li>
+<li>포함(contain)</li>
+<li>거리(distance)</li>
+</ol>
+<p>overlap 연산자로는 &amp;&amp;가 가장 대표적인데, 이건 2개의 값이 겹친다는 것을 의미한다.<br />
+Range에서는 2개의 범위가 겹치는 부분이 있는지를 체크하고, PostGIS에서는 공간끼리 겹치는지를 검사한다.</p>
+<p><img src="/images/img_33c8d24e49c89024.png" alt="" /></p>
+<p>@&gt; 연산자는 포함관계를 정의한다. A @&gt; B면 A가 B를 포함한다는 것이다.</p>
+<p><img src="/images/img_1dcb7bc955e6ca15.png" alt="" /></p>
+<p>&lt;-&gt; 연산자는 거리를 정의한다. 이건 양변 값의 거리를 반환한다. 특히 정렬조건으로 사용하기 용이하다.</p>
+<p><img src="/images/img_b90fd6f264f91a2f.png" alt="" /></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://www.postgresql.org/docs/current/gist.html">https://www.postgresql.org/docs/current/gist.html</a><br />
+<a rel="external" href="https://postgrespro.com/blog/pgsql/4175817">https://postgrespro.com/blog/pgsql/4175817</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224290557071/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] 커넥션과 운영<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224288562759/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>SIMD로 이진탐색을 더 빠르게 만들기.link<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

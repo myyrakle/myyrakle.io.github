@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] Athena: DynamoDB 통합 | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224294652868/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] Athena: DynamoDB 통합">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224294652868/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-05-23T13:51:00.335959+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224294652868/">[AWS] Athena: DynamoDB 통합</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-05-23T13:51:00.335959+00:00"><time datetime="2026-05-23T13:51:00.335959+00:00">2026.05.23</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="901 words"><time datetime="PT5M">5 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224294652868" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>DynamoDB는 날강도들 가득한 AWS에서 가장 강력하고 비용 효율적인 DB 서비스다.<br />
+RDB만큼 유연한 검색기능을 제공하진 않지만, 무제한 쓰기 확장이 가능하고, 비용도 성능 대비 저렴한 편이기 때문이다. 그래서 로그 같은 APPEND Only 데이터 수집 창고로 쓰기 좋다.</p>
+<p>그리고 DynamoDB의 또 하나의 장점은, Athena &amp; S3 파이프라인과도 아주 잘 통합된다는 것이다.<br />
+서비스가 DynamoDB에 데이터를 쌓으면, 그걸 S3에 parquet으로 말아서 올리고, Athena로 대량 집계를 날리는 일련의 패턴을 편리하게 구성할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="akitegcyeo-seontaegji">아키텍쳐 선택지</h2>
+<p>Athena에서 DynamoDB를 소스로 사용하는 방법은 여러가지가 있다.</p>
+<br>
+<h4 id="1-jigguro-ggojgi">1. 직구로 꽂기</h4>
+<p>가장 단순한 사용 방식은 다음과 같다.<br />
+DynamoDB Connector를 사용해서 직통으로 연결하는 것이다.</p>
+<p><img src="/images/img_897e07379d103c2b.png" alt="" />
+이건 성능이나 비용상의 이점이 거의 없다.<br />
+그냥 DynamoDB에 대신 READ 날려서 SQL Query에 맞춰서 가공을 하는 것에 불과하고, DynamoDB의 성능 한계를 그대로 받는다. 비용도 DynamoDB RCU 기반으로 뜯는다.<br />
+이건 작은 데이터에 대해서 JOIN 하는 용도로만 쓰거나 해야한다.</p>
+<br>
+<br>
+<h4 id="2-s3-export-only">2. S3 Export Only</h4>
+<p>그 다음으로 나은 방법은 다음과 같다.<br />
+DynamoDB는 PITR 백업 기반으로 S3에 export하는 기능을 제공하는데, 그러고 나면 아테나에서 바로 꽂아서 읽을 수 있다.</p>
+<p><img src="/images/img_e346e46b6786ce32.png" alt="" />
+근데 이것도 사실 최선이라고 할 수는 없다.<br />
+아테나 조회 패턴에 최적화되어있지도 않고, 공간도 불필요하게 크게 먹기 때문이다.<br />
+성능과 비용효율성을 원한다면 parquet으로 말아놓는 구성이 필요하지만, 이건 그냥 flat하게 펼쳐버린다.</p>
+<br>
+<br>
+<h4 id="3-s3-export-ctas-parquet">3. S3 Export &amp; CTAS (parquet)</h4>
+<p>Athena CTAS라는 기능을 쓰면 Athena만을 위한 최적화된 구조로 재생성시킬 수 있다.</p>
+<p><img src="/images/img_4603ac3dc9a15615.png" alt="" /></p>
+<br>
+<br>
+<h4 id="4-best-practice">4. Best Practice?</h4>
+<p>Best Practice로 간주되는 방법은 다음과 같다.</p>
+<p><img src="/images/img_a8e0e3e7b7b06405.png" alt="" />
+증분형 S3 export를 통해서 S3에 붓고, 그걸 Athena를 사용해서 재생성하는 것이다.<br />
+ETL 제어에는 Step Function이 가장 단순하고 편리한 편이다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p><a rel="external" href="https://aws.amazon.com/ko/dynamodb/pricing/on-demand/">https://aws.amazon.com/ko/dynamodb/pricing/on-demand/</a></p>
+<p>비용 발생 요소는 몇가지가 있다.<br />
+PITR이라는 복구 데이터를 유지해야 그걸로 S3에 보내는건데, 그것도 백업본 전체 용량 기준으로 요금을 뜯는다.</p>
+<p><img src="/images/img_114d0d986afbcc50.png" alt="" />
+전체 백업이 200GB면 40달러 정도 뜯는 셈이다.<br />
+근데 최소한도인 1일로 잡으면 그 날의 변경분만 보존될테니, 그렇게 크게 들진 않을 것이다.</p>
+<p>내보내는 행위 자체에도 크기당 비용이 발생한다.</p>
+<p><img src="/images/img_b5edd04d7dba5589.png" alt="" /></p>
+<p><img src="/images/img_9dcef484a6fed303.png" alt="" />
+100GB 정도 된다면 만원쯤 나오는 셈이다.</p>
+<br>
+<p><img src="/images/img_9dc6043f62cd2087.png" alt="" />
+그리고 당연히 S3 비용도 발생한다.<br />
+저장 비용은 당연히 따로고, parquet으로 재생성하는 과정에서 S3 표준 읽기/쓰기 비용이 발생한다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayonghaebogi">사용해보기</h2>
+<p>DynamoDB 테이블을 직접 만들고, 과정을 거치면서 사용법을 익혀보자.</p>
+<p><img src="/images/img_16e079f35b1f80f0.png" alt="" />
+적당히 테이블 하나 만들고</p>
+<br>
+<p><img src="/images/img_081c88ebb20c3c0c.png" alt="" />
+백업 옵션인 PITR을 켜야 한다.<br />
+이건 본질적으로 백업 데이터라서, 따로 백업정책이 필요없고 S3 Export용으로만 쓸거라면 1일로 해도 된다.</p>
+<br>
+<p><img src="/images/img_ea34365f9c9f67b6.png" alt="" />
+그리고 적당히 데이터를 넣는다.</p>
+<br>
+<br>
+<br>
+<h2 id="s3-export">S3 Export</h2>
+<p>이제 S3로 부을 준비는 됐다.<br />
+Dynamo에 보면 내보내기 탭이 있는데,</p>
+<p><img src="/images/img_f26f0230b24e1e47.png" alt="" /></p>
+<br>
+<p><img src="/images/img_88e8dc09a02338c7.png" alt="" />
+여기서 내보낼 S3 버킷 고르고 트리거하면 된다.<br />
+전체 내보내기와 증분(부분) 내보내기가 있는데, 일단은 전체로 먼저 해본다.</p>
+<br>
+<p><img src="/images/img_0562d2b767d97276.png" alt="" />
+그리고 이 내보내기 자체는 비동기 API라서 즉시 되진 않는다.</p>
+<p>좀 기다리면 성공으로 끝날텐데</p>
+<p><img src="/images/img_21239816a8c50695.png" alt="" />
+그럼 목적지에 이런 파일들이 지저분하게 막 떨어져있을 것이다.<br />
+이게 필요한 데이터들이다.</p>
+<br>
+<br>
+<br>
+<h2 id="maepingyong-external-teibeul-guseonghagi">매핑용 External 테이블 구성하기</h2>
+<p>자. 이제 준비는 거의 됐다.<br />
+Athena로 이동해서 매핑 테이블을 구성해준다.<br />
+방금 Export된 json.gz들이 있는 경로를 넣고, 어떤 필드들이 있는지 체크해서 키 목록을 세팅해주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE EXTERNAL TABLE</span><span style="color: #89B4FA;font-style: italic;"> 외부테이블구성</span><span> (</span></span>
+<span class="giallo-l"><span>    Item struct</span><span style="color: #94E2D5;">&lt;</span></span>
+<span class="giallo-l"><span>        키:   struct</span><span style="color: #94E2D5;">&lt;</span><span>S:타입</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        ...</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &gt;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ROW FORMAT SERDE</span><span style="color: #A6E3A1;"> &#39;org.openx.data.jsonserde.JsonSerDe&#39;</span></span>
+<span class="giallo-l"><span>LOCATION</span><span style="color: #A6E3A1;"> &#39;s3://버킷/경로/dynamo/AWSDynamoDB/?/data/&#39;</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_e168fe4ea1b16026.png" alt="" />
+이것 자체는 기존 데이터에 메타데이터만 추가해주는거라서, 비용이나 성능을 먹지는 않는다.</p>
+<br>
+<p><img src="/images/img_be8da9ff87647095.png" alt="" />
+그럼 일단 조회를 해볼 수는 있을 것이다.</p>
+<p>우린 여기서 한발 더 나아가야 한다.<br />
+athena의 CTAS 기능을 사용해서 parquet로 재생성해준다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE access_logs_parquet</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">WITH</span><span> (</span></span>
+<span class="giallo-l"><span>  format</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;PARQUET&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  parquet_compression</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;SNAPPY&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  external_location</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;s3://저장경로/&#39;</span></span>
+<span class="giallo-l"><span>) AS</span></span>
+<span class="giallo-l"><span>SELECT</span></span>
+<span class="giallo-l"><span>  Item</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span>   AS id</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  Item</span><span style="color: #94E2D5;">.</span><span>ip</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span>   AS ip</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  Item</span><span style="color: #94E2D5;">.</span><span>path</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span> AS path</span></span>
+<span class="giallo-l"><span>FROM 임시테이블</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_54c66aaa46b522f3.png" alt="" /></p>
+<p>그럼 실제로 최종 목적지에 압축된 parquet 엔트리가 생성될 것이고</p>
+<p><img src="/images/img_20d9320808c5b5f5.png" alt="" /></p>
+<p>쿼리도 날려볼 수 있을 것이다.</p>
+<p><img src="/images/img_4ec425c31f309905.png" alt="" />
+잘 들어간 것을 볼 수 있다.<br />
+쿼리 날리는건 그냥 이렇게 하면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="dynamodbyi-jeungbun-export-incremental-export">DynamoDB의 증분 Export (Incremental Export)</h2>
+<p>근데 방금 사용한 방식은 잘 동작하긴 하지만, 확장성이 좋은 방식은 아니다.<br />
+매번 전체 데이터를 가져와서 밀어넣는 것은 너무 오래걸리고, 비용도 비용대로 먹는다.</p>
+<p>다행히 DynamoDB는 이런 딜레마를 잘 해소해준다.<br />
+DynamoDB의 백업 시스템 자체가 타임스탬프 기반으로 필터링이 되는 구조로 되어있어서, "몇시간 전부터의 데이터"나 "어제부터의 데이터" 같은 식으로 부분적 EXPORT가 잘 되기 때문이다.</p>
+<p>이번에는 행을 하나 추가한 다음에 동기화를 구성해보자.</p>
+<p><img src="/images/img_300c75a5d774b4ca.png" alt="" />
+id=4444를 추가하고</p>
+<br>
+<p><img src="/images/img_59d19ce0dab63fa5.png" alt="" />
+증분 내보내기를 선택해서 트리거한다.</p>
+<br>
+<p><img src="/images/img_6761ec40424d194d.png" alt="" />
+그럼 마찬가지로 json.gz가 잔뜩 떨어진다.</p>
+<p>근데 여기서부턴 좀 다르다.<br />
+전체 내보내기는 진짜 전체 데이터만 가져오는 거라서 구조가 단순한데, 증분 내보내기는 UPDATE/DELETE 같은 상태 정보도 함께 포함되기 때문이다. 그 시기의 "모든 변경"을 가져온다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE EXTERNAL TABLE</span><span style="color: #89B4FA;font-style: italic;"> access_log_incremental</span><span> (</span></span>
+<span class="giallo-l"><span>    Metadata struct</span><span style="color: #94E2D5;">&lt;</span></span>
+<span class="giallo-l"><span>        WriteTimestampMicros: string</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    Keys struct</span><span style="color: #94E2D5;">&lt;</span></span>
+<span class="giallo-l"><span>        id: struct</span><span style="color: #94E2D5;">&lt;</span><span>S:string</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    NewImage struct</span><span style="color: #94E2D5;">&lt;</span></span>
+<span class="giallo-l"><span>        id:   struct</span><span style="color: #94E2D5;">&lt;</span><span>S:string</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        ip:   struct</span><span style="color: #94E2D5;">&lt;</span><span>S:string</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        path: struct</span><span style="color: #94E2D5;">&lt;</span><span>S:string</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    OldImage struct</span><span style="color: #94E2D5;">&lt;</span></span>
+<span class="giallo-l"><span>        id:   struct</span><span style="color: #94E2D5;">&lt;</span><span>S:string</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        ip:   struct</span><span style="color: #94E2D5;">&lt;</span><span>S:string</span><span style="color: #94E2D5;">&gt;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>        path: struct</span><span style="color: #94E2D5;">&lt;</span><span>S:string</span><span style="color: #94E2D5;">&gt;</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    &gt;</span></span>
+<span class="giallo-l"><span>)</span></span>
+<span class="giallo-l"><span>ROW FORMAT SERDE</span><span style="color: #A6E3A1;"> &#39;org.openx.data.jsonserde.JsonSerDe&#39;</span></span>
+<span class="giallo-l"><span>LOCATION</span><span style="color: #A6E3A1;"> &#39;s3://버킷/경로/dynamo/AWSDynamoDB/?/data/&#39;</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p><img src="/images/img_0c1a5d7127cceec2.png" alt="" /></p>
+<p><img src="/images/img_ecd1c94984a7da0b.png" alt="" />
+그래서 이런 식으로 뭐가 좀 많다.<br />
+INSERT/UPDATE는 NewImage를 읽어서 넣어야 하고, DELETE는 Keys만 전달된다.</p>
+<p>여기서부터는 기능 구조에 따라서 제약조건이 좀 달라진다.<br />
+APPEND-ONLY의 단순한 시스템이라면, 그냥 NewImage만 걸러서 기존 CTAS 테이블에 insert하면 된다.</p>
+<p><img src="/images/img_b4808a169649c9c6.png" alt="" /></p>
+<p><img src="/images/img_cad635f9812b2372.png" alt="" />
+그럼 자동으로 parquet 덩어리가 추가될 것이고</p>
+<br>
+<p><img src="/images/img_c2cecc0d06c68bbd.png" alt="" />
+조회도 잘 될 것이다.</p>
+<p>근데 UPDATE/DELETE를 고려해야 한다면 좀 복잡해진다.</p>
+<p>사실 지금 위의 쿼리도, 기존 parquet에 들어있던 ID와 동일한 INSERT가 들어온다면 중복 ID가 발생할 수 있다는 단점이 있다. 원본 데이터부터가 NEW INSERT ONLY라는 전제 하에서만 잘 동작하는 구조다.</p>
+<br>
+<br>
+<br>
+<h2 id="icebergreul-sayonghan-update-delete">IceBerg를 사용한 UPDATE/DELETE</h2>
+<p>여기서 문제가 되는 것은 parquet 자체가 수정을 위한 데이터 규격이 아니기 때문이다.<br />
+그저 데이터를 압축해서 효율적으로 관리하기 위한 포맷에 불과하다.</p>
+<p>그래서 변경되는 데이터셋에 대해 수정과 삭제를 고려해서 parquet을 관리해야 한다면, iceberg 엔진을 사용하는 편이 권장된다.<br />
+다음과 같은 식으로 테이블을 만들면 iceberg의 파티션 관리 능력을 가져갈 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>CREATE TABLE access_log_iceberg</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">WITH</span><span> (</span></span>
+<span class="giallo-l"><span>  table_type</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;ICEBERG&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  format</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;PARQUET&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  location</span><span style="color: #94E2D5;"> =</span><span style="color: #A6E3A1;"> &#39;s3://.../iceberg/access_log/&#39;</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>  is_external</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> false</span></span>
+<span class="giallo-l"><span>) AS</span></span>
+<span class="giallo-l"><span>SELECT id</span><span style="color: #9399B2;">,</span><span> ip</span><span style="color: #9399B2;">,</span><span> path FROM access_log_parquet</span><span style="color: #9399B2;">;</span></span></code></pre>
+<p>그러면 이제 MERGE 구문을 통해서 파티션을 재구성하는 것이 가능해진다.<br />
+DELETE나 UPDATE를 반영할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>MERGE INTO access_log_iceberg t</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">USING</span><span> (</span></span>
+<span class="giallo-l"><span>  SELECT</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    COALESCE</span><span>(NewImage</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span style="color: #9399B2;">,</span><span> Keys</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span>) AS id</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    NewImage</span><span style="color: #94E2D5;">.</span><span>ip</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span>   AS ip</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    NewImage</span><span style="color: #94E2D5;">.</span><span>path</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span> AS path</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span>    NewImage IS NULL AS is_deleted</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    CAST</span><span>(Metadata</span><span style="color: #94E2D5;">.</span><span>WriteTimestampMicros AS bigint) AS change_ts</span><span style="color: #9399B2;">,</span></span>
+<span class="giallo-l"><span style="color: #89B4FA;font-style: italic;">    ROW_NUMBER</span><span>()</span><span style="color: #89B4FA;font-style: italic;"> OVER</span><span> (</span></span>
+<span class="giallo-l"><span>      PARTITION BY</span><span style="color: #89B4FA;font-style: italic;"> COALESCE</span><span>(NewImage</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span style="color: #9399B2;">,</span><span> Keys</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">S</span><span>)</span></span>
+<span class="giallo-l"><span>      ORDER BY</span><span style="color: #89B4FA;font-style: italic;"> CAST</span><span>(Metadata</span><span style="color: #94E2D5;">.</span><span>WriteTimestampMicros AS bigint) DESC</span></span>
+<span class="giallo-l"><span>    ) AS rn</span></span>
+<span class="giallo-l"><span>  FROM access_log_incremental</span></span>
+<span class="giallo-l"><span>) s</span></span>
+<span class="giallo-l"><span>ON t</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #94E2D5;"> =</span><span> s</span><span style="color: #94E2D5;">.</span><span>id AND s</span><span style="color: #94E2D5;">.</span><span>rn</span><span style="color: #94E2D5;"> =</span><span style="color: #FAB387;"> 1</span></span>
+<span class="giallo-l"><span>WHEN MATCHED AND s</span><span style="color: #94E2D5;">.</span><span>is_deleted THEN DELETE</span></span>
+<span class="giallo-l"><span>WHEN MATCHED THEN UPDATE SET ip</span><span style="color: #94E2D5;"> =</span><span> s</span><span style="color: #94E2D5;">.</span><span>ip</span><span style="color: #9399B2;">,</span><span> path</span><span style="color: #94E2D5;"> =</span><span> s</span><span style="color: #94E2D5;">.</span><span>path</span></span>
+<span class="giallo-l"><span>WHEN NOT MATCHED AND NOT s</span><span style="color: #94E2D5;">.</span><span>is_deleted THEN</span><span style="color: #89B4FA;font-style: italic;"> INSERT</span><span> (id</span><span style="color: #9399B2;">,</span><span> ip</span><span style="color: #9399B2;">,</span><span> path)</span><span style="color: #89B4FA;font-style: italic;"> VALUES</span><span> (s</span><span style="color: #94E2D5;">.</span><span>id</span><span style="color: #9399B2;">,</span><span> s</span><span style="color: #94E2D5;">.</span><span>ip</span><span style="color: #9399B2;">,</span><span> s</span><span style="color: #94E2D5;">.</span><span>path)</span><span style="color: #9399B2;">;</span></span></code></pre><br>
+<br>
+<br>
+<h2 id="patisyeon-jeonryag">파티션 전략</h2>
+<p>Athena를 비용효율적으로, 그리고 더 빠르게 사용하기 위해서는 파티션 전략을 잘 잡아야 한다.<br />
+이건 별도 포스트로 갈음한다.<br />
+<a rel="external" href="https://blog.naver.com/sssang97/223716323937">https://blog.naver.com/sssang97/223716323937</a></p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/S3DataExport.HowItWorks.html">https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/S3DataExport.HowItWorks.html</a></p>
+<p><a rel="external" href="https://docs.aws.amazon.com/athena/latest/ug/connectors-dynamodb.html">https://docs.aws.amazon.com/athena/latest/ug/connectors-dynamodb.html</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224295296228/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>PHP의 이상한 부분들.link<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224294411134/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[PostgreSQL] 주소 타입: Inet, cidr<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

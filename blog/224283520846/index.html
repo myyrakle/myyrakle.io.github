@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[Github] Actions Runner Controller(ARC)로 Self Hosted Runner 구성하기 (in k8s) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224283520846/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[Github] Actions Runner Controller(ARC)로 Self Hosted Runner 구성하기 (in k8s)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224283520846/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-05-12T14:58:38.797215+00:00">
+    <meta property="article:tag" content="Github">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224283520846/">[Github] Actions Runner Controller(ARC)로 Self Hosted Runner 구성하기 (in k8s)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-05-12T14:58:38.797215+00:00"><time datetime="2026-05-12T14:58:38.797215+00:00">2026.05.12</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="574 words"><time datetime="PT3M">3 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/github/">Github</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224283520846" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>Github Action을 Self Hosted Runner로 띄우려면, 2가지 선택지가 있다.</p>
+<ol>
+<li>단일 바이너리로 즉시 실행하는 것</li>
+<li>쿠버네티스로 설치해서 실행하는 것 (ARC)</li>
+</ol>
+<p>1번이 플랫폼 호환성도 좋고 편리하긴 한데, 관리 부분에서 불편한 점도 있다. runner를 병렬로 구성하는 것도 번거롭고, 자동 재실행 같은걸 보장하는 것도 직접 다 해야 하기 때문이다.</p>
+<p>Github에서 근래에 출시한 ARC는 이런 불편한 지점들을 자동으로 관리해주는 시스템이다.<br />
+쿠버 기반이라서 수평으로 하드웨어를 확장하는 것도 쉽다.</p>
+<br>
+<br>
+<br>
+<h2 id="gibon-gujo">기본 구조</h2>
+<p>ARC는 2가지의 요소로 구성된다.<br />
+최상위 컨트롤러인 ARC와, 그 아래에서 실질적인 실행을 담당하는 gha-runner-scale-set이 있다.</p>
+<p>ARC는 딱 scale-set의 관리만을 담당한다. 얘는 Github 인증정보도 필요없고, 클러스터에 하나만 있으면 된다.</p>
+<p>gha-runner-scale-set은 클러스터당 여러개 구성할 수 있고, 이걸 통해서 runner가 실행된다. 인증정보도 여기에 다 넣는다.</p>
+<br>
+<br>
+<br>
+<h2 id="sajeon-jogeon">사전 조건</h2>
+<p>쿠버네티스와 helm에 대한 사전 지식 필요.</p>
+<p>당연히 쿠버네티스가 설치되어있어야 한다.<br />
+플랫폼은 중요하지 않다. Linux면 좋겠지만 Mac이나 Windows라면 minikube 같은걸 깔면 된다.</p>
+<p><img src="/images/img_698d91d97de1e84a.png" alt="" /></p>
+<p>그리고 Github Action을 사용하기 위한 인증 수단이 필요하다.<br />
+계정 인증으로 사용할거라면 그냥 PAT만 따오면 되고, 조직 단위에서 쓸거라면 Github App을 따서 pem을 받아오면 된다. 조직에서는 후자를 권장하는 편이다.</p>
+<p>권한은 이렇게 넣어주면 된다. Action, Admin, Checks</p>
+<p><img src="/images/img_98297c7c4ea57fdd.png" alt="" /></p>
+<p>Self Hosted Runner 권한도</p>
+<p><img src="/images/img_408cd3821be5c331.png" alt="" /></p>
+<p>Github App으로 쓴다면 pem 키를 받고.<br />
+Github App ID와 Install ID를 꺼내서 준비해야 한다.</p>
+<p><img src="/images/img_7b10366ba93dbfe5.png" alt="" />
+Install ID는 페이지 URL에서 찾을 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="arc-seolcihagi">ARC 설치하기</h2>
+<p>ARC는 상위 관제시스템이다.<br />
+helm을 쓰면 간단하게 설치할 수 있다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>NAMESPACE</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;arc-systems&quot;</span></span>
+<span class="giallo-l"><span>helm install arc \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    --</span><span style="color: #CBA6F7;">namespace</span><span style="color: #A6E3A1;"> &quot;${NAMESPACE}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">create</span><span>-</span><span style="color: #F9E2AF;font-style: italic;">namespace</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">    oci</span><span>:</span><span style="color: #9399B2;font-style: italic;">//ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller</span></span></code></pre>
+<p><img src="/images/img_1fc92fe98dbeef02.png" alt="" /></p>
+<p>그리고 이렇게 잘 뜨면 잘 깔린 것이다.</p>
+<p><img src="/images/img_78c8d31383de7dad.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="runner-scale-set-seolcihagi">Runner Scale Set 설치하기</h2>
+<p>이것도 helm을 통해서 설치할 수 있다.</p>
+<p>이건 인증을 어떤 형태로 가져왔는지에 따라서 넘겨줄 값이 다르다.<br />
+개인계정으로 연결할 경우에는 이렇게 PAT만 넘기면 되고</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSTALLATION_NAME</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;arc-runner-set&quot;</span></span>
+<span class="giallo-l"><span>NAMESPACE</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;arc-runners&quot;</span></span>
+<span class="giallo-l"><span>GITHUB_CONFIG_URL</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;https://github.com/조직명&quot;</span></span>
+<span class="giallo-l"><span>GITHUB_PAT</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;토큰&quot;</span></span>
+<span class="giallo-l"><span>helm install</span><span style="color: #A6E3A1;"> &quot;${INSTALLATION_NAME}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    --</span><span style="color: #CBA6F7;">namespace</span><span style="color: #A6E3A1;"> &quot;${NAMESPACE}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">create</span><span>-</span><span style="color: #F9E2AF;font-style: italic;">namespace</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">set githubConfigUrl</span><span>=</span><span style="color: #A6E3A1;">&quot;${GITHUB_CONFIG_URL}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">set githubConfigSecret</span><span style="color: #94E2D5;">.</span><span style="color: #F9E2AF;font-style: italic;">github_token</span><span>=</span><span style="color: #A6E3A1;">&quot;${GITHUB_PAT}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">    oci</span><span>:</span><span style="color: #9399B2;font-style: italic;">//ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set</span></span></code></pre>
+<p>Github App으로 설치한다면 이렇게 이것저것 넣어주면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>INSTALLATION_NAME</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;arc-runner-set&quot;</span></span>
+<span class="giallo-l"><span>NAMESPACE</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;arc-runners&quot;</span></span>
+<span class="giallo-l"><span>GITHUB_CONFIG_URL</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;https://github.com/조직명&quot;</span></span>
+<span class="giallo-l"><span>GITHUB_PEM</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;PEM키&quot;</span></span>
+<span class="giallo-l"><span>APP_ID</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;GITHUB APP ID&quot;</span></span>
+<span class="giallo-l"><span>INSTALL_ID</span><span style="color: #94E2D5;">=</span><span style="color: #A6E3A1;">&quot;Githu APP 설치 ID&quot;</span></span>
+<span class="giallo-l"><span>helm install</span><span style="color: #A6E3A1;"> &quot;${INSTALLATION_NAME}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    --</span><span style="color: #CBA6F7;">namespace</span><span style="color: #A6E3A1;"> &quot;${NAMESPACE}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">create</span><span>-</span><span style="color: #F9E2AF;font-style: italic;">namespace</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">set githubConfigUrl</span><span>=</span><span style="color: #A6E3A1;">&quot;${GITHUB_CONFIG_URL}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">set githubConfigSecret</span><span style="color: #94E2D5;">.</span><span style="color: #F9E2AF;font-style: italic;">github_app_private_key</span><span>=</span><span style="color: #A6E3A1;">&quot;${GITHUB_PEM}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">set githubConfigSecret</span><span style="color: #94E2D5;">.</span><span style="color: #F9E2AF;font-style: italic;">github_app_id</span><span>=</span><span style="color: #A6E3A1;">&quot;${APP_ID}&quot;</span><span> \ </span></span>
+<span class="giallo-l"><span>    --</span><span style="color: #F9E2AF;font-style: italic;">set githubConfigSecret</span><span style="color: #94E2D5;">.</span><span style="color: #F9E2AF;font-style: italic;">github_app_installation_id</span><span>=</span><span style="color: #A6E3A1;">&quot;${INSTALL_ID}&quot;</span><span> \</span></span>
+<span class="giallo-l"><span style="color: #F9E2AF;font-style: italic;">    oci</span><span>:</span><span style="color: #9399B2;font-style: italic;">//ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set</span></span></code></pre>
+<p>설정값 참조<br />
+<a rel="external" href="https://github.com/actions/actions-runner-controller/blob/master/charts/gha-runner-scale-set/values.yaml">https://github.com/actions/actions-runner-controller/blob/master/charts/gha-runner-scale-set/values.yaml</a></p>
+<p>아무튼 나는 Github App으로 설정했다.</p>
+<p><img src="/images/img_53c8bddde83c4ab1.png" alt="" /></p>
+<p><img src="/images/img_9df71134ea915a72.png" alt="" />
+날려서 오류 없이 이렇게 뜨면 잘 된 것이다.</p>
+<p>그리고 연동이 문제 없이 되었다면</p>
+<p><img src="/images/img_c2e2a0e6d6026894.png" alt="" />
+이렇게 Runner 목록에 runner scale set이 추가될 것이다.<br />
+그대로 갖다쓰면 된다.</p>
+<br>
+<br>
+<br>
+<h2 id="runner-sayonghagi">Runner 사용하기</h2>
+<p>기존의 Self Hosted Runner 사용법과 다를 것은 없다. 그냥 Runner 관리만 자동으로 해주는 것이기 때문이다.</p>
+<p><img src="/images/img_449fb70bdc17901f.png" alt="" />
+runs-on으로 지정해주고</p>
+<br>
+<p><img src="/images/img_9b4cbe43091a561b.png" alt="" />
+쏘면 된다.</p>
+<p>참고로 이건 쿠버 기반이라서, 반드시 컨테이너 내에 샌드박싱된 채로 실행된다.</p>
+<p><img src="/images/img_3c61d155cb004b5a.png" alt="" />
+그리고 개별 run이 하나의 job pod로 실행되었다가 끝나면 제거되기 때문에, 디스크 재사용이 단순하게는 되지 않는다.<br />
+디스크 캐시를 활용하기 위해서는 별도의 캐시 매커니즘이나 볼륨 설정이 필요하다.</p>
+<br>
+<br>
+<br>
+<h2 id="runner-gaesu-jojeong">Runner 개수 조정</h2>
+<p>ARC의 편리한 점 중 하나는, Runner의 개수를 조정하고 분산하는 것이 쉽다는 것이다.<br />
+ARC Runner의 최대 갯수는 autoscailingrunnerset이라는 리소스로 관리되는데,</p>
+<p><img src="/images/img_b876819415dfee97.png" alt="" /></p>
+<p><img src="/images/img_94f22a89c4e150b5.png" alt="" />
+따로 설정하지 않았다면 기본값은 5다.</p>
+<p>Runner의 최대 실행 개수 제한을 15로 늘리고 싶다면 이렇게 명령을 날리면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>kubectl patch autoscalingrunnerset</span><span style="color: #94E2D5;"> -</span><span>n arc</span><span style="color: #94E2D5;">-</span><span>runners arc</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">-</span><span>set \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>type</span><span style="color: #94E2D5;">=</span><span>merge \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>p</span><span style="color: #A6E3A1;"> &#39;{&quot;spec&quot;:{&quot;maxRunners&quot;:15}}&#39;</span></span></code></pre>
+<p><img src="/images/img_e21ba85a445502db.png" alt="" /></p>
+<p>helm을 통해 변경한다면 이렇게 할 수 있다. 이걸 더 권장한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>helm upgrade arc</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #94E2D5;">-</span><span>set oci</span><span style="color: #9399B2;">:</span><span style="color: #9399B2;font-style: italic;">//ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  -</span><span>n arc</span><span style="color: #94E2D5;">-</span><span>runners \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>reuse</span><span style="color: #94E2D5;">-</span><span>values \</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">  --</span><span>set maxRunners</span><span style="color: #94E2D5;">=</span><span style="color: #FAB387;">20</span></span></code></pre>
+<p><img src="/images/img_779614031ebc20af.png" alt="" /></p>
+<p>최소 개수도 지정한다면, 미사용시에도 runner가 pool 개념으로 떠있도록 구성할 수 있다.</p>
+<p><img src="/images/img_38720e8e424e49e1.png" alt="" /></p>
+<p><img src="/images/img_dcec63bd678728c3.png" alt="" />
+그러면 이런 식으로 runner도 여러개로 확장된다.</p>
+<br>
+<br>
+<br>
+<h2 id="beiseu-imiji-byeongyeong">베이스 이미지 변경</h2>
+<p>ARC는 Runner를 실행할때 다음과 같은 우분투 베이스 이미지를 사용한다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>ghcr</span><span style="color: #94E2D5;">.</span><span>io</span><span style="color: #94E2D5;">/</span><span>actions</span><span style="color: #94E2D5;">/</span><span>actions</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #9399B2;">:</span><span>latest</span></span></code></pre>
+<p>하지만 원한다면 베이스 이미지를 직접 말아서 넣는 것도 가능하다.</p>
+<p><img src="/images/img_b00183c3b496dce5.png" alt="" />
+적당히 잘 말아서</p>
+<p>scale set의 values.yaml에 넣고 밀어넣으면 된다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>template</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>  spec</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>    containers</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">    -</span><span> name</span><span style="color: #9399B2;">:</span><span> runner</span></span>
+<span class="giallo-l"><span>      image</span><span style="color: #9399B2;">:</span><span> your</span><span style="color: #94E2D5;">-</span><span>registry</span><span style="color: #94E2D5;">/</span><span>custom</span><span style="color: #94E2D5;">-</span><span>runner</span><span style="color: #9399B2;">:</span><span>latest  # 커스텀 이미지</span></span>
+<span class="giallo-l"><span>      command</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span style="color: #94E2D5;">        - /</span><span>home</span><span style="color: #94E2D5;">/</span><span>runner</span><span style="color: #94E2D5;">/</span><span>run</span><span style="color: #94E2D5;">.</span><span>sh</span></span></code></pre><br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.github.com/ko/actions/tutorials/use-actions-runner-controller/get-started">https://docs.github.com/ko/actions/tutorials/use-actions-runner-controller/get-started</a><br />
+<a rel="external" href="https://docs.github.com/ko/actions/concepts/runners/support-for-arc">https://docs.github.com/ko/actions/concepts/runners/support-for-arc</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224283872424/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[Docker] colima: Docker on MacOS<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224283222624/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[k8s] minikube로 시작해보기 (MacOS)<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

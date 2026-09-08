@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>[AWS] SQS Standard: MessageGroupId (Fair Queue) | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224281215168/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="[AWS] SQS Standard: MessageGroupId (Fair Queue)">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224281215168/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-05-10T16:58:30.894610+00:00">
+    <meta property="article:tag" content="AWS">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224281215168/">[AWS] SQS Standard: MessageGroupId (Fair Queue)</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-05-10T16:58:30.89461+00:00"><time datetime="2026-05-10T16:58:30.89461+00:00">2026.05.10</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="396 words"><time datetime="PT2M">2 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/aws/">AWS</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224281215168" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p>SQS 표준 큐에도 FIFO에만 있던 Message Group 기반의 테넌트 격리 기능이 추가되었다.<br />
+원래 표준 큐는 채널을 동적으로 생성하고 분리하는 것이 불가능해서 용도마다 큐를 하나씩 만들어야 했는데, 그런 번거로움이 좀 해소된 것이다.</p>
+<p>최초로 나온 것은 2025년 7월즈음인데, 서울을 포함한 모든 리전으로 확대된 것은 최근인 것 같다.</p>
+<p>이제는 메세지를 전송할때 메세지 그룹 ID를 지정할 수 있다.</p>
+<p><img src="/images/img_1843c7016aba46ff.png" alt="" /></p>
+<br>
+<br>
+<br>
+<h2 id="fair-queueyi-dongjag-weonri">Fair Queue의 동작 원리</h2>
+<p>이건 FIFO 큐의 MessageGroupID처럼 엄밀한 격리를 제공하지는 않는다. A/B 그룹을 GroupID로 나눈다고 해서 A Consumer가 A 메세지만 받고 B Consumer가 B 메세지만 받는다거나 하는 파티션은 안된다.</p>
+<p>이건 일종의 우선순위 큐처럼 작동할 뿐이다. ReceiveMessage를 할때 먼저 나오는 메세지의 우선순위 말이다.<br />
+왜 이런 어설픈 기능이 추가되었을까?</p>
+<p>예를 들어보자.<br />
+표준 큐에서 채널을 수동으로 관리한다면(메세지 안에 group 값을 넣거나 해서), 일종의 "노이즈" 문제가 발생할 수 있다. A 그룹의 메세지가 많다고 치면 A 그룹의 처리로 인해서 다른 그룹의 메세지가 지연될 수 있는 것이다.</p>
+<p><img src="/images/img_5ad6ffdb9bd7ad9e.png" alt="" />
+이런 식으로 말이다. A가 하도 많으니까 확률적으로 A 메세지의 받환이 더 잦아지고, 다른 메세지는 뒤로 밀린다.</p>
+<p>SQS에서 제대로 지원하는 Fair Queue -MessageGroupID을 사용한다면 이런 문제가 다소 완화된다.<br />
+메세지의 개수에 비례해서 우선순위를 낮추는 것이다. 그러니까, 메세지가 적은 Group의 처리를 우선한다.</p>
+<p><img src="/images/img_949963878f0ea228.png" alt="" />
+이러면 A 메세지가 많이 몰려도 C를 우선으로 Receive하게 해주므로, 비교적 공정한 처리가 되게끔 해준다.</p>
+<br>
+<br>
+<br>
+<h2 id="biyong">비용</h2>
+<p>공짜는 아니고 추가 요금을 요구한다.</p>
+<p><img src="/images/img_7501a1905c30c53c.png" alt="" />
+<a rel="external" href="https://aws.amazon.com/ko/sqs/pricing/">https://aws.amazon.com/ko/sqs/pricing/</a><br />
+해당 기능을 사용하면 요청 백만건당 0.1달러가 추가로 청구된다. 그렇게 비싸지는 않다.</p>
+<br>
+<br>
+<br>
+<h2 id="sayongbeob">사용법</h2>
+<p>사용법은 별것 없다.<br />
+이건 Producer에만 영향을 주고, Consumer 측에는 실질적인 변경이 없는 사항이므로 더 그렇다.</p>
+<p><img src="/images/img_aae66ecd98094b2c.png" alt="" />
+전송할때 GroupID만 넣어준다면 SQS에서 자체적으로 우선순위 처리를 알아서 잘 해준다.<br />
+그 이후로 건드려야할 부분은 없다. 우선순위만 달라질 뿐, 기능적으로 달라지진 않기 때문이다.</p>
+<p>그래서 groupID 기반의 파티션 처리가 필요하다면 그건 수동으로 해줘야 한다.</p>
+<p><img src="/images/img_b3e11a91671ef8b2.png" alt="" />
+Receive 시점의 MessageGroupID 필터링은 현재도 FIFO에서만 지원하는 기능이다.<br />
+파라미터가 있긴 하지만 무시될 것이다.</p>
+<p>consumer를 group 단위로 나누고 싶다면 일단 받은 다음에, 본인 group이 아니면 다시 큐에 반환하는 식으로 수동 구현을 해줘야 한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-fair-queues.html">https://docs.aws.amazon.com/ko_kr/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-fair-queues.html</a><br />
+<a rel="external" href="https://aws.amazon.com/about-aws/whats-new/2025/07/amazon-sqs-introduces-fair/">https://aws.amazon.com/about-aws/whats-new/2025/07/amazon-sqs-introduces-fair/</a><br />
+<a rel="external" href="https://aws.amazon.com/ko/blogs/compute/building-resilient-multi-tenant-systems-with-amazon-sqs-fair-queues/">https://aws.amazon.com/ko/blogs/compute/building-resilient-multi-tenant-systems-with-amazon-sqs-fair-queues/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224283222624/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[k8s] minikube로 시작해보기 (MacOS)<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224280385935/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[AWS] ECS Exec<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>

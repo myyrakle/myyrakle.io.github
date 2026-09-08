@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src-attr 'unsafe-inline'">
+
+    <title>vLLM | myyrakle&#x27;s note</title>
+
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Regular.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="preload" href="https://myyrakle.github.io/fonts/FiraCode-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/style.css?h=a09fbcf90ec2cd08d818">
+    <link rel="stylesheet" href="https://myyrakle.github.io/css/search-overlay.css?h=a4a8c5280e7bef46b390">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦀</text></svg>">
+    <script src="https://myyrakle.github.io/js/auto-close-popover-on-resize.js?h=4ef87d6fc7b98b22e044" defer></script>
+    <script src="https://myyrakle.github.io/js/search-overlay.js?h=7e7e8703f923d30cb94e" defer></script>
+    <script src="https://myyrakle.github.io/js/copy-code-to-clipboard.js?h=6eec6d5a29e934c1de32" defer></script>
+
+    <link rel="canonical" href="https://myyrakle.github.io/blog/224318182333/">
+    <link rel="alternate" type="application/atom+xml" href="https://myyrakle.github.io/atom.xml" title="myyrakle's note">
+    
+    <meta name="author" content="myyrakle">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#211f1a">
+    <meta name="color-scheme" content="dark">
+
+    <meta property="og:title" content="vLLM">
+    <meta property="og:type" content="article">
+    
+    <meta property="og:image" content="https:&#x2F;&#x2F;myyrakle.github.io/images/myyrakle.png">
+    <meta name="twitter:card" content="summary"><meta property="og:url" content="https://myyrakle.github.io/blog/224318182333/">
+    <meta property="og:description" content="dev blog">
+    <meta property="og:site_name" content="myyrakle&#x27;s note">
+    <meta property="og:updated_time" content="2026-09-08T15:13:01.151293648+00:00">
+    <meta property="article:published_time" content="2026-06-16T15:26:27.023051+00:00">
+    <meta property="article:tag" content="ML">
+
+</head>
+
+<body class="layout-center" data-theme="terminus">
+    <header class="header">
+        <div class="header-container">
+            <span class="header-logo-container">
+                <a href="https://myyrakle.github.io">
+                    <span class="logo">myyrakle's note</span>
+                </a>
+            </span>
+            <button class="search-open-button" type="button" aria-label="Open search" data-search-open>
+                <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <path d="m16.5 16.5 4.5 4.5"></path>
+                </svg>
+            </button>
+        </div>
+        <nav class="main-menu" aria-label="Main Menu">
+            <a class="skip-to-content" href="#main">Skip to main content</a>
+            <button class="main-menu-dropdown-button" popovertarget="nav-menu">Menu</button>
+            <ul id="nav-menu" class="main-menu-items" aria-label="Site Navigation" popover>
+                <li><a href="https://myyrakle.github.io/blog/">blog</a></li>
+                <li><a href="https://myyrakle.github.io/tags/">tags</a></li>
+                <li><a href="https://blog.naver.com/sssang97">naver</a></li>
+                <li><a href="https://github.com/myyrakle">github</a></li>
+            </ul>
+        </nav>
+    </header>
+    <main id="main">
+        <article class="post content">
+            <header>
+                <h1 class="post-title">
+                    <a href="https://myyrakle.github.io/blog/224318182333/">vLLM</a>
+                </h1>
+                <ul class="post-meta hidden">
+                    <li title="Published on 2026-06-16T15:26:27.023051+00:00"><time datetime="2026-06-16T15:26:27.023051+00:00">2026.06.16</time></li>
+                    <li role="separator" aria-hidden="true">::</li>
+                    <li title="670 words"><time datetime="PT4M">4 min</time> read</li>
+                </ul>
+                <div class="post-tags">
+                    <span>#<a rel="tag" href="https://myyrakle.github.io/tags/ml/">ML</a></span>
+                </div>
+            </header>
+<div style="margin-bottom: 1.5em;">
+    <a href="https://blog.naver.com/sssang97/224318182333" target="_blank" rel="noopener">[원본 링크]</a>
+</div>
+
+<p><img src="/images/img_f048880c026db8fd.png" alt="" />
+vLLM은 LLM 서빙을 위한 대표적인 최적화 엔진 중 하나다.<br />
+오픈모델들을 효율적으로 올려서 쓸 수 있게 해준다. 다만 가볍고 작게 올릴 수 있게 해주는 것은 아니다.</p>
+<p>vLLM이 어떤 접근법으로 모델을 효율적으로 서빙하는지, 어떻게 쓸 수 있는지 정도를 대략 정리해본다.</p>
+<br>
+<br>
+<br>
+<h2 id="gijon-model-seobing-bangsigyi-munje">기존 모델 서빙 방식의 문제</h2>
+<p>직접 모델을 받아서 서빙하게 되면 보통 허깅페이스 Transformer 모듈을 가져다가 적당히 파이썬으로 로드하는 경우가 많다.</p>
+<p>이 방식은 잘 동작하긴 하지만, 여러모로 비효율적인 부분들이 많다.</p>
+<br>
+<ol>
+<li>
+<p>동시 요청에 대한 GPU 활용률 낮음</p>
+</li>
+<li>
+<p>메모리 낭비 심함</p>
+</li>
+<li>
+<p>Batch 처리의 비효율성 존재</p>
+</li>
+<li>
+<p>그냥 전반적으로 느림</p>
+</li>
+</ol>
+<br>
+<br>
+<p>vLLM은 이런 부분들을 좀 최적화해주는 계층이다.</p>
+<br>
+<br>
+<br>
+<h2 id="vs-ollama">vs Ollama</h2>
+<p>Ollama도 모델을 서빙할때 기초적인 최적화를 좀 해주긴 한다.<br />
+llama.cpp를 사용해서 KV Cache 처리, Batch 최적화를 해주는데, 전반적인 최적화 능력은 vLLM이 더 좋은 편이다.</p>
+<p>그래서 성능이나 처리량이 필요하다면 vLLM이 선호된다.</p>
+<p>바로 이어서 vLLM이 모델을 최적화하는 법을 정리해보겠다.</p>
+<br>
+<br>
+<br>
+<h2 id="kv-cache-pagedattention">KV Cache: PagedAttention</h2>
+<p>LLM 모델들은 보통 KV 캐시를 통해서 추론 중의 최적화를 많이 가져가는 편이다.<br />
+토큰마다 벡터값을 여분의 GPU VRAM에 캐시로 저장하는 것이다.</p>
+<p>근데 이게 일반적인 구현체들에서는 메모리 단편화 문제가 있다. 캐시를 넣었다가 빼다보면 중간중간 붕 떠서, 공간이 남아도 넣지 못할 수 있는 것이다.<br />
+GC 런타임이나 언어, OS 레벨에서 메모리 할당해제로 단편화가 생기는 것과 문제 원리가 같다.</p>
+<p>vLLM은 역시 고전적인 접근법으로 VRAM 단편화 문제를 해소한다.<br />
+GPU VRAM을 운영체제의 가상 메모리처럼 페이지 단위로 쪼개놓고, 페이지에 분산해서 캐시값을 저장하는 것이다.<br />
+vLLM은 이걸 PagedAttention라고 부른다. 사실 그냥 페이징이라고 불러도 될 것 같긴 한데 아무튼.</p>
+<p>이를 통해 저장 효율성을 높인다.</p>
+<br>
+<br>
+<br>
+<h2 id="prefix-caching">Prefix Caching</h2>
+<p>Prefix Caching은 말 그대로 프롬프트의 앞부분을 캐싱한다는 것이다.<br />
+이게 왜 의미가 있을까?</p>
+<p>사실 상당수의 유저들은 프롬프트 지시어를 위에다가 고정해놓고 쓰는 경우가 많다.<br />
+이런 식으로 말이다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span>[요청</span><span style="color: #FAB387;"> 1</span><span>]</span></span>
+<span class="giallo-l"><span>Translate</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>Hello world</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[요청</span><span style="color: #FAB387;"> 2</span><span>]</span></span>
+<span class="giallo-l"><span>Translate</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>Good morning</span></span>
+<span class="giallo-l"></span>
+<span class="giallo-l"><span>[요청</span><span style="color: #FAB387;"> 3</span><span>]</span></span>
+<span class="giallo-l"><span>Translate</span><span style="color: #9399B2;">:</span></span>
+<span class="giallo-l"><span>Thank you</span></span></code></pre>
+<p>이런 패턴의 경우에는 Translate:에 대한 벡터 캐시만 쌓아놓고 재사용해도, 쌓이면 꽤 많은 추론비용을 절감할 수 있는 것이다.</p>
+<p>대신 vRAM 소비량이 좀 증가한다. 이건 추론이 끝나도 계속 유지하는 반영구 캐시이기 때문이다.</p>
+<br>
+<br>
+<br>
+<h2 id="continuous-batching">Continuous Batching</h2>
+<p>vLLM은 Batch 처리에 있어서도 꽤 공격적인 최적화를 해준다.<br />
+그냥 적당히 Batch 최적화를 할때는 이런 문제가 있을 수 있다.</p>
+<p>보통 A, B, C에 대해 배치 추론을 날리면, 이 배치 추론은 가장 오래 걸리는 추론 단위가 끝날때까지 블럭된다.<br />
+다시 말해서, A, B 추론이 끝나더라도, C가 끝나지 않으면 A, B 공간은 놀고 있다는 것이다.</p>
+<p>vLLM은 이 부분을 핀포인트로 최적화한다. C가 끝나지 않았더라도, 다 끝나고 놀고 있던 A, B 자리에도 D, E 연산을 바로 우겨넣어서 파이프라인처럼 빠르게 토큰 추론을 돌릴 수 있다.</p>
+<p><img src="/images/img_5e256f03e4f2e690.png" alt="" />
+<a rel="external" href="https://www.redhat.com/ko/blog/meet-vllm-faster-more-efficient-llm-inference-and-serving">https://www.redhat.com/ko/blog/meet-vllm-faster-more-efficient-llm-inference-and-serving</a></p>
+<p>vLLM은 이를 통해서 통상적으로 2배, 극단적으로는 5~10배 정도의 처리량 향상을 제공한다.<br />
+vLLM이 주목받은 주요 지점 중 하나다.</p>
+<br>
+<br>
+<br>
+<h2 id="vllmyi-danjeom">vLLM의 단점</h2>
+<p>이게 성능은 좋은데, 세팅도 번거롭고 이슈 포인트도 좀 있다.</p>
+<p>우선 GPU마다 호환성 문제가 좀 있다. 특정 모델과 양자화, vLLM의 조합이 어떤 GPU 장비에서는 잘 동작하지 않거나 버그가 많을 수 있다. 이건 잘 체크해봐야 한다.</p>
+<p>그리고 위에서 언급했듯이, vRAM은 좀 더 먹을 수 있다. Prefix Cache 같은 적극적 캐시 레이어를 쓰기 때문이다. (물론 끌 수도 있음)</p>
+<br>
+<br>
+<br>
+<h2 id="vllmyi-bugagineung">vLLM의 부가기능</h2>
+<p>OpenAI 호환 프로토콜을 제공한다. 대부분의 도구에 추가적인 어댑터 없이 붙여쓸 수 있다.</p>
+<p>Prometheus Metrics도 잘 지원한다. 이를 통해 메트릭을 쌓고 운영 문제를 추적할 수 있다.</p>
+<br>
+<br>
+<br>
+<h2 id="gemma4-gulryeobogi-with-docker">Gemma4 굴려보기 (with Docker)</h2>
+<p>직접 vllm 써서 모델 다운받고 서빙해도 되는데, 대중적인 모델들은 프리셋으로 말아놓은 것들이 있다.<br />
+gemma4의 경우에는 허깅페이스 토큰만 있으면 즉시 사용 가능하다.</p>
+<pre class="giallo" style="color: #CDD6F4; background-color: #1E1E2E;"><code data-lang="javascript"><span class="giallo-l"><span style="color: #CBA6F7;">export</span><span> HF_TOKEN</span><span style="color: #94E2D5;">=</span><span>hf_</span><span style="color: #94E2D5;">*</span></span>
+<span class="giallo-l"><span>sudo docker run</span><span style="color: #94E2D5;"> -</span><span>d</span><span style="color: #94E2D5;"> --</span><span>name gemma4</span><span style="color: #94E2D5;">-</span><span>translate</span><span style="color: #94E2D5;">   --</span><span>restart unless</span><span style="color: #94E2D5;">-</span><span>stopped</span><span style="color: #94E2D5;">   --</span><span>gpus all</span><span style="color: #94E2D5;">   --</span><span>ipc</span><span style="color: #94E2D5;">=</span><span>host</span><span style="color: #94E2D5;">   --</span><span>network host</span><span style="color: #94E2D5;">   --</span><span>shm</span><span style="color: #94E2D5;">-</span><span>size 16G</span><span style="color: #94E2D5;">   -</span><span>e HF_TOKEN</span><span style="color: #94E2D5;">=</span><span>$HF_TOKEN</span><span style="color: #94E2D5;">   -</span><span>v</span><span style="color: #94E2D5;"> ~/.</span><span>cache</span><span style="color: #94E2D5;">/</span><span>huggingface</span><span style="color: #9399B2;">:</span><span style="color: #F5C2E7;">/</span><span style="color: #A6E3A1;">root</span><span style="color: #F5C2E7;">/</span><span style="color: #94E2D5;">.</span><span>cache</span><span style="color: #94E2D5;">/</span><span>huggingface   vllm</span><span style="color: #94E2D5;">/</span><span>vllm</span><span style="color: #94E2D5;">-</span><span>openai</span><span style="color: #9399B2;">:</span><span>latest</span><span style="color: #94E2D5;">   --</span><span>model google</span><span style="color: #94E2D5;">/</span><span>gemma</span><span style="color: #94E2D5;">-</span><span style="color: #FAB387;">4</span><span style="color: #94E2D5;">-</span><span>12B</span><span style="color: #94E2D5;">-</span><span>it</span><span style="color: #94E2D5;">-</span><span>qat</span><span style="color: #94E2D5;">-</span><span>w4a16</span><span style="color: #94E2D5;">-</span><span>ct</span><span style="color: #94E2D5;">   --</span><span>host</span><span style="color: #FAB387;"> 0.0</span><span style="color: #94E2D5;">.</span><span style="color: #FAB387;">0.0</span><span style="color: #94E2D5;">   --</span><span>port</span><span style="color: #FAB387;"> 8001</span><span style="color: #94E2D5;">   --</span><span>dtype bfloat16</span><span style="color: #94E2D5;">   --</span><span>max</span><span style="color: #94E2D5;">-</span><span>model</span><span style="color: #94E2D5;">-</span><span>len</span><span style="color: #FAB387;"> 8192</span><span style="color: #94E2D5;">   --</span><span>gpu</span><span style="color: #94E2D5;">-</span><span>memory</span><span style="color: #94E2D5;">-</span><span>utilization</span><span style="color: #FAB387;"> 0.90</span><span style="color: #94E2D5;">   --</span><span>max</span><span style="color: #94E2D5;">-</span><span>num</span><span style="color: #94E2D5;">-</span><span>seqs</span><span style="color: #FAB387;"> 2</span></span></code></pre>
+<p><img src="/images/img_c45fe465f575adcb.png" alt="" />
+이건 GPU VRAM을 20GB 정도 먹는다. 내 경우에는 L4로 돌렸는데, 여력이 안된다면 더 작은 모델을 찾다.</p>
+<p>아무튼 실행하면, 약간의 로드타임과 함께 뜰 것이다.</p>
+<p><img src="/images/img_f31223c335a84d6a.png" alt="" /></p>
+<p><img src="/images/img_f5de0a1f8a6b52ec.png" alt="" /></p>
+<p>그럼 메모리 잔뜩 먹고</p>
+<p><img src="/images/img_0c29c8c29fb24a1c.png" alt="" /></p>
+<p>HTTP API를 통해 찔러볼 수 있을 것이다.</p>
+<p><img src="/images/img_7f6e01c8cc38ee9e.png" alt="" />
+잘 동작한다.</p>
+<br>
+<br>
+<p>참조<br />
+<a rel="external" href="https://github.com/vllm-project/vllm">https://github.com/vllm-project/vllm</a><br />
+<a rel="external" href="https://arxiv.org/abs/2309.06180?utm_source=chatgpt.com">https://arxiv.org/abs/2309.06180?utm_source=chatgpt.com</a><br />
+<a rel="external" href="https://www.redhat.com/ko/blog/meet-vllm-faster-more-efficient-llm-inference-and-serving">https://www.redhat.com/ko/blog/meet-vllm-faster-more-efficient-llm-inference-and-serving</a><br />
+<a rel="external" href="https://docs.vllm.ai/en/stable/design/prefix_caching/">https://docs.vllm.ai/en/stable/design/prefix_caching/</a><br />
+<a rel="external" href="https://docs.vllm.ai/en/stable/design/metrics/">https://docs.vllm.ai/en/stable/design/metrics/</a></p>
+
+        </article>
+        <nav class="post-navigation">
+            <header class="post-navigation-title">
+                <h2>Read More Posts</h2>
+                <hr>
+            </header>
+            <div class="post-navigation-buttons">
+                <a rel="next" href="https://myyrakle.github.io/blog/224321145854/" aria-label="Next article">
+                    <span aria-hidden="true">&lt;&nbsp;[</span>[PostgreSQL] tsvector와 Full Text Search<span aria-hidden="true">]</span>
+                </a>
+                <span aria-hidden="true" role="separator">::</span>
+                <a rel="prev" href="https://myyrakle.github.io/blog/224315189762/" aria-label="Prev article">
+                    <span aria-hidden="true">[</span>[ML] 모델 성능 깎기<span aria-hidden="true">]&nbsp;&gt;</span>
+                </a>
+            </div>
+        </nav>
+    </main>
+    <footer class="footer">
+        <address class="socials">
+            <ul>
+                <li>
+                    <a class="social-link" href="https://myyrakle.github.io/atom.xml" title="atom feed" aria-label="atom feed">
+                        <svg role="img" aria-label="feed icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/atom.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+                <li>
+                    <a class="social-link" rel="me" href="https://github.com/myyrakle" title="github" aria-label="github">
+                        <svg role="img" aria-label="github icon">
+                            <use aria-hidden="true" href="https://myyrakle.github.io/images/social_icons/github.svg#icon" />
+                        </svg>
+                    </a>
+                </li>
+            </ul>
+        </address>
+        <p class="copyright">
+            <span>© <time>2026</time> myyrakle</span>
+            <span>Powered by <a rel="external" href="https://www.getzola.org">Zola</a></span>
+            <span>Theme by <a rel="external" href="https://eyalkalderon.com">ebkalderon</a></span>
+        </p>
+    </footer>
+    <dialog class="search-overlay" data-search-dialog aria-label="Search posts">
+    <div class="search-overlay-frame">
+        <div class="search-overlay-header">
+            <h2>Search</h2>
+            <button class="search-close-button" type="button" aria-label="Close search" data-search-close>
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+        <div
+            class="search-overlay-body zola-search"
+            data-search-root
+            data-search-index-url="/search_index.ko.json"
+            data-search-library-url="/elasticlunr.min.js"
+        >
+            <form class="zola-search-form" data-search-form role="search">
+                <input class="zola-search-input" data-search-input type="search" placeholder="Search posts" autocomplete="off" spellcheck="false">
+            </form>
+            <p class="zola-search-summary" data-search-summary>Type to search posts.</p>
+            <ol class="zola-search-results" data-search-results></ol>
+        </div>
+    </div>
+</dialog>
+
+</body>
+
+</html>
